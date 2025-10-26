@@ -1,0 +1,109 @@
+cmake_minimum_required(VERSION 3.18)
+project(glRemix_renderer LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(GLREMIX_SHARED_DIR "${REPO_ROOT}/shared")
+include("${REPO_ROOT}/cmake/shared_files.cmake")
+
+set(SHARED_HEADERS ${GLREMIX_SHARED_HEADER_FILES})
+set(SHARED_SOURCES ${GLREMIX_SHARED_SOURCE_FILES})
+
+set(RENDERER_SOURCES
+    "main.cpp"
+)
+
+set(D3D12MA_SOURCES
+    "${REPO_ROOT}/external/D3D12MemoryAllocator-3.0.1/src/D3D12MemAlloc.cpp"
+)
+
+set(RENDERER_HEADERS
+)
+
+add_executable(${PROJECT_NAME} 
+    ${RENDERER_SOURCES} 
+    ${RENDERER_HEADERS}
+    ${SHARED_HEADERS}
+    ${SHARED_SOURCES}
+    ${D3D12MA_SOURCES}
+)
+
+target_include_directories(${PROJECT_NAME} PRIVATE 
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${GLREMIX_SHARED_DIR}"
+    "${REPO_ROOT}/external/robin-map-1.4.0/include"
+    "${REPO_ROOT}/external/D3D12MemoryAllocator-3.0.1/include"
+)
+
+set(_GLREMIX_COPY_IF_EXISTS_SCRIPT "${GLREMIX_COPY_IF_EXISTS_SCRIPT}")
+if(NOT _GLREMIX_COPY_IF_EXISTS_SCRIPT)
+    set(_GLREMIX_COPY_IF_EXISTS_SCRIPT "${REPO_ROOT}/cmake/copy_if_exists.cmake")
+endif()
+
+if(GLREMIX_DEPLOY_DIR)
+    set(_GLREMIX_RENDERER_DEPLOY_CONFIG_DIR "${GLREMIX_DEPLOY_DIR}/$<CONFIG>/renderer")
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Copying renderer executable to ${_GLREMIX_RENDERER_DEPLOY_CONFIG_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_GLREMIX_RENDERER_DEPLOY_CONFIG_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:${PROJECT_NAME}>
+            "${_GLREMIX_RENDERER_DEPLOY_CONFIG_DIR}/$<TARGET_FILE_NAME:${PROJECT_NAME}>"
+    )
+
+    if(MSVC)
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E echo "Copying renderer PDB to ${_GLREMIX_RENDERER_DEPLOY_CONFIG_DIR}"
+            COMMAND ${CMAKE_COMMAND}
+                -Dsrc="$<TARGET_PDB_FILE:${PROJECT_NAME}>"
+                -Ddst="${_GLREMIX_RENDERER_DEPLOY_CONFIG_DIR}/$<TARGET_PDB_FILE_NAME:${PROJECT_NAME}>"
+                -P "${_GLREMIX_COPY_IF_EXISTS_SCRIPT}"
+        )
+    endif()
+endif()
+
+if(WIN32)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE 
+        NOMINMAX
+        UNICODE 
+        _UNICODE
+        WIN32_LEAN_AND_MEAN
+    )
+    
+    if(MSVC)
+        target_compile_options(${PROJECT_NAME} PRIVATE /MP) # Enable multi-processor compilation
+    endif()
+
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        d3d12
+        dxgi
+        dxguid
+        dxcompiler # No d3dcompiler since we only use DXC
+        
+        # Windows system libraries
+        kernel32
+        advapi32
+    )
+
+endif()
+
+# Create the source groups for source tree with root at CMAKE_CURRENT_SOURCE_DIR
+set(ALL_RENDERER_FILES ${RENDERER_SOURCES} ${RENDERER_HEADERS})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${ALL_RENDERER_FILES})
+source_group("shared" FILES ${SHARED_HEADERS} ${SHARED_SOURCES})
+
+set(_GLREMIX_SHIM_TARGET_PREFIX "${GLREMIX_SHIM_TARGET_PREFIX}")
+if(NOT _GLREMIX_SHIM_TARGET_PREFIX)
+    set(_GLREMIX_SHIM_TARGET_PREFIX "glRemix_shim_")
+endif()
+
+set(_GLREMIX_SHIM_TARGET_WIN32 "${_GLREMIX_SHIM_TARGET_PREFIX}win32")
+set(_GLREMIX_SHIM_TARGET_X64 "${_GLREMIX_SHIM_TARGET_PREFIX}x64")
+
+if(TARGET ${_GLREMIX_SHIM_TARGET_WIN32})
+    add_dependencies(${PROJECT_NAME} ${_GLREMIX_SHIM_TARGET_WIN32})
+endif()
+
+if(TARGET ${_GLREMIX_SHIM_TARGET_X64})
+    add_dependencies(${PROJECT_NAME} ${_GLREMIX_SHIM_TARGET_X64})
+endif()
