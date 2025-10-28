@@ -5,7 +5,6 @@
 
 #include <GL/gl.h>
 
-#include <memory>
 #include <mutex>
 #include <tsl/robin_map.h>
 
@@ -29,8 +28,10 @@ namespace glremix::hooks
     // WGL/OpenGL might be called from multiple threads
     std::mutex g_mutex;
 
+    // wglSetPixelFormat will only be called once per context
+    // Or if there are multiple contexts they can share the same format since they're fake anyways...
+    // TODO: Make the above assumption?
     tsl::robin_map<HDC, FakePixelFormat> g_pixel_formats;
-    tsl::robin_map<HGLRC, std::unique_ptr<FakeContext>> g_contexts;
 
     thread_local HGLRC g_current_context = nullptr;
     thread_local HDC g_current_dc = nullptr;
