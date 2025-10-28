@@ -29,7 +29,7 @@
 #endif
 
 #ifndef GLREMIX_WGL_RETURN_WRAPPER
-#define GLREMIX_WGL_RETURN_WRAPPER(retType, name, params, args, defaultValue)                              \
+#define GLREMIX_WGL_RETURN_WRAPPER(retType, name, params, args, default_value)                             \
     extern "C" __declspec(dllexport) retType WINAPI name params                                            \
     {                                                                                                      \
         using FnType = retType(WINAPI*) params;                                                            \
@@ -38,6 +38,6 @@
             return override_fn args;                                                                       \
         }                                                                                                  \
         glremix::gl::report_missing_function(#name);                                                       \
-        return defaultValue;                                                                               \
+        return default_value;                                                                              \
     }
 #endif

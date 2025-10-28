@@ -37,23 +37,28 @@ namespace glremix::hooks
 
     FakePixelFormat create_default_pixel_format(const PIXELFORMATDESCRIPTOR *requested)
     {
+        if (requested == nullptr)
+        {
+			// Standard 32-bit color 24-bit depth 8-bit stencil double buffered format
+            return
+            {
+                .descriptor = 
+                {
+                    .nSize = sizeof(PIXELFORMATDESCRIPTOR),
+                    .nVersion = 1,
+                    .dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
+                    .iPixelType = PFD_TYPE_RGBA,
+                    .cColorBits = 32,
+                    .cDepthBits = 24,
+                    .cStencilBits = 8,
+                    .iLayerType = PFD_MAIN_PLANE
+                }
+            };
+        }
         FakePixelFormat result;
+        result.descriptor = *requested; 
         result.descriptor.nSize = sizeof(PIXELFORMATDESCRIPTOR);
         result.descriptor.nVersion = 1;
-        result.descriptor.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
-        result.descriptor.iPixelType = PFD_TYPE_RGBA;
-        result.descriptor.cColorBits = 32;
-        result.descriptor.cDepthBits = 24;
-        result.descriptor.cStencilBits = 8;
-        result.descriptor.iLayerType = PFD_MAIN_PLANE;
-
-        if (requested != nullptr)
-        {
-            result.descriptor = *requested;
-            result.descriptor.nSize = sizeof(PIXELFORMATDESCRIPTOR);
-            result.descriptor.nVersion = 1;
-        }
-
         return result;
     }
 

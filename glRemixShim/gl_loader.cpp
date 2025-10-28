@@ -10,7 +10,16 @@ namespace glremix::gl
     std::mutex g_hook_mutex;
 
 	// Function pointers for our custom hook implementations
-	tsl::robin_map<std::string, PROC> g_hooks; 
+	tsl::robin_map<std::string, PROC> g_hooks;
+
+	std::once_flag g_initialize_flag;
+	void initialize()
+	{
+		std::call_once(g_initialize_flag, []
+		{
+			// TODO: Setup IPC
+		});
+	}
 
 	void register_hook(const char *name, PROC proc)
 	{

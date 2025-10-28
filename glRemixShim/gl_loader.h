@@ -4,6 +4,8 @@
 
 namespace glremix::gl
 {
+	void initialize();
+
 	// Add function pointer to hooks map using name as key
 	void register_hook(const char* name, PROC proc);
 
