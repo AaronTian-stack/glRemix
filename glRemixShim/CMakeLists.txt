@@ -15,7 +15,7 @@ set(WGL_GENERATED_WRAPPERS "${GL_GENERATED_DIR}/wgl_wrappers.inl")
 set(WGL_GENERATED_REGISTER "${GL_GENERATED_DIR}/wgl_register.inl")
 
 add_custom_command(
-    OUTPUT "${GL_GENERATED_WRAPPERS}" "${GL_GENERATED_ALIASES}" "${GL_GENERATED_REGISTER}"
+    OUTPUT "${GL_GENERATED_WRAPPERS}" "${GL_GENERATED_ALIASES}"
     COMMAND ${Python3_EXECUTABLE}
         "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_gl_wrappers.py"
         --xml "${GL_XML_REGISTRY}"
@@ -23,24 +23,22 @@ add_custom_command(
         --min-version 1.0
         --max-version 1.1
         --alias-output "${GL_GENERATED_ALIASES}"
-        --register-output "${GL_GENERATED_REGISTER}"
     DEPENDS
         "${GL_XML_REGISTRY}"
         "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_gl_wrappers.py"
 )
 
 add_custom_command(
-    OUTPUT "${WGL_GENERATED_WRAPPERS}" "${WGL_GENERATED_REGISTER}"
+    OUTPUT "${WGL_GENERATED_WRAPPERS}"
     COMMAND ${Python3_EXECUTABLE}
         "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_wgl_wrappers.py"
         --output "${WGL_GENERATED_WRAPPERS}"
-        --register-output "${WGL_GENERATED_REGISTER}"
     DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_wgl_wrappers.py"
 )
 
-add_custom_target(glremix_generate_gl_wrappers DEPENDS "${GL_GENERATED_WRAPPERS}" "${GL_GENERATED_ALIASES}" "${GL_GENERATED_REGISTER}")
-add_custom_target(glremix_generate_wgl_wrappers DEPENDS "${WGL_GENERATED_WRAPPERS}" "${WGL_GENERATED_REGISTER}")
+add_custom_target(glremix_generate_gl_wrappers DEPENDS "${GL_GENERATED_WRAPPERS}" "${GL_GENERATED_ALIASES}")
+add_custom_target(glremix_generate_wgl_wrappers DEPENDS "${WGL_GENERATED_WRAPPERS}")
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/shim_sources.cmake)
 
@@ -69,16 +67,12 @@ if(NOT TARGET ${PROJECT_NAME})
         ${GLREMIX_SHIM_SCRIPT_FILES_REL}
         "${GL_GENERATED_WRAPPERS}"
         "${GL_GENERATED_ALIASES}"
-        "${GL_GENERATED_REGISTER}"
         "${WGL_GENERATED_WRAPPERS}"
-        "${WGL_GENERATED_REGISTER}"
     )
 
     set_source_files_properties("${GL_GENERATED_WRAPPERS}" PROPERTIES HEADER_FILE_ONLY TRUE)
     set_source_files_properties("${GL_GENERATED_ALIASES}" PROPERTIES HEADER_FILE_ONLY TRUE)
-    set_source_files_properties("${GL_GENERATED_REGISTER}" PROPERTIES HEADER_FILE_ONLY TRUE)
     set_source_files_properties("${WGL_GENERATED_WRAPPERS}" PROPERTIES HEADER_FILE_ONLY TRUE)
-    set_source_files_properties("${WGL_GENERATED_REGISTER}" PROPERTIES HEADER_FILE_ONLY TRUE)
     set_source_files_properties(${GLREMIX_SHIM_SCRIPT_FILES_REL} PROPERTIES HEADER_FILE_ONLY TRUE)
 
     set_target_properties(${PROJECT_NAME} PROPERTIES

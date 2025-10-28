@@ -36,14 +36,10 @@ WGL_FUNCTIONS = [
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("-o", "--output", type=Path, required=True, help="Path to write the generated wrappers .inl file")
-    parser.add_argument("-r", "--register-output", type=Path, help="Optional path to write RegisterWglWrappers() body")
     return parser.parse_args()
 
 
-def generate_wrappers(output_path: Path, register_output_path: Path = None) -> None:
-    """Generate WGL wrapper macro invocations."""
-    
-    # Generate wrapper calls
+def generate_wrappers(output_path: Path) -> None:
     wrapper_lines = [
         "// Auto-generated. Do not edit manually.",
     ] + [
@@ -55,22 +51,8 @@ def generate_wrappers(output_path: Path, register_output_path: Path = None) -> N
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(wrapper_lines) + "\n", encoding="utf-8")
     print(f"Generated {output_path}")
-    
-    # Spits out the macro we expect to register each function
-    if register_output_path:
-        register_lines = [
-            "// Auto-generated. Do not edit manually.",
-        ] + [
-            f'register_export("{name}", reinterpret_cast<PROC>(&{name}));'
-            for _, name, _, _, _ in WGL_FUNCTIONS
-            if name != "wglGetProcAddress"
-        ]
-        
-        register_output_path.parent.mkdir(parents=True, exist_ok=True)
-        register_output_path.write_text("\n".join(register_lines) + "\n", encoding="utf-8")
-        print(f"Generated {register_output_path}")
 
 
 if __name__ == "__main__":
     args = parse_args()
-    generate_wrappers(args.output, args.register_output)
+    generate_wrappers(args.output)

@@ -11,9 +11,9 @@
 
 namespace glremix::hooks
 {
-    // If forwarding a call is needed for whatever reason, you can write a function to load the true dll,
+    // If forwarding a call is needed for whatever reason, you can write a function to load the true DLL,
     // then use GetProcAddress or wglGetProcAddress to store the real function pointer. But we are not
-    // using OpenGL functions, so this does not apply.
+    // using OpenGL functions, so this does not apply. Might be useful for DLL chaining though.
 
     struct FakePixelFormat
     {
@@ -26,7 +26,7 @@ namespace glremix::hooks
         HDC last_dc = nullptr;
     };
 
-    // wgl/ogl might be called from multiple threads
+    // WGL/OpenGL might be called from multiple threads
     std::mutex g_mutex;
 
     tsl::robin_map<HDC, FakePixelFormat> g_pixel_formats;
@@ -86,8 +86,6 @@ namespace glremix::hooks
             return 0;
         }
 
-        UNREFERENCED_PARAMETER(bytes);
-
         std::scoped_lock lock(g_mutex);
         if (!g_pixel_formats.contains(dc))
         {
@@ -130,7 +128,7 @@ namespace glremix::hooks
 
     HGLRC WINAPI create_context_ovr(HDC dc)
     {
-        // TODO: Derive HWND from HDC to create swapchain
+        // TODO: Derive HWND from HDC for swapchain creation
         return reinterpret_cast<HGLRC>(0xDEADBEEF); // Dummy context handle
     }
 
@@ -166,22 +164,22 @@ namespace glremix::hooks
 	{
 	    std::call_once(g_install_flag, []()
 	    {
-	        gl::register_override("glVertex3f", reinterpret_cast<PROC>(&gl_vertex3f_ovr));
+	        gl::register_hook("glVertex3f", reinterpret_cast<PROC>(&gl_vertex3f_ovr));
             // TODO: more OpenGL overrides
+            // Just use the name and make sure the signature matches
 
-            // Override wgl for app to work
-            // Return success and try to do nothing
-	        gl::register_override("wglChoosePixelFormat", reinterpret_cast<PROC>(&choose_pixel_format_ovr));
-	        gl::register_override("wglDescribePixelFormat", reinterpret_cast<PROC>(&describe_pixel_format_ovr));
-	        gl::register_override("wglGetPixelFormat", reinterpret_cast<PROC>(&get_pixel_format_ovr));
-	        gl::register_override("wglSetPixelFormat", reinterpret_cast<PROC>(&set_pixel_format_ovr));
-	        gl::register_override("wglSwapBuffers", reinterpret_cast<PROC>(&swap_buffers_ovr));
-	        gl::register_override("wglCreateContext", reinterpret_cast<PROC>(&create_context_ovr));
-	        gl::register_override("wglDeleteContext", reinterpret_cast<PROC>(&delete_context_ovr));
-	        gl::register_override("wglGetCurrentContext", reinterpret_cast<PROC>(&get_current_context_ovr));
-	        gl::register_override("wglGetCurrentDC", reinterpret_cast<PROC>(&get_current_dc_ovr));
-	        gl::register_override("wglMakeCurrent", reinterpret_cast<PROC>(&make_current_ovr));
-	        gl::register_override("wglShareLists", reinterpret_cast<PROC>(&share_lists_ovr));
+            // Override wgl for app to work. Return success and try to do nothing
+	        gl::register_hook("wglChoosePixelFormat", reinterpret_cast<PROC>(&choose_pixel_format_ovr));
+	        gl::register_hook("wglDescribePixelFormat", reinterpret_cast<PROC>(&describe_pixel_format_ovr));
+	        gl::register_hook("wglGetPixelFormat", reinterpret_cast<PROC>(&get_pixel_format_ovr));
+	        gl::register_hook("wglSetPixelFormat", reinterpret_cast<PROC>(&set_pixel_format_ovr));
+	        gl::register_hook("wglSwapBuffers", reinterpret_cast<PROC>(&swap_buffers_ovr));
+	        gl::register_hook("wglCreateContext", reinterpret_cast<PROC>(&create_context_ovr));
+	        gl::register_hook("wglDeleteContext", reinterpret_cast<PROC>(&delete_context_ovr));
+	        gl::register_hook("wglGetCurrentContext", reinterpret_cast<PROC>(&get_current_context_ovr));
+	        gl::register_hook("wglGetCurrentDC", reinterpret_cast<PROC>(&get_current_dc_ovr));
+	        gl::register_hook("wglMakeCurrent", reinterpret_cast<PROC>(&make_current_ovr));
+	        gl::register_hook("wglShareLists", reinterpret_cast<PROC>(&share_lists_ovr));
 	    });
 	}
 }

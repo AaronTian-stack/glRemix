@@ -4,13 +4,12 @@
 
 namespace glremix::gl
 {
-	void initialize();
-	void register_override(const char* name, PROC proc);
-	PROC find_override(const char* name);
-	void register_export(const char* name, PROC proc);
-	PROC find_export(const char* name);
-	void report_missing_function(const char* name);
+	// Add function pointer to hooks map using name as key
+	void register_hook(const char* name, PROC proc);
 
-	void register_core_wrappers();
-	void register_wgl_wrappers();
+	// Try to return hooked function pointer using name as hook map lookup
+	PROC find_hook(const char* name);
+
+	// Print out missing function name to debug output
+	void report_missing_function(const char* name);
 }

@@ -17,11 +17,6 @@ def parse_args() -> argparse.Namespace:
         help="Optional path to write linker alias helper macros for the exported functions",
     )
     parser.add_argument(
-        "-r", "--register-output",
-        type=Path,
-        help="Optional path to write register_export calls for the functions",
-    )
-    parser.add_argument(
         "-m", "--min-version",
         default="1.0",
         help="Lowest OpenGL core version (inclusive) to include",
@@ -217,7 +212,7 @@ def single_param_size(type_text: str) -> int:
     return size
 
 
-def emit_wrappers(args: argparse.Namespace) -> None:
+def generate_wrappers(args: argparse.Namespace) -> None:
     tree = ET.parse(args.xml)
     root = tree.getroot()
 
@@ -272,16 +267,6 @@ def emit_wrappers(args: argparse.Namespace) -> None:
         args.alias_output.parent.mkdir(parents=True, exist_ok=True)
         args.alias_output.write_text(alias_text, encoding="utf-8")
 
-    if args.register_output:
-        register_lines: List[str] = [header.strip()] + [
-            f'register_export("{signature["name"]}", reinterpret_cast<PROC>(&{signature["name"]}));'
-            for signature in signatures
-        ]
-
-        register_text = "\n".join(register_lines) + "\n"
-        args.register_output.parent.mkdir(parents=True, exist_ok=True)
-        args.register_output.write_text(register_text, encoding="utf-8")
-
 
 if __name__ == "__main__":
-    emit_wrappers(parse_args())
+    generate_wrappers(parse_args())

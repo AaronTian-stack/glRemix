@@ -10,7 +10,7 @@ set(GLREMIX_SHIM_SOURCE_FILES
     "${GLREMIX_SHIM_SOURCE_DIR}/gl_exports.cpp"
     "${GLREMIX_SHIM_SOURCE_DIR}/gl_loader.cpp"
     "${GLREMIX_SHIM_SOURCE_DIR}/gl_hooks.cpp"
-    "${GLREMIX_SHIM_SOURCE_DIR}/wgl_dispatch.cpp"
+    "${GLREMIX_SHIM_SOURCE_DIR}/wgl_exports.cpp"
 )
 
 set(GLREMIX_SHIM_HEADER_FILES
@@ -18,6 +18,8 @@ set(GLREMIX_SHIM_HEADER_FILES
     "${GLREMIX_SHIM_SOURCE_DIR}/gl_hooks.h"
     "${GLREMIX_SHIM_SOURCE_DIR}/gl_loader.h"
     "${GLREMIX_SHIM_SOURCE_DIR}/wgl_export_aliases.inl"
+    "${GLREMIX_SHIM_SOURCE_DIR}/export_macros.h"
+    "${GLREMIX_SHIM_SOURCE_DIR}/undef_export_macros.h"
 )
 
 set(GLREMIX_SHIM_SCRIPT_FILES

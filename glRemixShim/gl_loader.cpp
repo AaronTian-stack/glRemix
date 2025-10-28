@@ -3,84 +3,43 @@
 #include <mutex>
 #include <string>
 #include <tsl/robin_map.h>
-#include <vector>
 
 namespace glremix::gl
 {
-    std::once_flag g_initialize_flag;
+	// Both WGL and OpenGL functions may be called from multiple threads hence the mutex
+    std::mutex g_hook_mutex;
 
-	// Both wgl and OpenGL functions may be called from multiple threads hence the mutexes
+	// Function pointers for our custom hook implementations
+	tsl::robin_map<std::string, PROC> g_hooks; 
 
-    std::mutex g_override_mutex;
-    tsl::robin_map<std::string, PROC> g_overrides; // Function pointers for our wgl overrides
-
-    std::mutex g_export_mutex;
-    tsl::robin_map<std::string, PROC> g_exports; // All other OpenGL functions
-
-	void initialize()
-	{
-	    std::call_once(g_initialize_flag, []
-	    {
-	        register_core_wrappers();
-	        register_wgl_wrappers();
-	    });
-	}
-
-	void register_override(const char *name, PROC proc)
+	void register_hook(const char *name, PROC proc)
 	{
 	    if (name == nullptr)
 	    {
 	        return;
 	    }
 
-	    std::scoped_lock lock(g_override_mutex);
+	    std::scoped_lock lock(g_hook_mutex);
 	    if (proc == nullptr)
 	    {
-	        g_overrides.erase(name);
+	        g_hooks.erase(name);
 	        return;
 	    }
 
-	    g_overrides[name] = proc;
+	    g_hooks[name] = proc;
 	}
 
-	PROC find_override(const char *name)
+	PROC find_hook(const char *name)
 	{
 	    if (name == nullptr)
 	    {
 	        return nullptr;
 	    }
 
-	    std::scoped_lock lock(g_override_mutex);
-	    if (g_overrides.contains(name))
+	    std::scoped_lock lock(g_hook_mutex);
+	    if (g_hooks.contains(name))
 	    {
-	        return g_overrides[name];
-	    }
-
-	    return nullptr;
-	}
-
-	void register_export(const char *name, PROC proc)
-	{
-	    if (name == nullptr || proc == nullptr)
-	    {
-	        return;
-	    }
-
-	    std::scoped_lock lock(g_export_mutex);
-	    g_exports[name] = proc;
-	}
-
-	PROC find_export(const char *name)
-	{
-	    if (name == nullptr)
-	    {
-	        return nullptr;
-	    }
-
-	    std::scoped_lock lock(g_export_mutex);
-	    if (g_exports.contains(name))
-	    {
-	        return g_exports[name];
+	        return g_hooks[name];
 	    }
 
 	    return nullptr;
