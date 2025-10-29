@@ -8,6 +8,7 @@
         if (auto override_fn = reinterpret_cast<FnType>(glremix::gl::find_hook(#name)))                    \
         {                                                                                                  \
             override_fn args;                                                                              \
+            glremix::gl::report_successful_function(#name);                                                \
             return;                                                                                        \
         }                                                                                                  \
         glremix::gl::report_missing_function(#name);                                                       \

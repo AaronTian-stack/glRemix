@@ -54,7 +54,19 @@ namespace glremix::gl
 	    return nullptr;
 	}
 
-	void report_missing_function(const char *name)
+	void report_successful_function(const char *name)
+	{
+		if (name == nullptr)
+		{
+			return;
+		}
+
+		char buffer[256];
+		std::snprintf(buffer, sizeof(buffer), "glRemix INFO: success! found override for OpenGL symbol: %s\n", name);
+		OutputDebugStringA(buffer);
+	}
+
+    void report_missing_function(const char *name)
 	{
 		if (name == nullptr)
 		{
