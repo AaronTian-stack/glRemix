@@ -176,9 +176,13 @@ namespace glremix::hooks
             // Just use the name and make sure the signature matches.
             // You can find exports in the generated gl_wrappers.inl, but extensions are not going to be in there.
 
-			// There will need be a caching system for display lists, since the app may use them instead of recording direct calls.
-			// A simple mapping and lookup to store recorded commands per display list ID should suffice.
-			// You can write it to a buffer stored as a value in the map, and just do a memcpy into the main IPC buffer.
+			// There will need be a caching system in the renderer for display lists, since the app may use them instead of recording direct calls.
+			// A mapping to store recorded commands per display list ID should suffice.
+
+			// FOR SHIM TEAM:
+			// The shim should generate a monotonic integer for the ID in glGenLists (which will also be returned to the host app)
+			// such that the renderer can construct a mapping for glCallList calls.
+			// This same idea applies to any resource creation call that returns an ID (textures for example).
 			// ex: glxgears only records geometry once and then replays it every frame via display lists.
 
             // Override WGL for app to work. Return success and try to do nothing.
