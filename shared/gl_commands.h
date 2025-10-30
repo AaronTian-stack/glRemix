@@ -79,6 +79,11 @@ namespace glRemix
 
     // TODO: Compress these?
 
+    // NOTE FOR PERSON DOING SHIM/IPC:
+	// It is not strictly required to have separate structs for each command, but it may make serialization/deserialization more clear.
+	// You could just use the DirectXMath XM types (storage) for vectors of 2/3/4 floats/ints/uints etc.
+    // If you choose to go that route, you can delete the below structs.
+
     struct GLVertex3fCommand
     {
         float x, y, z;
@@ -110,5 +115,5 @@ namespace glRemix
         float r, g, b, a;
     };
 
-    // TODO: Add more structs
+    // TODO: Add more structs as needed
 }

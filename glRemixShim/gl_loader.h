@@ -12,9 +12,6 @@ namespace glremix::gl
 	// Try to return hooked function pointer using name as hook map lookup
 	PROC find_hook(const char* name);
 
-    // Print out function name successfully found
-	void report_successful_function(const char* name);
-
 	// Print out missing function name to debug output
 	void report_missing_function(const char* name);
 }

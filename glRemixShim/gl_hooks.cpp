@@ -29,7 +29,7 @@ namespace glremix::hooks
     std::mutex g_mutex;
 
     // wglSetPixelFormat will only be called once per context
-    // Or if there are multiple contexts they can share the same format since they're fake anyways...
+    // Or if there are multiple contexts they can share the same format since they're fake anyway...
     // TODO: Make the above assumption?
     tsl::robin_map<HDC, FakePixelFormat> g_pixel_formats;
 
@@ -65,7 +65,8 @@ namespace glremix::hooks
 
     void APIENTRY gl_vertex3f_ovr(GLfloat x, GLfloat y, GLfloat z)
     {
-        int a = 0; // Breakpoint test
+		// Example override that does nothing.
+        // You can put a breakpoint here.
     }
 
     BOOL WINAPI swap_buffers_ovr(HDC)
@@ -171,10 +172,16 @@ namespace glremix::hooks
 	    std::call_once(g_install_flag, []()
 	    {
 	        gl::register_hook("glVertex3f", reinterpret_cast<PROC>(&gl_vertex3f_ovr));
-            // TODO: more OpenGL overrides
-            // Just use the name and make sure the signature matches
+            // TODO: Add more OpenGL overrides
+            // Just use the name and make sure the signature matches.
+            // You can find exports in the generated gl_wrappers.inl, but extensions are not going to be in there.
 
-            // Override wgl for app to work. Return success and try to do nothing
+			// There will need be a caching system for display lists, since the app may use them instead of recording direct calls.
+			// A simple mapping and lookup to store recorded commands per display list ID should suffice.
+			// You can write it to a buffer stored as a value in the map, and just do a memcpy into the main IPC buffer.
+			// ex: glxgears only records geometry once and then replays it every frame via display lists.
+
+            // Override WGL for app to work. Return success and try to do nothing.
 	        gl::register_hook("wglChoosePixelFormat", reinterpret_cast<PROC>(&choose_pixel_format_ovr));
 	        gl::register_hook("wglDescribePixelFormat", reinterpret_cast<PROC>(&describe_pixel_format_ovr));
 	        gl::register_hook("wglGetPixelFormat", reinterpret_cast<PROC>(&get_pixel_format_ovr));
