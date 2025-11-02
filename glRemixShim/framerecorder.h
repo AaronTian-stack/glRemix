@@ -19,12 +19,14 @@ public:
         std::lock_guard<std::mutex> lock(m_mutex);
         if (m_recording)
         {
-            CommandRecord rec;
-            rec.type = type;
-            rec.size = size;
-            rec.data.assign(reinterpret_cast<const uint8_t*>(payload),
+            GLCommandObject cmd;
+            cmd.cmdUnifs = {type, size};
+            cmd.data.assign(reinterpret_cast<const uint8_t*>(payload),
                             reinterpret_cast<const uint8_t*>(payload) + size);
-            m_commands.push_back(std::move(rec));
+
+            m_frameUnifs.payloadSize += sizeof(cmd.cmdUnifs) + size;
+
+            m_commands.push_back(std::move(cmd));
         }
     }
 
@@ -35,6 +37,7 @@ public:
 
     inline void EndFrame()
     {
+        std::lock_guard<std::mutex> lock(m_mutex);
         if (!m_recording)
         {
             return;
@@ -43,34 +46,43 @@ public:
         m_recording = false;
 
         std::vector<uint8_t> buffer;
-        for (auto& cmd : m_commands)
+        buffer.reserve(sizeof(m_frameUnifs) + m_frameUnifs.payloadSize);
+
+        buffer.insert(buffer.end(),
+                      reinterpret_cast<uint8_t*>(&m_frameUnifs),
+                      reinterpret_cast<uint8_t*>(&m_frameUnifs) + sizeof(m_frameUnifs));
+
+        if (!m_commands.empty())
         {
-            GLCommand header{cmd.type, cmd.size};
-            buffer.insert(buffer.end(),
-                          reinterpret_cast<uint8_t*>(&header),
-                          reinterpret_cast<uint8_t*>(&header) + sizeof(header));
-            buffer.insert(buffer.end(), cmd.data.begin(), cmd.data.end());
+            for (auto& cmd : m_commands)
+            {
+                buffer.insert(buffer.end(),
+                              reinterpret_cast<uint8_t*>(&cmd.cmdUnifs),
+                              reinterpret_cast<uint8_t*>(&cmd.cmdUnifs) + sizeof(cmd.cmdUnifs));
+                buffer.insert(buffer.end(), cmd.data.begin(), cmd.data.end());
+            }
         }
 
-        if (!buffer.empty())
-        {
-            m_ipc.SendFrame(buffer.data(), static_cast<uint32_t>(buffer.size()));
-        }
+        m_ipc.SendFrame(buffer.data(), static_cast<uint32_t>(buffer.size()));
 
         m_commands.clear();
+        m_frameUnifs.payloadSize = 0;
+        m_frameUnifs.frameIndex++;
     }
 
 private:
-    struct CommandRecord
+    struct GLCommandObject
     {
-        GLCommandType type;
-        uint32_t size;
+        GLCommandUnifs cmdUnifs;
         std::vector<uint8_t> data;
     };
 
     IPCProtocol m_ipc;
+
     std::mutex m_mutex;
     bool m_recording = false;
-    std::vector<CommandRecord> m_commands;
+
+    GLFrameUnifs m_frameUnifs;
+    std::vector<GLCommandObject> m_commands;
 };
 }  // namespace glRemix

@@ -88,10 +88,16 @@ bool glRemix::SharedMemory::Write(const void* src, uint32_t bytes, uint32_t offs
         return false;
     }
 
-    // Only write when EMPTY
+    if (m_header->state == SharedState::CONSUMED)
+    {
+        InterlockedExchange(reinterpret_cast<volatile LONG*>(&m_header->state),
+                            static_cast<LONG>(SharedState::EMPTY));
+    }
+
+    // only write when EMPTY
     if (m_header->state != SharedState::EMPTY)
     {
-        ss << "File not available for writing." << "\n";
+        ss << "File state not consumed. Will skip writing." << "\n";
         OutputDebugStringA(ss.str().c_str());
         return false;
     }
@@ -118,19 +124,25 @@ bool glRemix::SharedMemory::Read(void* dst,
                                      uint32_t offset,
                                      uint32_t* outBytes)
 {
+    std::ostringstream ss;
     if (!m_header || !dst)
     {
-        std::ostringstream ss;
-        ss << "File not ready for writing, call `::CreateForWriter` first." << "\n";
+        ss << "File not ready for reading, call `::OpenForReader` first." << "\n";
         OutputDebugStringA(ss.str().c_str());
 
+        return false;
+    }
+
+    if (m_header->state != SharedState::FILLED)
+    {
+        ss << "File state not filled. Nothing to read." << "\n";
+        OutputDebugStringA(ss.str().c_str());
         return false;
     }
 
     uint32_t n = m_header->size;
     if (n > maxBytes)
     {
-        std::ostringstream ss;
         ss << "Header size greater than desired max bytes. Truncating..." << "\n";
         OutputDebugStringA(ss.str().c_str());
 
