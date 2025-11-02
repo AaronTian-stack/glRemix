@@ -8,7 +8,6 @@
 #include <conio.h>
 
 // temporary test function, can remove
-// reads the
 // the important snippets are the ability to check for the IPC file mapping capacity
 // in general, `glRemix::IPCProtocol` wraps the actual file mapping object and view logic from IPC
 // since that is getting into userland, feel free to change or add function logic there
