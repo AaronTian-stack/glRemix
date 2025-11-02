@@ -19,7 +19,10 @@ Multiple processes can use the same object to create their own views, and their 
 
 The biggest worry here is about synchronization. Processes should use a semaphone to prevent data corruption (for sure need this).
 
+Will follow [this code example](https://learn.microsoft.com/en-us/windows/win32/memory/creating-a-view-within-a-file) to get up & and running
+
 ## Resources
 - https://learn.microsoft.com/en-us/windows/win32/memory/file-mapping
 - https://learn.microsoft.com/en-us/windows/win32/winprog64/interprocess-communication
 - https://learn.microsoft.com/en-us/windows/win32/dxtecharts/sixty-four-bit-programming-for-game-developers#compatibility-of-32-bit-applications-on-64-bit-platforms
+- https://learn.microsoft.com/en-us/windows/win32/ipc/interprocess-communications#using-a-file-mapping-for-ipc

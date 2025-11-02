@@ -456,11 +456,14 @@ CMakeScripts/
 cmake_install.cmake
 CTestTestfile.cmake
 Makefile
-*.cmake
+# *.cmake
 !CMakeLists.txt
 install_manifest.txt
 compile_commands.json
 
+# CMakePresets.json
+
 .vscode/
 
 .github/
+/CMakePresets.json

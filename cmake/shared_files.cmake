@@ -14,8 +14,9 @@ set(GLREMIX_SHARED_HEADER_NAMES
 	"ipc_protocol.h"
 )
 
-# Future shared sources can be added here
 set(GLREMIX_SHARED_SOURCE_NAMES
+    "shared_memory.cpp"
+    "ipc_protocol.cpp"
 )
 
 set(GLREMIX_SHARED_HEADER_FILES)
