@@ -1,7 +1,8 @@
 #include "gl_hooks.h"
 
 #include "framework.h"
-#include "gl_loader.h"
+
+#include <gl_loader.h>
 
 #include <GL/gl.h>
 
@@ -67,10 +68,15 @@ namespace glRemix::hooks
     {
 		// Example override that does nothing.
         // You can put a breakpoint here.
+        glRemix::GLVertex3fCommand payload{x, y, z};
+        g_recorder.Record(glRemix::GLCommandType::GL_VERTEX3F, &payload, sizeof(payload));
     }
 
     BOOL WINAPI swap_buffers_ovr(HDC)
     {
+        g_recorder.EndFrame();
+        g_recorder.StartFrame();
+
         return TRUE;
     }
 

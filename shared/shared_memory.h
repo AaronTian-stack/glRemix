@@ -7,7 +7,7 @@ namespace glRemix
 {
     // Local keyword allows to stay per-session, Global requires elevated permissions
     // wchar_t is standard for file mapping names in windows (though can maybe switch with TCHAR*)
-    constexpr const wchar_t* kDEFAULT_MAP_NAME = L"Local\\glRemix_Shared\\SingleFrameCapture";
+    constexpr const wchar_t* kDEFAULT_MAP_NAME = L"Local\\glRemix_DefaultMap";
     constexpr uint32_t kDEFAULT_CAPACITY = 1u << 20; // i.e. 1mb
 
     /* 

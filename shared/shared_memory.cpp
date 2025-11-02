@@ -23,7 +23,7 @@ bool glRemix::SharedMemory::CreateForWriter(const wchar_t* name, uint32_t capaci
     if (!hMapFile)
     {
         std::ostringstream ss;
-        ss << "Could not create file mapping of file" << GetLastError() << "\n";
+        ss << "Could not create file mapping of file. Error Code: " << GetLastError() << "\n";
         OutputDebugStringA(ss.str().c_str());
         return false;
     }
@@ -59,8 +59,8 @@ bool glRemix::SharedMemory::OpenForReader(const wchar_t* name)
     if (!hMapFile)
     {
         std::ostringstream ss;
-        ss << "Could not open file mapping of file. Ensure external process has created it.";
-        ss << GetLastError() << "\n";
+        ss << "Could not open file mapping of file. Ensure external process has created it. ";
+        ss << "Error Code: " << GetLastError() << "\n";
         OutputDebugStringA(ss.str().c_str());
         return false;
     }
@@ -174,7 +174,7 @@ bool glRemix::SharedMemory::_MapCommon(HANDLE hMapFile)
     if (m_view == NULL)
     {
         std::ostringstream ss;
-        ss << "Could not map view of file" << GetLastError() << "\n";
+        ss << "Could not map view of file. Error Code: " << GetLastError() << "\n";
         OutputDebugStringA(ss.str().c_str());
 
         CloseHandle(hMapFile);
