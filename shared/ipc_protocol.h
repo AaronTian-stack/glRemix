@@ -6,6 +6,7 @@
 
 namespace glRemix
 {
+    /* For now, a simple manager for `SharedMemory` */
     class IPCProtocol
     {
     public:

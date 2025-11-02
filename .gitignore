@@ -460,10 +460,8 @@ Makefile
 !CMakeLists.txt
 install_manifest.txt
 compile_commands.json
-
-# CMakePresets.json
+CMakePresets.json
 
 .vscode/
 
 .github/
-/CMakePresets.json

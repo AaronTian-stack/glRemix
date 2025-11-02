@@ -71,7 +71,7 @@ namespace glRemix
         bool _MapCommon(HANDLE hMap);
         void _CloseAll();
 
-        // preview size
+        // preview size, is passed into functions
         inline size_t _TotalSize(uint32_t capacity) {
             return sizeof(SharedMemoryHeader) + capacity;
         }
