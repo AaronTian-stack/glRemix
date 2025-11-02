@@ -10,15 +10,37 @@ include("${REPO_ROOT}/cmake/shared_files.cmake")
 set(SHARED_HEADERS ${GLREMIX_SHARED_HEADER_FILES})
 set(SHARED_SOURCES ${GLREMIX_SHARED_SOURCE_FILES})
 
+set(dx_dir "${CMAKE_CURRENT_SOURCE_DIR}/dx")
+
 set(RENDERER_SOURCES
     "main.cpp"
+    "${dx_dir}/d3d12_context.cpp"
+    "${dx_dir}/d3d12_descriptor_heap.cpp"
+
+    "application.cpp"
+    "rt_app.cpp"
 )
 
 set(D3D12MA_SOURCES
     "${REPO_ROOT}/external/D3D12MemoryAllocator-3.0.1/src/D3D12MemAlloc.cpp"
 )
 
+set(SHADER_FILES
+    "shaders/raster/triangle.hlsl"
+    "shaders/rt/raytracing.hlsl"
+)
+
 set(RENDERER_HEADERS
+    "${dx_dir}/d3d12_context.h"
+    "${dx_dir}/d3d12_fence.h"
+    "${dx_dir}/d3d12_queue.h"
+    "${dx_dir}/d3d12_command_allocator.h"
+    "${dx_dir}/d3d12_descriptor_heap.h"
+    "${dx_dir}/d3d12_descriptor.h"
+    "${dx_dir}/d3d12_as.h"
+
+    "application.h"
+    "rt_app.h"
 )
 
 add_executable(${PROJECT_NAME} 
@@ -27,6 +49,7 @@ add_executable(${PROJECT_NAME}
     ${SHARED_HEADERS}
     ${SHARED_SOURCES}
     ${D3D12MA_SOURCES}
+    ${SHADER_FILES}
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE 
@@ -91,6 +114,7 @@ endif()
 set(ALL_RENDERER_FILES ${RENDERER_SOURCES} ${RENDERER_HEADERS})
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${ALL_RENDERER_FILES})
 source_group("shared" FILES ${SHARED_HEADERS} ${SHARED_SOURCES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES ${SHADER_FILES})
 
 set(_GLREMIX_SHIM_TARGET_PREFIX "${GLREMIX_SHIM_TARGET_PREFIX}")
 if(NOT _GLREMIX_SHIM_TARGET_PREFIX)
