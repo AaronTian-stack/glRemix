@@ -10,5 +10,7 @@ namespace glRemix
     {
         // https://learn.microsoft.com/en-us/windows/win32/ipc/interprocess-communications#using-a-file-mapping-for-ipc
         // TODO: Setup IPC using file mapping
+       
+        
     }
 }
