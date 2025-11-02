@@ -2,7 +2,7 @@
 
 #include "framework.h"
 
-namespace glremix::gl
+namespace glRemix::gl
 {
 	void initialize();
 

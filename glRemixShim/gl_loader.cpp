@@ -4,7 +4,11 @@
 #include <string>
 #include <tsl/robin_map.h>
 
-namespace glremix::gl
+#include "ipc_protocol.h"
+
+static glRemix::IPCProtocol g_ipc;
+
+namespace glRemix::gl
 {
 	// Both WGL and OpenGL functions may be called from multiple threads hence the mutex
     std::mutex g_hook_mutex;

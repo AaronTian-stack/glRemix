@@ -1,6 +1,6 @@
 #pragma once
 
-namespace glremix::hooks
+namespace glRemix::hooks
 {
 	void install_overrides();
 }
