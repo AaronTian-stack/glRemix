@@ -32,6 +32,7 @@ void initialize()
         {
             OutputDebugStringA("glRemix: Recorder ready.\n");
         }
+        g_recorder.StartFrame();
     });
 }
 
