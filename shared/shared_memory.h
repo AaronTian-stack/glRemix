@@ -10,11 +10,14 @@ namespace glRemix
     constexpr const wchar_t* kDEFAULT_MAP_NAME = L"Local\\glRemix_Shared\\SingleFrameCapture";
     constexpr uint32_t kDEFAULT_CAPACITY = 1u << 20; // i.e. 1mb
 
-    // Current state options:
-    // 0 = EMPTY (writer may write)
-    // 1 = FILLED (reader may read)
-    // 2 = CONSUMED (reader set after reading, may not be necessary)
-    enum class SharedState : uint32_t {
+    /* 
+     * Current state options :
+     * 0 = EMPTY (writer may write)
+     * 1 = FILLED (reader may read)
+     * 2 = CONSUMED (reader set after reading, may not be necessary)
+    */
+    // use LONG so that we may use `InterlockedExchange`
+    enum class SharedState : LONG {
         EMPTY = 0,
         FILLED = 1,
         CONSUMED = 2
@@ -60,7 +63,7 @@ namespace glRemix
 
     private:
         HANDLE m_map = nullptr; // windows provides `HANDLE` typedef
-        void* m_view = nullptr;
+        LPTSTR m_view = nullptr;
         SharedMemoryHeader* m_header = nullptr;
         uint8_t* m_payload = nullptr;
 
@@ -72,7 +75,7 @@ namespace glRemix
         void _CloseAll();
 
         // preview size, is passed into functions
-        inline size_t _TotalSize(uint32_t capacity) {
+        inline size_t _MaxObjectSize(uint32_t capacity) {
             return sizeof(SharedMemoryHeader) + capacity;
         }
     };
