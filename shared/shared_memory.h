@@ -44,13 +44,15 @@ namespace glRemix
         // reader opens existing mapping and maps view.
         bool OpenForReader(const wchar_t* name = kDEFAULT_MAP_NAME);
 
-        // state: EMPTY -> FILLED
+        // state: EMPTY || CONSUMED -> FILLED
         // returns true if write success
-        bool WriteOnce(const void* src, uint32_t bytes, uint32_t offset = 0);
+        bool Write(const void* src, uint32_t bytes, uint32_t offset = 0);
+
+        bool Peek(void* dst, uint32_t maxBytes, uint32_t offset, uint32_t* outBytes);
 
         // state: FILLED -> CONSUMED
         // returns true if read success
-        bool ReadOnce(void* dst, uint32_t maxBytes, uint32_t offset = 0, uint32_t* outBytes = nullptr);
+        bool Read(void* dst, uint32_t maxBytes, uint32_t offset = 0, uint32_t* outBytes = nullptr);
 
         // accesssors
         inline SharedMemoryHeader* GetHeader() const { return m_header; }

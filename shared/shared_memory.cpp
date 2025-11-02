@@ -78,7 +78,7 @@ bool glRemix::SharedMemory::OpenForReader(const wchar_t* name)
     return true;
 }
 
-bool glRemix::SharedMemory::WriteOnce(const void* src, uint32_t bytes, uint32_t offset)
+bool glRemix::SharedMemory::Write(const void* src, uint32_t bytes, uint32_t offset)
 {
     std::ostringstream ss;
     if (!m_header || !src || bytes > m_header->capacity)
@@ -100,6 +100,7 @@ bool glRemix::SharedMemory::WriteOnce(const void* src, uint32_t bytes, uint32_t 
     m_header->size = bytes;
 
     // mark as FILLED so the reader knows data is ready
+    MemoryBarrier();  // ensure size/payload visible before state
     InterlockedExchange(reinterpret_cast<volatile LONG*>(&m_header->state),
                         static_cast<LONG>(SharedState::FILLED));
 
@@ -112,7 +113,7 @@ bool glRemix::SharedMemory::WriteOnce(const void* src, uint32_t bytes, uint32_t 
     return true;
 }
 
-bool glRemix::SharedMemory::ReadOnce(void* dst,
+bool glRemix::SharedMemory::Read(void* dst,
                                      uint32_t maxBytes,
                                      uint32_t offset,
                                      uint32_t* outBytes)
@@ -124,13 +125,6 @@ bool glRemix::SharedMemory::ReadOnce(void* dst,
         OutputDebugStringA(ss.str().c_str());
 
         return false;
-    }
-
-    // wait for data to be FILLED
-    // this is probably not best practice and just for MVP purposes
-    while (m_header->state != SharedState::FILLED)
-    {
-        Sleep(1);
     }
 
     uint32_t n = m_header->size;
@@ -160,6 +154,31 @@ bool glRemix::SharedMemory::ReadOnce(void* dst,
         SetEvent(m_readEvent);
     }
 
+    return true;
+}
+
+bool glRemix::SharedMemory::Peek(void* dst, uint32_t maxBytes, uint32_t offset, uint32_t* outBytes)
+{
+    if (!m_header || !dst)
+    {
+        return false;
+    }
+    if (m_header->state != SharedState::FILLED)
+    {
+        return false;
+    }
+
+    uint32_t n = m_header->size;
+    if ((offset + n) > maxBytes)
+    {
+        n = (maxBytes > offset) ? (maxBytes - offset) : 0;
+    }
+    std::memcpy(dst, m_payload + offset, n);
+    if (outBytes)
+    {
+        *outBytes = n;
+    }
+    // no state change (remains FILLED)
     return true;
 }
 

@@ -24,7 +24,6 @@ void _readFrame()
         if (_kbhit())
         {
             std::cout << "IPC initialization attempts stopped by user." << std::endl;
-            std::cout << _getch() << std::endl;
             return;
         }
     }
@@ -47,7 +46,6 @@ void _readFrame()
         if (_kbhit())
         {
             std::cout << "Frame polling stopped by user." << std::endl;
-            std::cout << _getch() << std::endl;
             return;
         }
     }
@@ -86,9 +84,10 @@ void _readFrame()
 
 int main()
 {
-    std::cout << "Hello world" << std::endl;
-
     _readFrame();
+
+    std::cout << "Press Ctrl + C to exit" << std::endl; // hold here to read output
+    _getch();
 
     return 0;
 }
