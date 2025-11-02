@@ -1,105 +1,84 @@
-// Raytracing output texture
-RWTexture2D<float4> RenderTarget : register(u0);
+#ifndef RAYTRACING_HLSL
+#define RAYTRACING_HLSL
 
-// Acceleration structure
-RaytracingAccelerationStructure SceneBVH : register(t0);
-
-// Ray generation constant buffer
-cbuffer RayGenCB : register(b0)
+struct Viewport
 {
-    float4x4 viewInverse;
-    float4x4 projInverse;
-    float2 screenDimensions;
-}
+    float left;
+    float top;
+    float right;
+    float bottom;
+};
 
-// Payload structure for the rays
+struct RayGenConstantBuffer
+{
+    Viewport viewport;
+    Viewport stencil;
+};
+
+RaytracingAccelerationStructure Scene : register(t0, space0);
+RWTexture2D<float4> RenderTarget : register(u0);
+ConstantBuffer<RayGenConstantBuffer> g_rayGenCB : register(b0);
+
+// https://learn.microsoft.com/en-us/windows/win32/direct3d12/intersection-attributes
+typedef BuiltInTriangleIntersectionAttributes MyAttributes;
 struct RayPayload
 {
     float4 color;
 };
 
-struct Vertex
+bool IsInsideViewport(float2 p, Viewport viewport)
 {
-    float3 position;
-    float4 color;
-};
+    return (p.x >= viewport.left && p.x <= viewport.right)
+        && (p.y >= viewport.top && p.y <= viewport.bottom);
+}
 
-// Ray generation shader
 [shader("raygeneration")]
-void RayGen()
+void MyRaygenShader()
 {
-    // Get the current pixel coordinate
-    uint2 launchIndex = DispatchRaysIndex().xy;
-    float2 dims = float2(screenDimensions.x, screenDimensions.y);
-    
-    // Transform pixel to camera space
-    float2 xy = float2(launchIndex.xy) / dims * 2.0f - 1.0f;
-    float4 target = mul(projInverse, float4(xy, 1, 1));
-    
-    // Create the ray
-    RayDesc ray;
-    ray.Origin = mul(viewInverse, float4(0, 0, 0, 1)).xyz;
-    ray.Direction = normalize(mul(viewInverse, float4(target.xyz, 0)).xyz);
-    ray.TMin = 0.001;
-    ray.TMax = 10000.0;
-    
-    // Initialize payload
-    RayPayload payload;
-    payload.color = float4(0, 0, 0, 0);
-    
-    // Trace the ray
-    TraceRay(
-        SceneBVH,                // Acceleration structure
-        RAY_FLAG_FORCE_OPAQUE,   // Ray flags
-        0xFF,                    // Instance inclusion mask
-        0,                       // Hit group offset
-        0,                       // Miss shader index
-        0,                       // Ray contribution to hit group index
-        ray,                     // Ray
-        payload                  // Payload
-    );
-    
-    // Write the result
-    RenderTarget[launchIndex] = payload.color;
+    float2 lerpValues = (float2)DispatchRaysIndex() / (float2)DispatchRaysDimensions();
+
+    // Orthographic projection since we're raytracing in screen space.
+    float3 rayDir = float3(0, 0, 1);
+    float3 origin = float3(
+        lerp(g_rayGenCB.viewport.left, g_rayGenCB.viewport.right, lerpValues.x),
+        lerp(g_rayGenCB.viewport.top, g_rayGenCB.viewport.bottom, lerpValues.y),
+        0.0f);
+
+    if (IsInsideViewport(origin.xy, g_rayGenCB.stencil))
+    {
+        // Trace the ray.
+        // Set the ray's extents.
+        RayDesc ray;
+        ray.Origin = origin;
+        ray.Direction = rayDir;
+        // Set TMin to a non-zero small value to avoid aliasing issues due to floating - point errors.
+        // TMin should be kept small to prevent missing geometry at close contact areas.
+        ray.TMin = 0.001;
+        ray.TMax = 10000.0;
+        RayPayload payload = { float4(0, 0, 0, 0) };
+        TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
+
+        // Write the raytraced color to the output texture.
+        RenderTarget[DispatchRaysIndex().xy] = payload.color;
+    }
+    else
+    {
+        // Render interpolated DispatchRaysIndex outside the stencil window
+        RenderTarget[DispatchRaysIndex().xy] = float4(lerpValues, 0, 1);
+    }
 }
 
-// Miss shader
-[shader("miss")]
-void Miss(inout RayPayload payload)
-{
-    // Return a background color (dark blue)
-    payload.color = float4(0.1, 0.1, 0.3, 1.0);
-}
-
-// Closest hit shader
 [shader("closesthit")]
-void ClosestHit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
+void MyClosestHitShader(inout RayPayload payload, in MyAttributes attr)
 {
-    // Get the vertex attributes of the triangle
-    Vertex vertices[3];
-    vertices[0] = FetchVertex(PrimitiveIndex(), 0);
-    vertices[1] = FetchVertex(PrimitiveIndex(), 1);
-    vertices[2] = FetchVertex(PrimitiveIndex(), 2);
-    
-    // Compute barycentric coordinates
-    float3 barycentrics = float3(1.0 - attribs.barycentrics.x - attribs.barycentrics.y,
-                                attribs.barycentrics.x,
-                                attribs.barycentrics.y);
-    
-    // Interpolate color
-    payload.color = vertices[0].color * barycentrics.x +
-                   vertices[1].color * barycentrics.y +
-                   vertices[2].color * barycentrics.z;
+    float3 barycentrics = float3(1 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
+    payload.color = float4(barycentrics, 1);
 }
 
-// Helper function to fetch vertex data - this would need to be implemented
-// based on your vertex buffer layout and resource binding
-Vertex FetchVertex(uint primitiveIndex, uint vertexIndex)
+[shader("miss")]
+void MyMissShader(inout RayPayload payload)
 {
-    // This is a placeholder - you need to implement actual vertex fetching
-    // based on your vertex buffer layout and resource binding
-    Vertex v;
-    v.position = float3(0, 0, 0);
-    v.color = float4(1, 1, 1, 1);
-    return v;
+    payload.color = float4(0, 0, 0, 1);
 }
+
+#endif // RAYTRACING_HLSL

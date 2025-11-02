@@ -16,9 +16,24 @@ set(RENDERER_SOURCES
     "main.cpp"
     "${dx_dir}/d3d12_context.cpp"
     "${dx_dir}/d3d12_descriptor_heap.cpp"
+    "${dx_dir}/d3d12_pipeline_builder.cpp"
 
     "application.cpp"
     "rt_app.cpp"
+)
+
+set(RENDERER_HEADERS
+    "${dx_dir}/d3d12_context.h"
+    "${dx_dir}/d3d12_fence.h"
+    "${dx_dir}/d3d12_queue.h"
+    "${dx_dir}/d3d12_command_allocator.h"
+    "${dx_dir}/d3d12_descriptor_heap.h"
+    "${dx_dir}/d3d12_descriptor.h"
+    "${dx_dir}/d3d12_as.h"
+    "${dx_dir}/d3d12_pipeline_builder.h"
+
+    "application.h"
+    "rt_app.h"
 )
 
 set(D3D12MA_SOURCES
@@ -30,26 +45,12 @@ set(SHADER_FILES
     "shaders/rt/raytracing.hlsl"
 )
 
-set(RENDERER_HEADERS
-    "${dx_dir}/d3d12_context.h"
-    "${dx_dir}/d3d12_fence.h"
-    "${dx_dir}/d3d12_queue.h"
-    "${dx_dir}/d3d12_command_allocator.h"
-    "${dx_dir}/d3d12_descriptor_heap.h"
-    "${dx_dir}/d3d12_descriptor.h"
-    "${dx_dir}/d3d12_as.h"
-
-    "application.h"
-    "rt_app.h"
-)
-
 add_executable(${PROJECT_NAME} 
     ${RENDERER_SOURCES} 
     ${RENDERER_HEADERS}
     ${SHARED_HEADERS}
     ${SHARED_SOURCES}
     ${D3D12MA_SOURCES}
-    ${SHADER_FILES}
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE 

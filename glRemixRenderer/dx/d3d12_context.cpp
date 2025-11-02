@@ -4,14 +4,29 @@
 #include <stdexcept>
 
 #include "application.h"
+#include <DirectXMath.h>
 
 using namespace glremix::dx;
 
-void D3D12Context::set_debug_name(ID3D12Object* obj, const char* name)
+void glremix::dx::set_debug_name(ID3D12Object* obj, const char* name)
 {
 	if (name)
 	{
 		obj->SetPrivateData(WKPDID_D3DDebugObjectName, strlen(name), name);
+	}
+}
+
+bool is_depth_stencil_format(DXGI_FORMAT format)
+{
+	switch (format)
+	{
+	case DXGI_FORMAT_D16_UNORM:
+	case DXGI_FORMAT_D24_UNORM_S8_UINT:
+	case DXGI_FORMAT_D32_FLOAT:
+	case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+		return true;
+	default:
+		return false;
 	}
 }
 
@@ -150,37 +165,50 @@ bool D3D12Context::create(bool enable_debug_layer)
 	return create_fence(&m_fence_wait_all, 0, "wait all fence");
 }
 
-bool D3D12Context::create_swapchain(const HWND window, D3D12Queue* const queue, UINT* const frame_index)
+bool D3D12Context::get_window_dimensions(XMUINT2* dims)
 {
-	assert(frame_index);
-
-	// I hope the host app doesn't immediately resize the window after creation!
+	assert(m_window);
 	RECT client_rect;
-	if (!GetClientRect(window, &client_rect)) 
+	if (!GetClientRect(m_window, &client_rect))
 	{
 		OutputDebugStringA("WinUser ERROR: Failed to get client rect\n");
 		return false;
 	}
-	UINT width = client_rect.right - client_rect.left;
-	UINT height = client_rect.bottom - client_rect.top;
+	dims->x = client_rect.right - client_rect.left;
+	dims->y = client_rect.bottom - client_rect.top;
+	return true;
+}
 
-    DXGI_SWAP_CHAIN_DESC1 swapchain_descriptor
-    {
-        .Width = width,
-        .Height = height,
-        .Format = DXGI_FORMAT_R8G8B8A8_UNORM,
-        .SampleDesc = 
+bool D3D12Context::create_swapchain(const HWND window, D3D12Queue* const queue, UINT* const frame_index)
+{
+	assert(frame_index);
+
+	m_window = window;
+
+	// I hope the host app doesn't immediately resize the window after creation!
+	XMUINT2 dims;
+	if (!get_window_dimensions(&dims))
+	{
+		return false;
+	}
+
+	DXGI_SWAP_CHAIN_DESC1 swapchain_descriptor
+	{
+		.Width = dims.x,
+		.Height = dims.y,
+		.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+		.SampleDesc = 
 		{
-	        .Count = 1,
-        	.Quality = 0
-        },
-        .BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT,
-        .BufferCount = Application::m_frames_in_flight,
-        .Scaling = DXGI_SCALING_STRETCH,
-        .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
-        .AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED,
-        .Flags = 0
-    };
+			.Count = 1,
+			.Quality = 0
+		},
+		.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT,
+		.BufferCount = Application::m_frames_in_flight,
+		.Scaling = DXGI_SCALING_STRETCH,
+		.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
+		.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED,
+		.Flags = 0
+	};
 
 	ComPtr<IDXGISwapChain1> swapchain1;
 	if (FAILED(m_dxgi_factory->CreateSwapChainForHwnd(
@@ -209,6 +237,8 @@ bool D3D12Context::create_swapchain(const HWND window, D3D12Queue* const queue, 
 			return false;
 		}
 	}
+
+	m_window = window;
 
 	m_swapchain_queue = queue;
 	*frame_index = m_swapchain->GetCurrentBackBufferIndex();
@@ -249,13 +279,34 @@ bool D3D12Context::create_swapchain_descriptors(D3D12DescriptorTable* descriptor
 
 UINT D3D12Context::get_swapchain_index() const
 {
+	assert(m_swapchain);
 	return m_swapchain->GetCurrentBackBufferIndex();
 }
 
-ID3D12Resource* D3D12Context::get_swapchain_buffer(UINT index) const
+bool D3D12Context::present()
 {
-	assert(index < Application::m_frames_in_flight);
-	return m_swapchain_buffers[index].Get();
+	assert(m_swapchain);
+	if (FAILED(m_swapchain->Present(1, 0)))
+	{
+		OutputDebugStringA("D3D12 ERROR: Failed to present swapchain\n");
+		return false;
+	}
+	return true;
+}
+
+void D3D12Context::set_barrier_swapchain(D3D12_TEXTURE_BARRIER* barrier)
+{
+	barrier->pResource = m_swapchain_buffers[get_swapchain_index()].Get();
+	barrier->Subresources =
+	{
+		.IndexOrFirstMipLevel = 0,
+		.NumMipLevels = 1,
+		.FirstArraySlice = 0,
+		.NumArraySlices = 1,
+		// Most formats are single plane so ignore this
+		.FirstPlane = 0,
+		.NumPlanes = 1,
+	};
 }
 
 bool D3D12Context::create_descriptor_heap(const D3D12_DESCRIPTOR_HEAP_DESC& desc, D3D12DescriptorHeap* heap,
@@ -275,12 +326,47 @@ bool D3D12Context::create_texture(const D3D12_RESOURCE_DESC1& desc, D3D12_BARRIE
 	{
 		.HeapType = D3D12_HEAP_TYPE_GPU_UPLOAD, // GPU Upload only?
 	};
-	D3D12_CLEAR_VALUE* clear_ptr = nullptr;
 	if (FAILED(m_allocator->CreateResource3(
 		&allocation_desc,
 		&desc,
 		init_layout,
-		clear_ptr,
+		nullptr,
+		0, nullptr,
+		allocation,
+		IID_NULL, NULL)))
+	{
+		OutputDebugStringA("D3D12 ERROR: Failed to create texture\n");
+		return false;
+	}
+	set_debug_name((*allocation)->GetResource(), debug_name);
+	return true;
+}
+
+bool D3D12Context::create_render_target(const D3D12_RESOURCE_DESC1& desc,
+	D3D12MA::Allocation** allocation, const char* debug_name)
+{
+	assert(allocation);
+	D3D12MA::ALLOCATION_DESC allocation_desc
+	{
+		.HeapType = D3D12_HEAP_TYPE_DEFAULT,
+	};
+	D3D12_CLEAR_VALUE clear
+	{
+		.Format = desc.Format,
+	};
+	if (is_depth_stencil_format(desc.Format))
+	{
+		clear.DepthStencil = { .Depth = 1.0f, .Stencil = 0 };
+	}
+	else
+	{
+		clear.Color[0] = clear.Color[1] = clear.Color[2] = clear.Color[3] = 0.0f;
+	}
+	if (FAILED(m_allocator->CreateResource3(
+		&allocation_desc,
+		&desc,
+		D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS, // Raytracing, for raster need to transition to RENDER_TARGET
+		&clear,
 		0, nullptr,
 		allocation,
 		IID_NULL, NULL)))
@@ -357,6 +443,7 @@ bool D3D12Context::create_fence(D3D12Fence* fence, uint64_t initial_value, const
 
 bool D3D12Context::wait_fences(const WaitInfo& info) const
 {
+	// Max 16 fences at a time
 	if (info.count > 16)
 	{
 		return false;
