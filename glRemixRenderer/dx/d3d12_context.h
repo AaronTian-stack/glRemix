@@ -10,6 +10,7 @@
 #include <d3d12shader.h>
 #include <dxcapi.h>
 
+#include "d3d12_buffer.h"
 #include "d3d12_command_allocator.h"
 #include "d3d12_descriptor_heap.h"
 #include "d3d12_fence.h"
@@ -61,6 +62,11 @@ namespace glRemix::dx
 
 		void set_barrier_swapchain(D3D12_TEXTURE_BARRIER* barrier);
 		//void set_barrier_resource(); // TODO: Take as input whatever abstraction is used for textures
+
+		bool create_buffer(const BufferDesc& desc, D3D12Buffer* buffer, const char* debug_name = nullptr) const;
+		// Convenience functions
+		bool map_buffer(D3D12Buffer* buffer, void** pointer);
+		void unmap_buffer(D3D12Buffer* buffer);
 
 		bool create_descriptor_heap(const D3D12_DESCRIPTOR_HEAP_DESC& desc, D3D12DescriptorHeap* heap, const char* debug_name = nullptr) const;
 		//void set_descriptor_heap(ID3D12GraphicsCommandList7* cmd_list, const D3D12DescriptorHeap& heap) override;

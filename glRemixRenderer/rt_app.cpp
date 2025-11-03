@@ -8,8 +8,9 @@ void glRemix::glRemixRenderer::create()
 		THROW_IF_FALSE(m_context.create_command_allocator(&m_cmd_pools[i], &m_gfx_queue, "frame command allocator"));
 	}
 
-	// Create root signature
+	// Create raster root signature
 	{
+        // TODO: You'll probably want a texture and sampler as this will be for UI probably
 		D3D12_ROOT_SIGNATURE_DESC root_sig_desc;
 		root_sig_desc.NumParameters = 0;
 		root_sig_desc.pParameters = nullptr;
@@ -47,6 +48,96 @@ void glRemix::glRemixRenderer::create()
 	
 
 	// Compile ray tracing pipeline
+	ComPtr<IDxcBlobEncoding> raytracing_shaders;
+	THROW_IF_FALSE(m_context.load_blob_from_file(L"./shaders/raytracing_lib_6_6.dxil", raytracing_shaders.ReleaseAndGetAddressOf()));
+	// Get exports from DXIL Library
+    std::array exports = 
+	{
+		D3D12_EXPORT_DESC{ L"RayGenMain",   nullptr },
+		D3D12_EXPORT_DESC{ L"ClosestHitMain",     nullptr },
+		D3D12_EXPORT_DESC{ L"MissMain",     nullptr },
+        // TODO: Add Any Hit shader
+        // TODO: Add Intersection shader if doing non-triangle geometry
+    };
+	D3D12_DXIL_LIBRARY_DESC dxil_lib
+	{
+		.DXILLibrary =
+		{
+			.pShaderBytecode = raytracing_shaders->GetBufferPointer(),
+			.BytecodeLength = raytracing_shaders->GetBufferSize(),
+		},
+		.NumExports = exports.size(),
+		.pExports = exports.data(),
+	};
+
+	D3D12_STATE_SUBOBJECT lib_sub_obj
+	{
+		.Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY,
+		.pDesc = &dxil_lib,
+	};
+
+	// Define hit group subobject needed for pipeline
+	D3D12_HIT_GROUP_DESC hg
+	{
+		.HitGroupExport = L"HG_Default",
+		.Type = D3D12_HIT_GROUP_TYPE_TRIANGLES, // or PROCEDURAL
+		//.AnyHitShaderImport =
+		.ClosestHitShaderImport = L"ClosestHitMain",
+		//.IntersectionShaderImport = 
+	};
+	// Define global, local root signatures
+	// Shader payload config
+	// Pipeline config (recursion depth)
+	// Create all subobjects 
+
+
+	D3D12_STATE_SUBOBJECT hgSubobj{};
+	hgSubobj.Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP;
+	hgSubobj.pDesc = &hg;
+
+	// Simple geometry for triangle. Use GPU upload heaps to make life easier
+	struct Vertex
+	{
+		std::array<float, 3> position;
+		std::array<float, 3> color;
+	};
+	std::array<Vertex, 3> triangle_vertices
+	{
+		{
+			{ { 0.0f, 0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
+			{ { 0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
+			{ { -0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f } }
+		}
+	};
+	std::array<UINT, 3> triangle_indices
+	{
+		0, 1, 2
+	};
+	dx::BufferDesc vertex_desc
+	{
+		.size = sizeof(Vertex) * triangle_vertices.size(),
+		.stride = sizeof(Vertex),
+		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+	};
+	void* cpu_ptr;
+	THROW_IF_FALSE(m_context.create_buffer(vertex_desc, &m_vertex_buffer, "triangle vertex buffer"));
+
+	THROW_IF_FALSE(m_context.map_buffer(&m_vertex_buffer, &cpu_ptr));
+	memcpy(cpu_ptr, triangle_vertices.data(), vertex_desc.size);
+	m_context.unmap_buffer(&m_vertex_buffer);
+
+	dx::BufferDesc index_desc
+	{
+		.size = sizeof(UINT) * triangle_indices.size(),
+		.stride = sizeof(UINT),
+		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+	};
+	THROW_IF_FALSE(m_context.create_buffer(index_desc, &m_index_buffer, "triangle index buffer"));
+
+	THROW_IF_FALSE(m_context.map_buffer(&m_index_buffer, &cpu_ptr));
+	memcpy(cpu_ptr, triangle_indices.data(), index_desc.size);
+	m_context.unmap_buffer(&m_index_buffer);
+
 	// Build BLAS here for now, but renderer will construct them dynamically for new geometry in render loop
 
 	// Init ImGui

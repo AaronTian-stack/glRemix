@@ -1,6 +1,3 @@
-#ifndef RAYTRACING_HLSL
-#define RAYTRACING_HLSL
-
 struct Viewport
 {
     float left;
@@ -33,7 +30,7 @@ bool IsInsideViewport(float2 p, Viewport viewport)
 }
 
 [shader("raygeneration")]
-void MyRaygenShader()
+void RayGenMain()
 {
     float2 lerpValues = (float2)DispatchRaysIndex() / (float2)DispatchRaysDimensions();
 
@@ -69,16 +66,14 @@ void MyRaygenShader()
 }
 
 [shader("closesthit")]
-void MyClosestHitShader(inout RayPayload payload, in MyAttributes attr)
+void ClosestHitMain(inout RayPayload payload, in MyAttributes attr)
 {
     float3 barycentrics = float3(1 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
     payload.color = float4(barycentrics, 1);
 }
 
 [shader("miss")]
-void MyMissShader(inout RayPayload payload)
+void MissMain(inout RayPayload payload)
 {
     payload.color = float4(0, 0, 0, 1);
 }
-
-#endif // RAYTRACING_HLSL

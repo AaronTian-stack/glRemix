@@ -30,6 +30,7 @@ set(RENDERER_HEADERS
     "${dx_dir}/d3d12_descriptor.h"
     "${dx_dir}/d3d12_as.h"
     "${dx_dir}/d3d12_pipeline_types.h"
+    "${dx_dir}/d3d12_buffer.h"
 
     "application.h"
     "rt_app.h"

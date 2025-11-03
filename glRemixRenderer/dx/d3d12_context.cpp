@@ -321,6 +321,84 @@ void D3D12Context::set_barrier_swapchain(D3D12_TEXTURE_BARRIER* barrier)
 	};
 }
 
+bool D3D12Context::create_buffer(const BufferDesc& desc, D3D12Buffer* buffer, const char* debug_name) const
+{
+	assert(buffer);
+	buffer->desc = desc;
+
+	D3D12_RESOURCE_DESC1 resource_desc
+	{
+		.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+		.Alignment = 0,
+		.Width = desc.size,
+		.Height = 1,
+		.DepthOrArraySize = 1,
+		.MipLevels = 1,
+		.Format = DXGI_FORMAT_UNKNOWN,
+		.SampleDesc =
+		{
+			.Count = 1,
+			.Quality = 0,
+		},
+		.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+		.Flags = D3D12_RESOURCE_FLAG_NONE,
+		// Don't care about SamplerFeedbackMipRegion
+	};
+	if (desc.uav)
+	{
+		resource_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+	}
+	D3D12MA::ALLOCATION_DESC allocation_desc{};
+	if (desc.visibility & GPU)
+	{
+		if (desc.visibility & CPU)
+		{
+			allocation_desc.HeapType = D3D12_HEAP_TYPE_GPU_UPLOAD;
+		}
+	}
+	else
+	{
+		allocation_desc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
+	}
+	if (FAILED(m_allocator->CreateResource3(
+		&allocation_desc,
+		&resource_desc,
+		desc.uav ? D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS : D3D12_BARRIER_LAYOUT_UNDEFINED,
+		nullptr,
+		0, nullptr,
+		buffer->allocation.ReleaseAndGetAddressOf(),
+		IID_NULL, NULL)))
+	{
+		OutputDebugStringA("D3D12 ERROR: Failed to create buffer\n");
+		return false;
+	}
+
+	set_debug_name(buffer->allocation.Get()->GetResource(), debug_name);
+
+	return true;
+}
+
+bool D3D12Context::map_buffer(D3D12Buffer* buffer, void** pointer)
+{
+	assert(buffer);
+	assert(buffer->desc.visibility & CPU);
+
+	D3D12_RANGE range(0, 0);
+	void* mapped_ptr;
+	if (FAILED(buffer->allocation.Get()->GetResource()->Map(0, &range, &mapped_ptr)))
+	{
+		OutputDebugStringA("D3D12 ERROR: Failed to map buffer\n");
+		return false;
+	}
+	*pointer = mapped_ptr;
+	return true;
+}
+
+void D3D12Context::unmap_buffer(D3D12Buffer* buffer)
+{
+	buffer->allocation.Get()->GetResource()->Unmap(0, nullptr);
+}
+
 bool D3D12Context::create_descriptor_heap(const D3D12_DESCRIPTOR_HEAP_DESC& desc, D3D12DescriptorHeap* heap,
                                           const char* debug_name) const
 {
