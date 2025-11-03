@@ -893,6 +893,172 @@ bool D3D12Context::create_graphics_pipeline(
 	return true;
 }
 
+bool D3D12Context::create_raytracing_pipeline(const RayTracingPipelineDesc& desc, IDxcBlob* raytracing_shaders,
+                                               ID3D12StateObject** state_object, const char* debug_name) const
+{
+	assert(false && "Not working yet");
+	assert(desc.global_root_signature);
+
+	std::array<D3D12_EXPORT_DESC, 5> exports_array{};
+	{
+		UINT c = 0;
+		for (UINT i = 0; i < desc.num_exports; i++)
+		{
+			if (desc.export_names[i])
+			{
+				exports_array[c++].Name = desc.export_names[i];
+				// Don't rename exports (null)
+			}
+		}
+	}
+
+	D3D12_DXIL_LIBRARY_DESC dxil_lib
+	{
+		.DXILLibrary =
+		{
+			.pShaderBytecode = raytracing_shaders->GetBufferPointer(),
+			.BytecodeLength = raytracing_shaders->GetBufferSize(),
+		},
+		.NumExports = desc.num_exports,
+		.pExports = exports_array.data(),
+	};
+
+	D3D12_STATE_SUBOBJECT lib_sub_obj
+	{
+		.Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY,
+		.pDesc = &dxil_lib,
+	};
+
+	// Define hit group subobject needed for pipeline
+	D3D12_HIT_GROUP_DESC hg
+	{
+		.HitGroupExport = L"HG_Default",
+		.Type = D3D12_HIT_GROUP_TYPE_TRIANGLES, // or PROCEDURAL TODO: Add option in struct for this
+		.AnyHitShaderImport = desc.export_names[static_cast<UINT>(ExportType::ANY_HIT)],
+		.ClosestHitShaderImport = desc.export_names[static_cast<UINT>(ExportType::CLOSEST_HIT)],
+		.IntersectionShaderImport = desc.export_names[static_cast<UINT>(ExportType::INTERSECTION)],
+	};
+	// Define global, local root signatures
+	D3D12_STATE_SUBOBJECT global_rs_subobj
+	{
+		.Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE,
+		.pDesc = desc.global_root_signature,
+	};
+
+	std::array<D3D12_STATE_SUBOBJECT, 5> local_rs_subobjs{};
+	{
+		UINT c = 0;
+		for (auto& rs : desc.local_root_signatures)
+		{
+			if (rs)
+			{
+				local_rs_subobjs[c++] = D3D12_STATE_SUBOBJECT
+				{
+					.Type = D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE,
+					.pDesc = rs,
+				};
+			}
+		}
+	}
+
+	// Associate local root signatures with their exports
+	std::array<D3D12_SUBOBJECT_TO_EXPORTS_ASSOCIATION, 5> local_rs_associations{};
+	std::array<D3D12_STATE_SUBOBJECT, 5> local_rs_association_subobjs{};
+	{
+		UINT c = 0;
+		for (UINT i = 0; i < 5; i++)
+		{
+			if (desc.local_root_signatures[i] && desc.export_names[i])
+			{
+				local_rs_associations[c].pSubobjectToAssociate = &local_rs_subobjs[i];
+				local_rs_associations[c].NumExports = 1;
+				local_rs_associations[c].pExports = &exports_array[i].Name,
+				c++;
+			}
+		}
+		for (UINT i = 0; i < c; i++)
+		{
+			local_rs_association_subobjs[i].Type = D3D12_STATE_SUBOBJECT_TYPE_SUBOBJECT_TO_EXPORTS_ASSOCIATION;
+			local_rs_association_subobjs[i].pDesc = &local_rs_associations[i];
+		}
+	}
+
+	// Configs
+	D3D12_RAYTRACING_SHADER_CONFIG shader_config
+	{
+		.MaxPayloadSizeInBytes = desc.payload_size,
+		.MaxAttributeSizeInBytes = desc.attribute_size,
+	};
+	D3D12_STATE_SUBOBJECT shader_config_subobj
+	{
+		.Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG,
+		.pDesc = &shader_config,
+	};
+	D3D12_RAYTRACING_PIPELINE_CONFIG pipeline_config
+	{
+		.MaxTraceRecursionDepth = desc.max_recursion_depth,
+	};
+
+	D3D12_STATE_SUBOBJECT pipeline_config_subobj
+	{
+		.Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG,
+		.pDesc = &pipeline_config,
+	};
+	D3D12_STATE_SUBOBJECT hg_subobj
+	{
+		.Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP,
+		.pDesc = &hg,
+	};
+
+	// Collect all subobjects
+	std::vector<D3D12_STATE_SUBOBJECT> subobjects;
+	subobjects.reserve(20);
+
+	subobjects.push_back(lib_sub_obj);
+	subobjects.push_back(hg_subobj);
+
+	if (desc.global_root_signature)
+	{
+		subobjects.push_back(global_rs_subobj);
+	}
+
+	for (UINT i = 0; i < 5; i++)
+	{
+		if (desc.local_root_signatures[i])
+		{
+			subobjects.push_back(local_rs_subobjs[i]);
+		}
+	}
+
+	UINT num_associations = 0;
+	for (UINT i = 0; i < 5; i++)
+	{
+		if (desc.local_root_signatures[i] && desc.export_names[i])
+		{
+			subobjects.push_back(local_rs_association_subobjs[num_associations++]);
+		}
+	}
+
+	subobjects.push_back(shader_config_subobj);
+	subobjects.push_back(pipeline_config_subobj);
+
+	D3D12_STATE_OBJECT_DESC state_object_desc
+	{
+		.Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
+		.NumSubobjects = static_cast<UINT>(subobjects.size()),
+		.pSubobjects = subobjects.data(),
+	};
+
+	if (FAILED(m_device->CreateStateObject(&state_object_desc, IID_PPV_ARGS(state_object))))
+	{
+		OutputDebugStringA("D3D12 ERROR: Failed to create ray tracing pipeline state object\n");
+		return false;
+	}
+
+	set_debug_name(*state_object, debug_name);
+	
+	return true;
+}
 
 bool D3D12Context::init_imgui()
 {

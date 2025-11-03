@@ -47,53 +47,69 @@ void glRemix::glRemixRenderer::create()
 		m_raster_pipeline.ReleaseAndGetAddressOf(), "raster pipeline"));
 	
 
+	// Create raytracing global root signature
+	{
+		std::array<D3D12_DESCRIPTOR_RANGE, 2> descriptor_ranges{};
+		
+		// Acceleration structure (SRV) at t0
+		descriptor_ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		descriptor_ranges[0].NumDescriptors = 1;
+		descriptor_ranges[0].BaseShaderRegister = 0;
+		descriptor_ranges[0].RegisterSpace = 0;
+		descriptor_ranges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		// Output UAV at u0
+		descriptor_ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+		descriptor_ranges[1].NumDescriptors = 1;
+		descriptor_ranges[1].BaseShaderRegister = 0;
+		descriptor_ranges[1].RegisterSpace = 0;
+		descriptor_ranges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		std::array<D3D12_ROOT_PARAMETER, 3> root_parameters{};
+
+		// Parameter 0: Acceleration structure
+		root_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		root_parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		root_parameters[0].DescriptorTable.NumDescriptorRanges = 1;
+		root_parameters[0].DescriptorTable.pDescriptorRanges = &descriptor_ranges[0];
+
+		// Parameter 1: Output UAV
+		root_parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		root_parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		root_parameters[1].DescriptorTable.NumDescriptorRanges = 1;
+		root_parameters[1].DescriptorTable.pDescriptorRanges = &descriptor_ranges[1];
+
+		// Parameter 2: Constant buffer at b0
+		root_parameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		root_parameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		root_parameters[2].Descriptor.ShaderRegister = 0;
+		root_parameters[2].Descriptor.RegisterSpace = 0;
+
+		D3D12_ROOT_SIGNATURE_DESC root_sig_desc{};
+		root_sig_desc.NumParameters = static_cast<UINT>(root_parameters.size());
+		root_sig_desc.pParameters = root_parameters.data();
+		root_sig_desc.NumStaticSamplers = 0;
+		root_sig_desc.pStaticSamplers = nullptr;
+		root_sig_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+
+		THROW_IF_FALSE(m_context.create_root_signature(root_sig_desc, m_rt_global_root_signature.ReleaseAndGetAddressOf(), "rt global root signature"));
+	}
+
 	// Compile ray tracing pipeline
 	ComPtr<IDxcBlobEncoding> raytracing_shaders;
 	THROW_IF_FALSE(m_context.load_blob_from_file(L"./shaders/raytracing_lib_6_6.dxil", raytracing_shaders.ReleaseAndGetAddressOf()));
-	// Get exports from DXIL Library
-    std::array exports = 
-	{
-		D3D12_EXPORT_DESC{ L"RayGenMain",   nullptr },
-		D3D12_EXPORT_DESC{ L"ClosestHitMain",     nullptr },
-		D3D12_EXPORT_DESC{ L"MissMain",     nullptr },
-        // TODO: Add Any Hit shader
-        // TODO: Add Intersection shader if doing non-triangle geometry
-    };
-	D3D12_DXIL_LIBRARY_DESC dxil_lib
-	{
-		.DXILLibrary =
-		{
-			.pShaderBytecode = raytracing_shaders->GetBufferPointer(),
-			.BytecodeLength = raytracing_shaders->GetBufferSize(),
-		},
-		.NumExports = exports.size(),
-		.pExports = exports.data(),
-	};
-
-	D3D12_STATE_SUBOBJECT lib_sub_obj
-	{
-		.Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY,
-		.pDesc = &dxil_lib,
-	};
-
-	// Define hit group subobject needed for pipeline
-	D3D12_HIT_GROUP_DESC hg
-	{
-		.HitGroupExport = L"HG_Default",
-		.Type = D3D12_HIT_GROUP_TYPE_TRIANGLES, // or PROCEDURAL
-		//.AnyHitShaderImport =
-		.ClosestHitShaderImport = L"ClosestHitMain",
-		//.IntersectionShaderImport = 
-	};
-	// Define global, local root signatures
-	// Shader payload config
-	// Pipeline config (recursion depth)
-	// Create all subobjects 
-
-
-	D3D12_STATE_SUBOBJECT hgSubobj{};
-	hgSubobj.Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP;
-	hgSubobj.pDesc = &hg;
+	dx::RayTracingPipelineDesc rt_desc = dx::make_ray_tracing_pipeline_desc(
+		L"RayGenMain",
+		L"MissMain",
+		L"ClosestHitMain"
+		// TODO: Add Any Hit shader
+		// TODO: Add Intersection shader if doing non-triangle geometry
+	);
+	rt_desc.global_root_signature = m_rt_global_root_signature.Get();
+	rt_desc.max_recursion_depth = 1;
+	rt_desc.payload_size = sizeof(float) * 4;  // RayPayload contains float4 color
+	rt_desc.attribute_size = sizeof(float) * 2; // BuiltInTriangleIntersectionAttributes has 2 floats
+	THROW_IF_FALSE(m_context.create_raytracing_pipeline(rt_desc, raytracing_shaders.Get(), m_rt_pipeline.ReleaseAndGetAddressOf(), "rt pipeline"));
 
 	// Simple geometry for triangle. Use GPU upload heaps to make life easier
 	struct Vertex

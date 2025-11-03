@@ -16,6 +16,7 @@ set(RENDERER_SOURCES
     "main.cpp"
     "${dx_dir}/d3d12_context.cpp"
     "${dx_dir}/d3d12_descriptor_heap.cpp"
+    "${dx_dir}/d3d12_pipeline_types.cpp"
 
     "application.cpp"
     "rt_app.cpp"

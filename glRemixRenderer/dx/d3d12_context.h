@@ -34,7 +34,7 @@ namespace glRemix::dx
 		ComPtr<ID3D12Debug3> m_debug;
 		ComPtr<IDXGIDebug1> m_dxgi_debug;
 
-		ComPtr<ID3D12Device> m_device;
+		ComPtr<ID3D12Device5> m_device;
 		ComPtr<D3D12MA::Allocator> m_allocator;
 
 		ComPtr<IDxcUtils> m_dxc_utils = nullptr;
@@ -94,6 +94,12 @@ namespace glRemix::dx
 			IDxcBlob* vertex_shader, IDxcBlob* pixel_shader,
 			ID3D12PipelineState** pipeline_state, const char* debug_name
 		);
+
+		bool create_raytracing_pipeline(
+			const RayTracingPipelineDesc& desc,
+			IDxcBlob* raytracing_shaders,
+			ID3D12StateObject** state_object, const char* debug_name
+		) const;
 
 		// Note: ImGui using win32 is blurry, even the sample is like this, so I assume it's expected
 		bool init_imgui();
