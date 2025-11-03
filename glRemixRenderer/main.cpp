@@ -30,7 +30,7 @@ int main()
 	RegisterClass(&wc);
 
 	HWND hwnd = CreateWindowEx(
-		0, L"glRemixTestWindow", L"glRemix Renderer - Test",
+		0, L"glRemixTestWindow", L"glRemix",
 		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, CW_USEDEFAULT, 1280, 720,
 		nullptr, nullptr, GetModuleHandle(nullptr), nullptr
@@ -39,7 +39,7 @@ int main()
 	ShowWindow(hwnd, SW_SHOW);
 
 	// Run the renderer
-	glremix::glRemixRenderer renderer;
+	glRemix::glRemixRenderer renderer;
 	renderer.run(hwnd, true);
 
 	DestroyWindow(hwnd);

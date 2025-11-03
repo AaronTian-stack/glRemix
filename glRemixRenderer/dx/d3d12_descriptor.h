@@ -1,6 +1,6 @@
 #pragma once
 
-namespace glremix::dx
+namespace glRemix::dx
 {
 	struct D3D12DescriptorHeap;
 

@@ -8,7 +8,7 @@
 
 using Microsoft::WRL::ComPtr;
 
-namespace glremix::dx
+namespace glRemix::dx
 {
 	// Not thread safe
 	// TODO: For RTV/DSV maybe make specific version just for those because they are never copied

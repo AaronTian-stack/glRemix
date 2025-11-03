@@ -16,7 +16,6 @@ set(RENDERER_SOURCES
     "main.cpp"
     "${dx_dir}/d3d12_context.cpp"
     "${dx_dir}/d3d12_descriptor_heap.cpp"
-    "${dx_dir}/d3d12_pipeline_builder.cpp"
 
     "application.cpp"
     "rt_app.cpp"
@@ -30,7 +29,7 @@ set(RENDERER_HEADERS
     "${dx_dir}/d3d12_descriptor_heap.h"
     "${dx_dir}/d3d12_descriptor.h"
     "${dx_dir}/d3d12_as.h"
-    "${dx_dir}/d3d12_pipeline_builder.h"
+    "${dx_dir}/d3d12_pipeline_types.h"
 
     "application.h"
     "rt_app.h"
@@ -51,6 +50,7 @@ add_executable(${PROJECT_NAME}
     ${SHARED_HEADERS}
     ${SHARED_SOURCES}
     ${D3D12MA_SOURCES}
+    ${SHADER_FILES}
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE 
@@ -116,6 +116,9 @@ set(ALL_RENDERER_FILES ${RENDERER_SOURCES} ${RENDERER_HEADERS})
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${ALL_RENDERER_FILES})
 source_group("shared" FILES ${SHARED_HEADERS} ${SHARED_SOURCES})
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES ${SHADER_FILES})
+
+# Exclude shader files from build
+set_source_files_properties(${SHADER_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
 
 set(_GLREMIX_SHIM_TARGET_PREFIX "${GLREMIX_SHIM_TARGET_PREFIX}")
 if(NOT _GLREMIX_SHIM_TARGET_PREFIX)

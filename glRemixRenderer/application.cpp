@@ -1,6 +1,6 @@
 #include "application.h"
 
-using namespace glremix;
+using namespace glRemix;
 
 void Application::run(const HWND hwnd, const bool enable_debug_layer)
 {

@@ -1,16 +1,55 @@
 #include "rt_app.h"
 
-void glremix::glRemixRenderer::create()
+void glRemix::glRemixRenderer::create()
 {
 	for (UINT i = 0; i < m_frames_in_flight; i++)
 	{
 		THROW_IF_FALSE(m_context.create_command_allocator(&m_cmd_pools[i], &m_gfx_queue, "frame command allocator"));
 	}
+
+	// Create root signature
+	{
+		D3D12_ROOT_SIGNATURE_DESC root_sig_desc;
+		root_sig_desc.NumParameters = 0;
+		root_sig_desc.pParameters = nullptr;
+		root_sig_desc.NumStaticSamplers = 0;
+		root_sig_desc.pStaticSamplers = nullptr;
+		root_sig_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+		THROW_IF_FALSE(m_context.create_root_signature(root_sig_desc, m_root_signature.ReleaseAndGetAddressOf(), "triangle root signature"));
+	}
+
+	// Compile dummy raster pipeline for testing
+	ComPtr<IDxcBlobEncoding> vertex_shader;
+	THROW_IF_FALSE(m_context.load_blob_from_file(L"./shaders/triangle_vs_6_6_VSMain.dxil", vertex_shader.ReleaseAndGetAddressOf()));
+	ComPtr<IDxcBlobEncoding> pixel_shader;
+	THROW_IF_FALSE(m_context.load_blob_from_file(L"./shaders/triangle_ps_6_6_PSMain.dxil", pixel_shader.ReleaseAndGetAddressOf()));
+
+	dx::GraphicsPipelineDesc pipeline_desc
+	{
+		.render_targets
+		{
+			.num_render_targets = 1,
+			.rtv_formats = { DXGI_FORMAT_R8G8B8A8_UNORM },
+			.dsv_format = DXGI_FORMAT_UNKNOWN,
+		},
+	};
+	
+	pipeline_desc.root_signature = m_root_signature.Get();
+
+	ComPtr<ID3D12ShaderReflection> shader_reflection_interface; // Needs to stay in scope until pipeline is created
+	THROW_IF_FALSE(m_context.reflect_input_layout(vertex_shader.Get(), &pipeline_desc.input_layout, false, shader_reflection_interface.ReleaseAndGetAddressOf()));
+
+	THROW_IF_FALSE(m_context.create_graphics_pipeline(pipeline_desc, 
+		vertex_shader.Get(), pixel_shader.Get(), 
+		m_raster_pipeline.ReleaseAndGetAddressOf(), "raster pipeline"));
+	
+
 	// Compile ray tracing pipeline
 	// Build BLAS here for now, but renderer will construct them dynamically for new geometry in render loop
 }
 
-void glremix::glRemixRenderer::render()
+void glRemix::glRemixRenderer::render()
 {
 	// TODO: start ImGui frame
 
@@ -137,12 +176,12 @@ void glremix::glRemixRenderer::render()
 	m_fence_frame_ready_val[get_frame_index()] = current_fence_value + 1;
 }
 
-void glremix::glRemixRenderer::destroy()
+void glRemix::glRemixRenderer::destroy()
 {
 	
 }
 
-glremix::glRemixRenderer::~glRemixRenderer()
+glRemix::glRemixRenderer::~glRemixRenderer()
 {
 
 }

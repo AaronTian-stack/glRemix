@@ -6,9 +6,9 @@
 #include "application.h"
 #include <DirectXMath.h>
 
-using namespace glremix::dx;
+using namespace glRemix::dx;
 
-void glremix::dx::set_debug_name(ID3D12Object* obj, const char* name)
+void glRemix::dx::set_debug_name(ID3D12Object* obj, const char* name)
 {
 	if (name)
 	{
@@ -162,6 +162,12 @@ bool D3D12Context::create(bool enable_debug_layer)
 		m_dxgi_debug->EnableLeakTrackingForThread();
 	}
 
+	if (FAILED(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&m_dxc_utils))))
+	{
+		OutputDebugStringA("D3D12 ERROR: Failed to create DXC utils\n");
+		return false;
+	}
+
 	return create_fence(&m_fence_wait_all, 0, "wait all fence");
 }
 
@@ -249,6 +255,7 @@ bool D3D12Context::create_swapchain(const HWND window, D3D12Queue* const queue, 
 bool D3D12Context::create_swapchain_descriptors(D3D12DescriptorTable* descriptors, D3D12DescriptorHeap* rtv_heap)
 {
 	assert(descriptors);
+	assert(rtv_heap);
 	if (rtv_heap->desc.Flags & D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE)
 	{
 		OutputDebugStringA("D3D12 ERROR: Not RTV heap\n");
@@ -266,11 +273,11 @@ bool D3D12Context::create_swapchain_descriptors(D3D12DescriptorTable* descriptor
 		return false;
 	}
 
+	assert(m_swapchain_buffers.size() >= Application::m_frames_in_flight);
 	for (UINT i = 0; i < Application::m_frames_in_flight; i++)
     {
         D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle{};
 		rtv_heap->get_cpu_descriptor(&rtv_handle, descriptors->offset + i);
-		assert(m_swapchain_buffers[i]);
         m_device->CreateRenderTargetView(m_swapchain_buffers[i].Get(), nullptr, rtv_handle);
     }
 
@@ -296,6 +303,7 @@ bool D3D12Context::present()
 
 void D3D12Context::set_barrier_swapchain(D3D12_TEXTURE_BARRIER* barrier)
 {
+	assert(barrier);
 	barrier->pResource = m_swapchain_buffers[get_swapchain_index()].Get();
 	barrier->Subresources =
 	{
@@ -318,7 +326,7 @@ bool D3D12Context::create_descriptor_heap(const D3D12_DESCRIPTOR_HEAP_DESC& desc
 	return result;
 }
 
-bool D3D12Context::create_texture(const D3D12_RESOURCE_DESC1& desc, D3D12_BARRIER_LAYOUT init_layout,
+bool D3D12Context::create_texture(const D3D12_RESOURCE_DESC1& desc, const D3D12_BARRIER_LAYOUT init_layout,
                                   D3D12MA::Allocation** allocation, const char* debug_name)
 {
 	assert(allocation);
@@ -378,8 +386,9 @@ bool D3D12Context::create_render_target(const D3D12_RESOURCE_DESC1& desc,
 	return true;
 }
 
-bool D3D12Context::create_queue(D3D12_COMMAND_LIST_TYPE type, D3D12Queue* queue, const char* debug_name) const
+bool D3D12Context::create_queue(const D3D12_COMMAND_LIST_TYPE type, D3D12Queue* queue, const char* debug_name) const
 {
+	assert(queue);
     D3D12_COMMAND_QUEUE_DESC desc
     {
         .Type = type,
@@ -399,9 +408,11 @@ bool D3D12Context::create_queue(D3D12_COMMAND_LIST_TYPE type, D3D12Queue* queue,
 
 bool D3D12Context::create_command_allocator(D3D12CommandAllocator* cmd_allocator, D3D12Queue* const queue, const char* debug_name) const
 {
+	assert(cmd_allocator);
+	assert(queue);
 	if (FAILED(m_device->CreateCommandAllocator(
 		queue->type,
-		IID_PPV_ARGS(&cmd_allocator->cmd_allocator))))
+		IID_PPV_ARGS(cmd_allocator->cmd_allocator.ReleaseAndGetAddressOf()))))
 	{
 		OutputDebugStringA("D3D12 ERROR: Failed to create command allocator\n");
 		return false;
@@ -414,6 +425,7 @@ bool D3D12Context::create_command_allocator(D3D12CommandAllocator* cmd_allocator
 bool D3D12Context::create_command_list(ID3D12GraphicsCommandList7** cmd_list, const D3D12CommandAllocator& cmd_allocator,
 	const char* debug_name) const
 {
+	assert(cmd_list);
 	if (FAILED(m_device->CreateCommandList(
 		0, // Single GPU
 		cmd_allocator.queue->type,
@@ -428,7 +440,7 @@ bool D3D12Context::create_command_list(ID3D12GraphicsCommandList7** cmd_list, co
 	return true;
 }
 
-bool D3D12Context::create_fence(D3D12Fence* fence, uint64_t initial_value, const char* debug_name) const
+bool D3D12Context::create_fence(D3D12Fence* fence, const uint64_t initial_value, const char* debug_name) const
 {
 	assert(fence);
 	if (FAILED(m_device->CreateFence(initial_value, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence->fence.ReleaseAndGetAddressOf()))))
@@ -465,6 +477,7 @@ bool D3D12Context::wait_fences(const WaitInfo& info) const
 
 bool D3D12Context::wait_idle(D3D12Queue* queue)
 {
+	assert(queue);
 	auto value = m_fence_wait_all.fence->GetCompletedValue() + 1;
 
 	queue->queue->Signal(m_fence_wait_all.fence.Get(), value);
@@ -478,6 +491,324 @@ bool D3D12Context::wait_idle(D3D12Queue* queue)
 		.timeout = INFINITE
 	};
 	return wait_fences(wait_info);
+}
+
+DXGI_FORMAT D3D12Context::mask_to_format(const BYTE mask, const D3D_REGISTER_COMPONENT_TYPE component_type)
+{
+	// Determine number of components from mask
+	// Mask bits: x=1, y=2, z=4, w=8
+	BYTE component_count = 0;
+	if (mask & 1) component_count++; // x
+	if (mask & 2) component_count++; // y
+	if (mask & 4) component_count++; // z
+	if (mask & 8) component_count++; // w
+
+	// Map component type and count to DXGI_FORMAT
+	switch (component_type)
+	{
+	case D3D_REGISTER_COMPONENT_UINT32:
+		{
+			switch (component_count)
+			{
+			case 1: return DXGI_FORMAT_R32_UINT;
+			case 2: return DXGI_FORMAT_R32G32_UINT;
+			case 3: return DXGI_FORMAT_R32G32B32_UINT;
+			case 4: return DXGI_FORMAT_R32G32B32A32_UINT;
+			default: break;
+			}
+			break;
+		}
+	case D3D_REGISTER_COMPONENT_SINT32:
+		{
+			switch (component_count)
+			{
+			case 1: return DXGI_FORMAT_R32_SINT;
+			case 2: return DXGI_FORMAT_R32G32_SINT;
+			case 3: return DXGI_FORMAT_R32G32B32_SINT;
+			case 4: return DXGI_FORMAT_R32G32B32A32_SINT;
+			default: break;
+			}
+			break;
+		}
+	case D3D_REGISTER_COMPONENT_FLOAT32:
+		{
+			switch (component_count)
+			{
+			case 1: return DXGI_FORMAT_R32_FLOAT;
+			case 2: return DXGI_FORMAT_R32G32_FLOAT;
+			case 3: return DXGI_FORMAT_R32G32B32_FLOAT;
+			case 4: return DXGI_FORMAT_R32G32B32A32_FLOAT;
+			default: break;
+			}
+			break;
+		}
+	default:
+		break;
+	}
+
+	// Default to unknown format
+	return DXGI_FORMAT_UNKNOWN;
+}
+
+InputLayoutDesc D3D12Context::shader_reflection(ID3D12ShaderReflection* shader_reflection,
+                                                                      const D3D12_SHADER_DESC& shader_desc, const bool increment_slot)
+{
+	assert(shader_reflection);
+
+	std::vector<D3D12_INPUT_ELEMENT_DESC> input_element_desc;
+	input_element_desc.reserve(shader_desc.InputParameters);
+	
+	UINT slot = 0;
+	for (UINT parameter_index = 0; parameter_index < shader_desc.InputParameters; parameter_index++)
+	{
+		D3D12_SIGNATURE_PARAMETER_DESC signature_parameter_desc{};
+		const auto hr = shader_reflection->GetInputParameterDesc(parameter_index, &signature_parameter_desc);
+
+		if (FAILED(hr))
+		{
+			continue;
+		}
+
+		input_element_desc.emplace_back(D3D12_INPUT_ELEMENT_DESC
+		{
+			.SemanticName = signature_parameter_desc.SemanticName,
+			.SemanticIndex = signature_parameter_desc.SemanticIndex,
+			.Format = mask_to_format(signature_parameter_desc.Mask, signature_parameter_desc.ComponentType),
+			.InputSlot = slot,
+			.AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT,
+			.InputSlotClass = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
+			.InstanceDataStepRate = 0u, // TODO: manual options for instancing
+		});
+		if (increment_slot)
+		{
+			slot++;
+		}
+	}
+
+	return input_element_desc;
+}
+
+bool D3D12Context::reflect_input_layout(IDxcBlob* vertex_shader, InputLayoutDesc* input_layout, const bool increment_slot, ID3D12ShaderReflection** reflection)
+{
+	assert(input_layout);
+	assert(vertex_shader);
+
+	const DxcBuffer reflection_buffer =
+	{
+		.Ptr = vertex_shader->GetBufferPointer(),
+		.Size = vertex_shader->GetBufferSize(),
+		.Encoding = 0
+	};
+
+	if (FAILED(m_dxc_utils->CreateReflection(&reflection_buffer, IID_PPV_ARGS(reflection))))
+	{
+		OutputDebugStringA("D3D12 ERROR: Failed to reflect vertex shader\n");
+		return false;
+	}
+
+	D3D12_SHADER_DESC shader_desc{};
+	if (FAILED((*reflection)->GetDesc(&shader_desc)))
+	{
+		OutputDebugStringA("D3D12 ERROR: Failed to get shader description\n");
+		return false;
+	}
+
+	*input_layout = shader_reflection(*reflection, shader_desc, increment_slot);
+
+	return true;
+}
+
+bool D3D12Context::load_blob_from_file(const wchar_t* path, IDxcBlobEncoding** blob) const
+{
+	return SUCCEEDED(m_dxc_utils->LoadFile(path, nullptr, blob));
+}
+
+D3D12_BLEND_DESC make_default_blend_desc()
+{
+	D3D12_BLEND_DESC desc
+	{
+		.AlphaToCoverageEnable = FALSE,
+		.IndependentBlendEnable = FALSE,
+	};
+
+	constexpr D3D12_RENDER_TARGET_BLEND_DESC default_render_target_blend_desc
+	{
+		.BlendEnable = FALSE,
+		.LogicOpEnable = FALSE,
+		.SrcBlend = D3D12_BLEND_ONE,
+		.DestBlend = D3D12_BLEND_ZERO,
+		.BlendOp = D3D12_BLEND_OP_ADD,
+		.SrcBlendAlpha = D3D12_BLEND_ONE,
+		.DestBlendAlpha = D3D12_BLEND_ZERO,
+		.BlendOpAlpha = D3D12_BLEND_OP_ADD,
+		.LogicOp = D3D12_LOGIC_OP_NOOP,
+		.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL,
+	};
+
+	for (auto& i : desc.RenderTarget)
+	{
+		i = default_render_target_blend_desc;
+	}
+
+	return desc;
+}
+
+D3D12_DEPTH_STENCIL_DESC make_default_depth_stencil_desc()
+{
+	D3D12_DEPTH_STENCIL_DESC desc
+	{
+		.DepthEnable = FALSE,
+		.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL,
+		.DepthFunc = D3D12_COMPARISON_FUNC_LESS,
+		.StencilEnable = FALSE,
+		.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK,
+		.StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK,
+		.FrontFace = {},
+		.BackFace = {},
+	};
+
+	constexpr D3D12_DEPTH_STENCILOP_DESC default_stencil_op
+	{
+		.StencilFailOp = D3D12_STENCIL_OP_KEEP,
+		.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP,
+		.StencilPassOp = D3D12_STENCIL_OP_KEEP,
+		.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS
+	};
+
+	desc.FrontFace = default_stencil_op;
+	desc.BackFace = default_stencil_op;
+
+	return desc;
+}
+
+bool D3D12Context::create_root_signature(const D3D12_ROOT_SIGNATURE_DESC& desc, ID3D12RootSignature** root_signature, const char* debug_name) const
+{
+	assert(root_signature);
+
+	ComPtr<ID3DBlob> signature;
+	ComPtr<ID3DBlob> error;
+	if (FAILED(D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1, signature.ReleaseAndGetAddressOf(), error.ReleaseAndGetAddressOf())))
+	{
+		if (error)
+		{
+			OutputDebugStringA(static_cast<const char*>(error->GetBufferPointer()));
+		}
+		return false;
+	}
+
+	if (FAILED(m_device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(root_signature))))
+	{
+		OutputDebugStringA("D3D12 ERROR: Failed to create root signature\n");
+		return false;
+	}
+
+	if (debug_name)
+	{
+		set_debug_name(*root_signature, debug_name);
+	}
+
+	return true;
+}
+
+bool D3D12Context::create_graphics_pipeline(
+	const GraphicsPipelineDesc& desc, 
+	IDxcBlob* vertex_shader, IDxcBlob* pixel_shader, 
+	ID3D12PipelineState** pipeline_state, 
+	const char* debug_name)
+{
+	assert(pipeline_state);
+	assert(desc.root_signature);
+	assert(vertex_shader);
+	assert(pixel_shader);
+
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc{};
+
+	pso_desc.pRootSignature = desc.root_signature;
+
+	pso_desc.VS = 
+	{
+		.pShaderBytecode = vertex_shader->GetBufferPointer(),
+		.BytecodeLength = vertex_shader->GetBufferSize()
+	};
+	pso_desc.PS = 
+	{
+		.pShaderBytecode = pixel_shader->GetBufferPointer(),
+		.BytecodeLength = pixel_shader->GetBufferSize()
+	};
+
+	pso_desc.InputLayout = 
+	{
+		.pInputElementDescs = desc.input_layout.data(),
+		.NumElements = static_cast<UINT>(desc.input_layout.size())
+	};
+
+	if (desc.rasterizer_state.has_value())
+	{
+		pso_desc.RasterizerState = desc.rasterizer_state.value();
+	}
+	else
+	{
+		pso_desc.RasterizerState =
+		{
+			.FillMode = D3D12_FILL_MODE_SOLID,
+			.CullMode = D3D12_CULL_MODE_BACK,
+			.FrontCounterClockwise = FALSE,
+			.DepthBias = D3D12_DEFAULT_DEPTH_BIAS,
+			.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP,
+			.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS,
+			.DepthClipEnable = TRUE,
+			.MultisampleEnable = FALSE,
+			.AntialiasedLineEnable = FALSE,
+			.ForcedSampleCount = 0,
+			.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF
+		};
+	}
+
+	if (desc.blend_state.has_value())
+	{
+		pso_desc.BlendState = desc.blend_state.value();
+	}
+	else
+	{
+		pso_desc.BlendState = make_default_blend_desc();
+	}
+
+	if (desc.depth_stencil_state.has_value())
+	{
+		pso_desc.DepthStencilState = desc.depth_stencil_state.value();
+	}
+	else
+	{
+		pso_desc.DepthStencilState = make_default_depth_stencil_desc();
+	}
+
+	pso_desc.SampleMask = UINT_MAX;
+
+	pso_desc.PrimitiveTopologyType = desc.topology_type;
+
+	pso_desc.NumRenderTargets = desc.render_targets.num_render_targets;
+	for (UINT i = 0; i < desc.render_targets.num_render_targets && i < 8; ++i)
+	{
+		pso_desc.RTVFormats[i] = desc.render_targets.rtv_formats[i];
+	}
+
+	pso_desc.DSVFormat = desc.render_targets.dsv_format;
+
+	pso_desc.SampleDesc =
+	{
+		.Count = desc.sample_count,
+		.Quality = desc.sample_quality
+	};
+
+	if (FAILED(m_device->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(pipeline_state))))
+	{
+		OutputDebugStringA("D3D12 ERROR: Failed to create Graphics Pipeline State\n");
+		return false;
+	}
+
+	set_debug_name(*pipeline_state, debug_name);
+
+	return true;
 }
 
 D3D12Context::~D3D12Context()

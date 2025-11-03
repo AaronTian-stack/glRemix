@@ -6,7 +6,7 @@
 
 using Microsoft::WRL::ComPtr;
 
-namespace glremix::dx
+namespace glRemix::dx
 {
     struct D3D12Fence
     {

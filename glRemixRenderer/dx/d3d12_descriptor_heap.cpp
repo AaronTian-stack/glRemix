@@ -2,13 +2,13 @@
 
 #include <cassert>
 
-using namespace glremix::dx;
+using namespace glRemix::dx;
 
 bool D3D12DescriptorHeap::create(ID3D12Device* device, const D3D12_DESCRIPTOR_HEAP_DESC& desc)
 {
 	this->m_desc = desc;
 
-	if (FAILED(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_heap))))
+	if (FAILED(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(m_heap.ReleaseAndGetAddressOf()))))
 	{
 		OutputDebugStringA("D3D12 ERROR: Failed to create descriptor heap\n");
 		return false;

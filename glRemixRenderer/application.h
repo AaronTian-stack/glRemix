@@ -7,7 +7,7 @@
 
 #define THROW_IF_FALSE(cond) do { if (!(cond)) throw std::runtime_error(#cond " failed"); } while (0)
 
-namespace glremix
+namespace glRemix
 {
 	class Application
 	{

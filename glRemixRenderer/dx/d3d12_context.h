@@ -1,21 +1,25 @@
 #pragma once
 
 #include <array>
+#include <vector>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 #include <dxgidebug.h>
 #include <D3D12MemAlloc.h>
 #include <DirectXMath.h>
+#include <d3d12shader.h>
+#include <dxcapi.h>
 
 #include "d3d12_command_allocator.h"
 #include "d3d12_descriptor_heap.h"
 #include "d3d12_fence.h"
 #include "d3d12_queue.h"
+#include "d3d12_pipeline_types.h"
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
 
-namespace glremix::dx
+namespace glRemix::dx
 {
 	class D3D12Context
 	{
@@ -27,13 +31,18 @@ namespace glremix::dx
 		ComPtr<ID3D12Device> m_device;
 		ComPtr<D3D12MA::Allocator> m_allocator;
 
+		ComPtr<IDxcUtils> m_dxc_utils = nullptr;
+
 		HWND m_window = nullptr;
 		ComPtr<IDXGISwapChain3> m_swapchain;
 		std::array<ComPtr<ID3D12Resource>, 2> m_swapchain_buffers; // 2 is upper bound
-		//std::array<Descriptor, 2> m_swapchain_descriptors{};
 		D3D12Queue* m_swapchain_queue = nullptr;
 
 		D3D12Fence m_fence_wait_all{};
+
+		static DXGI_FORMAT mask_to_format(BYTE mask, D3D_REGISTER_COMPONENT_TYPE component_type);
+		static std::vector<D3D12_INPUT_ELEMENT_DESC> shader_reflection(ID3D12ShaderReflection* shader_reflection,
+		                                                                const D3D12_SHADER_DESC& shader_desc, bool increment_slot = false);
 
 	public:
 		bool create(bool enable_debug_layer);
@@ -62,15 +71,26 @@ namespace glremix::dx
 		bool create_fence(D3D12Fence* fence, uint64_t initial_value, const char* debug_name = nullptr) const;
 		bool wait_fences(const WaitInfo& info) const;
 
+		bool reflect_input_layout(IDxcBlob* vertex_shader, InputLayoutDesc* input_layout, bool increment_slot, ID3D12ShaderReflection** reflection);
+
+		bool create_root_signature(const D3D12_ROOT_SIGNATURE_DESC& desc, ID3D12RootSignature** root_signature, const char* debug_name = nullptr) const;
+
+		// TODO: Custom file loading, no wide char
+		bool load_blob_from_file(const wchar_t* path, IDxcBlobEncoding** blob) const;
+
+		bool create_graphics_pipeline(
+			const GraphicsPipelineDesc& desc,
+			IDxcBlob* vertex_shader, IDxcBlob* pixel_shader,
+			ID3D12PipelineState** pipeline_state, const char* debug_name
+		);
+
 		//virtual void init_imgui(TODO);
 		//virtual void start_imgui_frame();
 		//virtual void render_imgui_draw_data(ID3D12GraphicsCommandList7* cmd_list);
 		//virtual void destroy_imgui();
 
 		bool wait_idle(D3D12Queue* queue);
-
 		~D3D12Context();
-
 	};
 
 	void set_debug_name(ID3D12Object* obj, const char* name);

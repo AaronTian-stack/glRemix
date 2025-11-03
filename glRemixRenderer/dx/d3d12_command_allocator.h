@@ -2,7 +2,7 @@
 
 #include "d3d12_queue.h"
 
-namespace glremix::dx
+namespace glRemix::dx
 {
     struct D3D12CommandAllocator
     {
