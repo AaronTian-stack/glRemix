@@ -1,4 +1,5 @@
 #include "rt_app.h"
+#include "imgui.h"
 
 void glRemix::glRemixRenderer::create()
 {
@@ -47,11 +48,16 @@ void glRemix::glRemixRenderer::create()
 
 	// Compile ray tracing pipeline
 	// Build BLAS here for now, but renderer will construct them dynamically for new geometry in render loop
+
+	// Init ImGui
+	THROW_IF_FALSE(m_context.init_imgui());
 }
 
 void glRemix::glRemixRenderer::render()
 {
-	// TODO: start ImGui frame
+	// Start ImGui frame
+	m_context.start_imgui_frame();
+	ImGui::ShowDemoWindow();
 
 	// Be careful not to call the ID3D12Interface reset instead
 	THROW_IF_FALSE(SUCCEEDED(m_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
@@ -115,11 +121,14 @@ void glRemix::glRemixRenderer::render()
 	// Draw everything
 	D3D12_CPU_DESCRIPTOR_HANDLE swapchain_rtv{};
 	m_swapchain_descriptors.heap->get_cpu_descriptor(&swapchain_rtv, m_swapchain_descriptors.offset + swapchain_idx);
-	const std::array clear_color = { 0.0f, 0.0f, 0.0f, 1.0f };
-	//cmd_list->OMSetRenderTargets(1, &swapchain_rtv, )
+	const std::array clear_color = { 1.0f, 0.0f, 0.0f, 1.0f };
+	cmd_list->OMSetRenderTargets(1, &swapchain_rtv, FALSE, nullptr);
 	cmd_list->ClearRenderTargetView(swapchain_rtv, clear_color.data(), 0, nullptr);
 
-	// This is where most of the rendering code will fit into
+	// This is where rasterization will go
+
+	// Render ImGui
+	m_context.render_imgui_draw_data(cmd_list.Get());
 
 	// Transition swapchain image to present
 	{
@@ -178,7 +187,7 @@ void glRemix::glRemixRenderer::render()
 
 void glRemix::glRemixRenderer::destroy()
 {
-	
+	m_context.destroy_imgui();
 }
 
 glRemix::glRemixRenderer::~glRemixRenderer()

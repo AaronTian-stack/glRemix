@@ -23,6 +23,11 @@ namespace glRemix::dx
 {
 	class D3D12Context
 	{
+		D3D12DescriptorHeap m_imgui_srv_heap{};
+		D3D12DescriptorTable m_imgui_font_desc{};
+		D3D12_CPU_DESCRIPTOR_HANDLE m_imgui_font_cpu{}; // Persistent CPU handle for allocator callback
+		D3D12_GPU_DESCRIPTOR_HANDLE m_imgui_font_gpu{}; // Persistent GPU handle for allocator callback
+
 		ComPtr<IDXGIFactory6> m_dxgi_factory = nullptr;
 
 		ComPtr<ID3D12Debug3> m_debug;
@@ -84,10 +89,11 @@ namespace glRemix::dx
 			ID3D12PipelineState** pipeline_state, const char* debug_name
 		);
 
-		//virtual void init_imgui(TODO);
-		//virtual void start_imgui_frame();
-		//virtual void render_imgui_draw_data(ID3D12GraphicsCommandList7* cmd_list);
-		//virtual void destroy_imgui();
+		// Note: ImGui using win32 is blurry, even the sample is like this, so I assume it's expected
+		bool init_imgui();
+		void start_imgui_frame();
+		void render_imgui_draw_data(ID3D12GraphicsCommandList7* cmd_list);
+		void destroy_imgui();
 
 		bool wait_idle(D3D12Queue* queue);
 		~D3D12Context();

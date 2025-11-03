@@ -6,6 +6,10 @@
 #include "application.h"
 #include <DirectXMath.h>
 
+#include "imgui.h"
+#include "imgui_impl_win32.h"
+#include "imgui_impl_dx12.h"
+
 using namespace glRemix::dx;
 
 void glRemix::dx::set_debug_name(ID3D12Object* obj, const char* name)
@@ -809,6 +813,104 @@ bool D3D12Context::create_graphics_pipeline(
 	set_debug_name(*pipeline_state, debug_name);
 
 	return true;
+}
+
+
+bool D3D12Context::init_imgui()
+{
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGui::StyleColorsDark();
+
+	assert(m_window);
+
+	if (!ImGui_ImplWin32_Init(m_window))
+	{
+		OutputDebugStringA("ImGui ERROR: ImGui_ImplWin32_Init failed\n");
+		return false;
+	}
+
+	D3D12_DESCRIPTOR_HEAP_DESC heap_desc
+	{
+		.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+		.NumDescriptors = Application::m_frames_in_flight, // This should match swapchain buffer count
+		.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
+	};
+
+	if (!create_descriptor_heap(heap_desc, &m_imgui_srv_heap, "imgui srv heap"))
+		return false;
+
+	if (!m_imgui_srv_heap.allocate(1, &m_imgui_font_desc))
+	{
+		OutputDebugStringA("ImGui ERROR: Failed to allocate descriptor for font texture\n");
+		return false;
+	}
+
+	D3D12_CPU_DESCRIPTOR_HANDLE font_cpu{};
+	D3D12_GPU_DESCRIPTOR_HANDLE font_gpu{};
+	m_imgui_srv_heap.get_cpu_descriptor(&font_cpu, m_imgui_font_desc.offset);
+	if (!m_imgui_srv_heap.get_gpu_descriptor(&font_gpu, m_imgui_font_desc.offset))
+	{
+		return false;
+	}
+
+	m_imgui_font_cpu = font_cpu;
+	m_imgui_font_gpu = font_gpu;
+	ImGui_ImplDX12_InitInfo init_info = {};
+	init_info.Device = m_device.Get();
+	init_info.CommandQueue = m_swapchain_queue ? m_swapchain_queue->queue.Get() : nullptr;
+	init_info.NumFramesInFlight = Application::m_frames_in_flight;
+	init_info.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+	init_info.DSVFormat = DXGI_FORMAT_UNKNOWN;
+	init_info.SrvDescriptorHeap = m_imgui_srv_heap.m_heap.Get();
+
+	init_info.UserData = this;
+	init_info.SrvDescriptorAllocFn = [](ImGui_ImplDX12_InitInfo* info,
+										D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu_desc_handle,
+										D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu_desc_handle)
+	{
+		auto* self = static_cast<D3D12Context*>(info->UserData);
+		*out_cpu_desc_handle = self->m_imgui_font_cpu;
+		*out_gpu_desc_handle = self->m_imgui_font_gpu;
+	};
+	init_info.SrvDescriptorFreeFn = [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE, D3D12_GPU_DESCRIPTOR_HANDLE)
+	{
+		// Managed by entire heap
+	};
+
+	if (!ImGui_ImplDX12_Init(&init_info))
+	{
+		OutputDebugStringA("ImGui ERROR: ImGui_ImplDX12_Init failed\n");
+		return false;
+	}
+
+	return true;
+}
+
+void D3D12Context::start_imgui_frame()
+{
+	ImGui_ImplDX12_NewFrame();
+	ImGui_ImplWin32_NewFrame();
+	ImGui::NewFrame();
+}
+
+void D3D12Context::render_imgui_draw_data(ID3D12GraphicsCommandList7* cmd_list)
+{
+    assert(cmd_list);
+    assert(m_imgui_srv_heap.m_heap);
+	ImGui::Render();
+	ID3D12DescriptorHeap* heaps[] = { m_imgui_srv_heap.m_heap.Get() };
+	cmd_list->SetDescriptorHeaps(1, heaps);
+	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmd_list);
+}
+
+void D3D12Context::destroy_imgui()
+{
+	ImGui_ImplDX12_Shutdown();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
+	assert(m_imgui_font_desc.heap);
+	m_imgui_srv_heap.deallocate(&m_imgui_font_desc);
 }
 
 D3D12Context::~D3D12Context()

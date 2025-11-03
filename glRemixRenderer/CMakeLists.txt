@@ -44,12 +44,18 @@ set(SHADER_FILES
     "shaders/rt/raytracing.hlsl"
 )
 
+set(IMGUI_DIR "${REPO_ROOT}/external/imgui")
+file(GLOB IMGUI_SOURCES
+    "${IMGUI_DIR}/imgui*.cpp"
+)
+
 add_executable(${PROJECT_NAME} 
     ${RENDERER_SOURCES} 
     ${RENDERER_HEADERS}
     ${SHARED_HEADERS}
     ${SHARED_SOURCES}
     ${D3D12MA_SOURCES}
+    ${IMGUI_SOURCES}
     ${SHADER_FILES}
 )
 
@@ -58,6 +64,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     "${GLREMIX_SHARED_DIR}"
     "${REPO_ROOT}/external/robin-map-1.4.0/include"
     "${REPO_ROOT}/external/D3D12MemoryAllocator-3.0.1/include"
+    "${REPO_ROOT}/external/imgui"
 )
 
 set(_GLREMIX_COPY_IF_EXISTS_SCRIPT "${GLREMIX_COPY_IF_EXISTS_SCRIPT}")

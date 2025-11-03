@@ -1,5 +1,8 @@
 #include <iostream>
 #include <windows.h>
+#include "imgui_impl_win32.h"
+
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 #include "rt_app.h"
 
@@ -14,6 +17,9 @@ namespace
 			PostQuitMessage(0);
 			return 0;
 		}
+		// TODO: Somehow get this event from the host app so we can pipe events to ImGui
+        if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam))
+            return 1;
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	}
 }
