@@ -100,10 +100,11 @@ endif()
 set(_GLREMIX_SHIM_TARGET_WIN32 "${_GLREMIX_SHIM_TARGET_PREFIX}win32")
 set(_GLREMIX_SHIM_TARGET_X64 "${_GLREMIX_SHIM_TARGET_PREFIX}x64")
 
-if(TARGET ${_GLREMIX_SHIM_TARGET_WIN32})
-    add_dependencies(${PROJECT_NAME} ${_GLREMIX_SHIM_TARGET_WIN32})
-endif()
-
-if(TARGET ${_GLREMIX_SHIM_TARGET_X64})
-    add_dependencies(${PROJECT_NAME} ${_GLREMIX_SHIM_TARGET_X64})
-endif()
+# shim is not dependency of renderer
+# if(TARGET ${_GLREMIX_SHIM_TARGET_WIN32})
+#     add_dependencies(${PROJECT_NAME} ${_GLREMIX_SHIM_TARGET_WIN32})
+# endif()
+# 
+# if(TARGET ${_GLREMIX_SHIM_TARGET_X64})
+#     add_dependencies(${PROJECT_NAME} ${_GLREMIX_SHIM_TARGET_X64})
+# endif()

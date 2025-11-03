@@ -1,14 +1,15 @@
 #include "gl_hooks.h"
 
 #include "framework.h"
-#include "gl_loader.h"
+
+#include <gl_loader.h>
 
 #include <GL/gl.h>
 
 #include <mutex>
 #include <tsl/robin_map.h>
 
-namespace glremix::hooks
+namespace glRemix::hooks
 {
     // If forwarding a call is needed for whatever reason, you can write a function to load the true DLL,
     // then use GetProcAddress or wglGetProcAddress to store the real function pointer. But we are not
@@ -31,7 +32,7 @@ namespace glremix::hooks
     // wglSetPixelFormat will only be called once per context
     // Or if there are multiple contexts they can share the same format since they're fake anyway...
     // TODO: Make the above assumption?
-    tsl::robin_map<HDC, FakePixelFormat> g_pixel_formats;
+    tsl::robin_map < HDC, FakePixelFormat> g_pixel_formats;
 
     thread_local HGLRC g_current_context = nullptr;
     thread_local HDC g_current_dc = nullptr;
@@ -67,10 +68,15 @@ namespace glremix::hooks
     {
 		// Example override that does nothing.
         // You can put a breakpoint here.
+        glRemix::GLVertex3fCommand payload{x, y, z};
+        g_recorder.Record(glRemix::GLCommandType::GL_VERTEX3F, &payload, sizeof(payload));
     }
 
     BOOL WINAPI swap_buffers_ovr(HDC)
     {
+        g_recorder.EndFrame();
+        g_recorder.StartFrame();
+
         return TRUE;
     }
 

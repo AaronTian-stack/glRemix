@@ -64,8 +64,9 @@ namespace glRemix
         GL_SHUTDOWN
     };
 
+    // Name *Unifs for clear association
     // Header for all commands
-    struct GLCommand
+    struct GLCommandUnifs
     {
         GLCommandType type;
         uint32_t dataSize;

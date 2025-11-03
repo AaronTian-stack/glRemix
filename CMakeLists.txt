@@ -86,11 +86,11 @@ if((GLREMIX_BUILD_SHIM_WIN32 AND GLREMIX_BUILD_SHIM_X64) OR (NOT GLREMIX_BUILD_S
 endif()
 
 if(GLREMIX_BUILD_SHIM_WIN32)
-	glremix_add_shim_builder("win32" "Win32" "Build 32-bit OpenGL shim")
+	glRemix_add_shim_builder("win32" "Win32" "Build 32-bit OpenGL shim")
 endif()
 
 if(GLREMIX_BUILD_SHIM_X64)
-	glremix_add_shim_builder("x64" "x64" "Build 64-bit OpenGL shim")
+	glRemix_add_shim_builder("x64" "x64" "Build 64-bit OpenGL shim")
 endif()
 
 add_subdirectory(glRemixRenderer)

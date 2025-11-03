@@ -5,12 +5,12 @@
     extern "C" __declspec(dllexport) void APIENTRY name params                                             \
     {                                                                                                      \
         using FnType = void(APIENTRY*) params;                                                             \
-        if (auto override_fn = reinterpret_cast<FnType>(glremix::gl::find_hook(#name)))                    \
+        if (auto override_fn = reinterpret_cast<FnType>(glRemix::gl::find_hook(#name)))                    \
         {                                                                                                  \
             override_fn args;                                                                              \
             return;                                                                                        \
         }                                                                                                  \
-        glremix::gl::report_missing_function(#name);                                                       \
+        glRemix::gl::report_missing_function(#name);                                                       \
     }
 #endif
 
@@ -19,11 +19,11 @@
     extern "C" __declspec(dllexport) ret APIENTRY name params                                              \
     {                                                                                                      \
         using FnType = ret(APIENTRY*) params;                                                              \
-        if (auto override_fn = reinterpret_cast<FnType>(glremix::gl::find_hook(#name)))                    \
+        if (auto override_fn = reinterpret_cast<FnType>(glRemix::gl::find_hook(#name)))                    \
         {                                                                                                  \
             return override_fn args;                                                                       \
         }                                                                                                  \
-        glremix::gl::report_missing_function(#name);                                                       \
+        glRemix::gl::report_missing_function(#name);                                                       \
         return {};                                                                                         \
     }
 #endif
@@ -33,11 +33,11 @@
     extern "C" __declspec(dllexport) retType WINAPI name params                                            \
     {                                                                                                      \
         using FnType = retType(WINAPI*) params;                                                            \
-        if (auto override_fn = reinterpret_cast<FnType>(glremix::gl::find_hook(#name)))                    \
+        if (auto override_fn = reinterpret_cast<FnType>(glRemix::gl::find_hook(#name)))                    \
         {                                                                                                  \
             return override_fn args;                                                                       \
         }                                                                                                  \
-        glremix::gl::report_missing_function(#name);                                                       \
+        glRemix::gl::report_missing_function(#name);                                                       \
         return default_value;                                                                              \
     }
 #endif
