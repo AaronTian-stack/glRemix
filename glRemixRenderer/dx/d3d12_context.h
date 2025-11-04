@@ -82,7 +82,7 @@ namespace glRemix::dx
 		bool create_fence(D3D12Fence* fence, uint64_t initial_value, const char* debug_name = nullptr) const;
 		bool wait_fences(const WaitInfo& info) const;
 
-		bool reflect_input_layout(IDxcBlob* vertex_shader, InputLayoutDesc* input_layout, bool increment_slot, ID3D12ShaderReflection** reflection);
+		bool reflect_input_layout(IDxcBlob* vertex_shader, InputLayoutDesc* input_layout, bool increment_slot, ID3D12ShaderReflection** reflection) const;
 
 		bool create_root_signature(const D3D12_ROOT_SIGNATURE_DESC& desc, ID3D12RootSignature** root_signature, const char* debug_name = nullptr) const;
 
@@ -99,6 +99,14 @@ namespace glRemix::dx
 			const RayTracingPipelineDesc& desc,
 			IDxcBlob* raytracing_shaders,
 			ID3D12StateObject** state_object, const char* debug_name
+		) const;
+
+		// TODO: Similar function for AABB buffers? Need it for area lights.
+		D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC get_buffer_rt_description(D3D12Buffer* vertex_buffer, D3D12Buffer* index_buffer);
+		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO get_acceleration_structure_prebuild_info(
+			const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& desc) const;
+		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC get_raytracing_acceleration_structure(
+			const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& desc, D3D12Buffer* out, D3D12Buffer* in, D3D12Buffer* scratch
 		) const;
 
 		// Note: ImGui using win32 is blurry, even the sample is like this, so I assume it's expected

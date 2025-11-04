@@ -20,7 +20,9 @@ namespace glRemix::dx
         UINT64 size = 0;
         UINT64 stride = 0;
         BufferVisibility visibility = GPU;
-        bool uav = false;
+        // Normally you should have some usage enum that could enumerate this stuff and more
+        bool uav = false; // Still need to transition after creating resource
+        bool acceleration_structure = false;
     };
 
     struct D3D12Buffer

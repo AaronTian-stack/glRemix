@@ -153,6 +153,7 @@ int main()
 
 	// Run the renderer
 	glRemix::glRemixRenderer renderer;
+	// TODO: Make sure to disable the debug layer on release, but we may want it in release builds for testing
 	renderer.run(hwnd, true);
 
 	DestroyWindow(hwnd);

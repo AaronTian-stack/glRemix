@@ -1,4 +1,6 @@
 #include "rt_app.h"
+
+#include "constants.h"
 #include "imgui.h"
 
 void glRemix::glRemixRenderer::create()
@@ -10,7 +12,8 @@ void glRemix::glRemixRenderer::create()
 
 	// Create raster root signature
 	{
-        // TODO: You'll probably want a texture and sampler as this will be for UI probably
+		// TODO: Make a singular very large root signature that is used for all raster pipelines
+        // TODO: Probably want a texture and sampler as this will be for UI probably
 		D3D12_ROOT_SIGNATURE_DESC root_sig_desc;
 		root_sig_desc.NumParameters = 0;
 		root_sig_desc.pParameters = nullptr;
@@ -48,8 +51,9 @@ void glRemix::glRemixRenderer::create()
 	
 
 	// Create raytracing global root signature
+	// TODO: Make a singular very large root signature that is used for all ray tracing pipelines
 	{
-		std::array<D3D12_DESCRIPTOR_RANGE, 2> descriptor_ranges{};
+		std::array<D3D12_DESCRIPTOR_RANGE, 3> descriptor_ranges{};
 		
 		// Acceleration structure (SRV) at t0
 		descriptor_ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
@@ -65,25 +69,20 @@ void glRemix::glRemixRenderer::create()
 		descriptor_ranges[1].RegisterSpace = 0;
 		descriptor_ranges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-		std::array<D3D12_ROOT_PARAMETER, 3> root_parameters{};
+		// Constant buffer at b0
+		descriptor_ranges[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+		descriptor_ranges[2].NumDescriptors = 1;
+		descriptor_ranges[2].BaseShaderRegister = 0;
+		descriptor_ranges[2].RegisterSpace = 0;
+		descriptor_ranges[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-		// Parameter 0: Acceleration structure
+		std::array<D3D12_ROOT_PARAMETER, 1> root_parameters{};
+
+		// Single table for everything
 		root_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 		root_parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-		root_parameters[0].DescriptorTable.NumDescriptorRanges = 1;
-		root_parameters[0].DescriptorTable.pDescriptorRanges = &descriptor_ranges[0];
-
-		// Parameter 1: Output UAV
-		root_parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-		root_parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-		root_parameters[1].DescriptorTable.NumDescriptorRanges = 1;
-		root_parameters[1].DescriptorTable.pDescriptorRanges = &descriptor_ranges[1];
-
-		// Parameter 2: Constant buffer at b0
-		root_parameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-		root_parameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-		root_parameters[2].Descriptor.ShaderRegister = 0;
-		root_parameters[2].Descriptor.RegisterSpace = 0;
+		root_parameters[0].DescriptorTable.NumDescriptorRanges = 3;
+		root_parameters[0].DescriptorTable.pDescriptorRanges = descriptor_ranges.data();
 
 		D3D12_ROOT_SIGNATURE_DESC root_sig_desc{};
 		root_sig_desc.NumParameters = static_cast<UINT>(root_parameters.size());
@@ -107,11 +106,13 @@ void glRemix::glRemixRenderer::create()
 	);
 	rt_desc.global_root_signature = m_rt_global_root_signature.Get();
 	rt_desc.max_recursion_depth = 1;
-	rt_desc.payload_size = sizeof(float) * 4;  // RayPayload contains float4 color
-	rt_desc.attribute_size = sizeof(float) * 2; // BuiltInTriangleIntersectionAttributes has 2 floats
+	// Make sure these match in the shader
+	rt_desc.payload_size = sizeof(float) * 4;
+	rt_desc.attribute_size = sizeof(float) * 2;
 	THROW_IF_FALSE(m_context.create_raytracing_pipeline(rt_desc, raytracing_shaders.Get(), m_rt_pipeline.ReleaseAndGetAddressOf(), "rt pipeline"));
 
 	// Simple geometry for triangle. Use GPU upload heaps to make life easier
+	// TODO: Eventually replace with classic CPU -> GPU copy and only use GPU upload heaps for dynamic data
 	struct Vertex
 	{
 		std::array<float, 3> position;
@@ -129,35 +130,143 @@ void glRemix::glRemixRenderer::create()
 	{
 		0, 1, 2
 	};
-	dx::BufferDesc vertex_desc
+	dx::BufferDesc vertex_buffer_desc
 	{
 		.size = sizeof(Vertex) * triangle_vertices.size(),
 		.stride = sizeof(Vertex),
 		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
 	};
 	void* cpu_ptr;
-	THROW_IF_FALSE(m_context.create_buffer(vertex_desc, &m_vertex_buffer, "triangle vertex buffer"));
+	THROW_IF_FALSE(m_context.create_buffer(vertex_buffer_desc, &m_vertex_buffer, "triangle vertex buffer"));
 
 	THROW_IF_FALSE(m_context.map_buffer(&m_vertex_buffer, &cpu_ptr));
-	memcpy(cpu_ptr, triangle_vertices.data(), vertex_desc.size);
+	memcpy(cpu_ptr, triangle_vertices.data(), vertex_buffer_desc.size);
 	m_context.unmap_buffer(&m_vertex_buffer);
 
-	dx::BufferDesc index_desc
+	dx::BufferDesc index_buffer_desc
 	{
 		.size = sizeof(UINT) * triangle_indices.size(),
 		.stride = sizeof(UINT),
 		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
 	};
-	THROW_IF_FALSE(m_context.create_buffer(index_desc, &m_index_buffer, "triangle index buffer"));
+	THROW_IF_FALSE(m_context.create_buffer(index_buffer_desc, &m_index_buffer, "triangle index buffer"));
 
 	THROW_IF_FALSE(m_context.map_buffer(&m_index_buffer, &cpu_ptr));
-	memcpy(cpu_ptr, triangle_indices.data(), index_desc.size);
+	memcpy(cpu_ptr, triangle_indices.data(), index_buffer_desc.size);
 	m_context.unmap_buffer(&m_index_buffer);
 
+	dx::BufferDesc raygen_cb_desc
+	{
+		.size = sizeof(RayGenConstantBuffer),
+		.stride = sizeof(RayGenConstantBuffer),
+		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+	};
+	THROW_IF_FALSE(m_context.create_buffer(raygen_cb_desc, &m_raygen_constant_buffer, "raygen constant buffer"));
+
 	// Build BLAS here for now, but renderer will construct them dynamically for new geometry in render loop
+	D3D12_RAYTRACING_GEOMETRY_DESC tri_desc
+	{
+		.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
+		.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE, // Try to use this liberally as its faster
+		.Triangles = m_context.get_buffer_rt_description(&m_vertex_buffer, &m_index_buffer),
+	};
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS blas_desc
+	{
+		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
+		// Lots of options here, probably want to use different ones, especially the update one
+		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
+		.NumDescs = 1,
+		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+		.pGeometryDescs = &tri_desc,
+	};
+
+	const auto prebuild_info = m_context.get_acceleration_structure_prebuild_info(blas_desc);
+	// TODO: Compute max size for scratch space and use for all BLAS
+	// The same could be done for TLAS(s) as well
+	dx::BufferDesc scratch_buffer_desc
+	{
+		.size = prebuild_info.ScratchDataSizeInBytes,
+		.stride = 0,
+		.visibility = dx::GPU,
+		.uav = true, // Scratch space must be in UAV layout
+	};
+	THROW_IF_FALSE(m_context.create_buffer(scratch_buffer_desc, &m_scratch_space, "BLAS scratch space"));
+
+	dx::BufferDesc blas_buffer_desc
+	{
+		.size = prebuild_info.ResultDataMaxSizeInBytes,
+		.stride = 0,
+		.visibility = dx::GPU,
+		.acceleration_structure = true,
+	};
+	THROW_IF_FALSE(m_context.create_buffer(blas_buffer_desc, &m_blas_buffer, "BLAS buffer"));
+	
+	const auto build_desc = m_context.get_raytracing_acceleration_structure(blas_desc, &m_blas_buffer, nullptr, &m_scratch_space);
+
+	// Record transitions, copies
+	THROW_IF_FALSE(SUCCEEDED(m_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
+	ComPtr<ID3D12GraphicsCommandList7> cmd_list;
+	THROW_IF_FALSE(m_context.create_command_list(cmd_list.ReleaseAndGetAddressOf(), m_cmd_pools[get_frame_index()]));
+
+	// Transition scratch space to UAV format
+	D3D12_BUFFER_BARRIER scratch_space_uav
+	{
+		.SyncBefore = D3D12_BARRIER_SYNC_NONE,
+		.SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+		.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
+		.AccessAfter = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
+		.pResource = m_scratch_space.allocation->GetResource(),
+		.Offset = 0,
+		.Size = UINT64_MAX,
+	};
+
+	D3D12_BUFFER_BARRIER blas_buffer_barrier
+	{
+		.SyncBefore = D3D12_BARRIER_SYNC_NONE,
+		.SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+		.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
+		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
+		.pResource = m_blas_buffer.allocation->GetResource(),
+		.Offset = 0,
+		.Size = UINT64_MAX,
+	};
+
+	std::array buffer_barriers{ scratch_space_uav, blas_buffer_barrier };
+
+	D3D12_BARRIER_GROUP barrier_group
+	{
+		.Type = D3D12_BARRIER_TYPE_BUFFER,
+		.NumBarriers = static_cast<UINT>(buffer_barriers.size()),
+		.pBufferBarriers = buffer_barriers.data(),
+	};
+
+	cmd_list->Barrier(1, &barrier_group);
+
+	cmd_list->BuildRaytracingAccelerationStructure(&build_desc, 0, nullptr);
+
+	// TODO: Whenever buffers are moved to CPU -> GPU copy method instead of GPU upload heaps record the copy here as well
+
+	THROW_IF_FALSE(SUCCEEDED(cmd_list->Close()));
+	const std::array<ID3D12CommandList*, 1> lists = { cmd_list.Get() };
+	m_gfx_queue.queue->ExecuteCommandLists(1, lists.data());
+
+	// Signal fence and wait for GPU to finish
+	auto current_fence_value = ++m_fence_frame_ready_val[get_frame_index()];
+	m_gfx_queue.queue->Signal(m_fence_frame_ready.fence.Get(), current_fence_value);
+
+	dx::WaitInfo wait_info
+	{
+		.wait_all = true,
+		.count = 1,
+		.fences = &m_fence_frame_ready,
+		.values = &current_fence_value,
+		.timeout = INFINITE,
+	};
 
 	// Init ImGui
 	THROW_IF_FALSE(m_context.init_imgui());
+
+	THROW_IF_FALSE(m_context.wait_fences(wait_info)); // Block CPU until done
 }
 
 void glRemix::glRemixRenderer::render()

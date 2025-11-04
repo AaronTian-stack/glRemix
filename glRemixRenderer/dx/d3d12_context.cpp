@@ -5,6 +5,7 @@
 
 #include "application.h"
 #include <DirectXMath.h>
+#include "helper.h"
 
 #include "imgui.h"
 #include "imgui_impl_win32.h"
@@ -42,6 +43,7 @@ bool D3D12Context::create(bool enable_debug_layer)
 		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&m_debug))))
 		{
 			m_debug->EnableDebugLayer();
+			//m_debug->SetEnableGPUBasedValidation(true); // TODO: Enable this when debugging shaders
 			dxgi_factory_flags |= DXGI_CREATE_FACTORY_DEBUG;
 		}
 	}
@@ -348,22 +350,27 @@ bool D3D12Context::create_buffer(const BufferDesc& desc, D3D12Buffer* buffer, co
 	{
 		resource_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 	}
-	D3D12MA::ALLOCATION_DESC allocation_desc{};
-	if (desc.visibility & GPU)
+	if (desc.acceleration_structure)
 	{
-		if (desc.visibility & CPU)
+		resource_desc.Flags |= D3D12_RESOURCE_FLAG_RAYTRACING_ACCELERATION_STRUCTURE;
+	}
+	D3D12MA::ALLOCATION_DESC allocation_desc{};
+	allocation_desc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
+	if (desc.visibility & CPU)
+	{
+		if (desc.visibility & GPU)
 		{
 			allocation_desc.HeapType = D3D12_HEAP_TYPE_GPU_UPLOAD;
 		}
-	}
-	else
-	{
-		allocation_desc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
+		else
+		{
+			allocation_desc.HeapType = D3D12_HEAP_TYPE_UPLOAD;
+		}
 	}
 	if (FAILED(m_allocator->CreateResource3(
 		&allocation_desc,
 		&resource_desc,
-		desc.uav ? D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS : D3D12_BARRIER_LAYOUT_UNDEFINED,
+		D3D12_BARRIER_LAYOUT_UNDEFINED, // You can't have UAV as initial layout, need to transition after creation
 		nullptr,
 		0, nullptr,
 		buffer->allocation.ReleaseAndGetAddressOf(),
@@ -670,7 +677,7 @@ InputLayoutDesc D3D12Context::shader_reflection(ID3D12ShaderReflection* shader_r
 	return input_element_desc;
 }
 
-bool D3D12Context::reflect_input_layout(IDxcBlob* vertex_shader, InputLayoutDesc* input_layout, const bool increment_slot, ID3D12ShaderReflection** reflection)
+bool D3D12Context::reflect_input_layout(IDxcBlob* vertex_shader, InputLayoutDesc* input_layout, const bool increment_slot, ID3D12ShaderReflection** reflection) const
 {
 	assert(input_layout);
 	assert(vertex_shader);
@@ -705,7 +712,7 @@ bool D3D12Context::load_blob_from_file(const wchar_t* path, IDxcBlobEncoding** b
 	return SUCCEEDED(m_dxc_utils->LoadFile(path, nullptr, blob));
 }
 
-D3D12_BLEND_DESC make_default_blend_desc()
+static D3D12_BLEND_DESC make_default_blend_desc()
 {
 	D3D12_BLEND_DESC desc
 	{
@@ -818,6 +825,8 @@ bool D3D12Context::create_graphics_pipeline(
 		.BytecodeLength = pixel_shader->GetBufferSize()
 	};
 
+	assert(!u64_overflows_u32(desc.input_layout.size()));
+
 	pso_desc.InputLayout = 
 	{
 		.pInputElementDescs = desc.input_layout.data(),
@@ -896,7 +905,6 @@ bool D3D12Context::create_graphics_pipeline(
 bool D3D12Context::create_raytracing_pipeline(const RayTracingPipelineDesc& desc, IDxcBlob* raytracing_shaders,
                                                ID3D12StateObject** state_object, const char* debug_name) const
 {
-	assert(false && "Not working yet");
 	assert(desc.global_root_signature);
 
 	std::array<D3D12_EXPORT_DESC, 5> exports_array{};
@@ -914,7 +922,7 @@ bool D3D12Context::create_raytracing_pipeline(const RayTracingPipelineDesc& desc
 
 	D3D12_DXIL_LIBRARY_DESC dxil_lib
 	{
-		.DXILLibrary =
+		.DXILLibrary
 		{
 			.pShaderBytecode = raytracing_shaders->GetBufferPointer(),
 			.BytecodeLength = raytracing_shaders->GetBufferSize(),
@@ -932,17 +940,18 @@ bool D3D12Context::create_raytracing_pipeline(const RayTracingPipelineDesc& desc
 	// Define hit group subobject needed for pipeline
 	D3D12_HIT_GROUP_DESC hg
 	{
-		.HitGroupExport = L"HG_Default",
+		.HitGroupExport = L"HG_Default", // TODO: Option in struct for this?
 		.Type = D3D12_HIT_GROUP_TYPE_TRIANGLES, // or PROCEDURAL TODO: Add option in struct for this
 		.AnyHitShaderImport = desc.export_names[static_cast<UINT>(ExportType::ANY_HIT)],
 		.ClosestHitShaderImport = desc.export_names[static_cast<UINT>(ExportType::CLOSEST_HIT)],
 		.IntersectionShaderImport = desc.export_names[static_cast<UINT>(ExportType::INTERSECTION)],
 	};
+
 	// Define global, local root signatures
 	D3D12_STATE_SUBOBJECT global_rs_subobj
 	{
 		.Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE,
-		.pDesc = desc.global_root_signature,
+		.pDesc = reinterpret_cast<const void*>(&desc.global_root_signature),
 	};
 
 	std::array<D3D12_STATE_SUBOBJECT, 5> local_rs_subobjs{};
@@ -955,7 +964,7 @@ bool D3D12Context::create_raytracing_pipeline(const RayTracingPipelineDesc& desc
 				local_rs_subobjs[c++] = D3D12_STATE_SUBOBJECT
 				{
 					.Type = D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE,
-					.pDesc = rs,
+					.pDesc = &rs,
 				};
 			}
 		}
@@ -1017,6 +1026,9 @@ bool D3D12Context::create_raytracing_pipeline(const RayTracingPipelineDesc& desc
 	subobjects.push_back(lib_sub_obj);
 	subobjects.push_back(hg_subobj);
 
+	subobjects.push_back(shader_config_subobj);
+	subobjects.push_back(pipeline_config_subobj);
+
 	if (desc.global_root_signature)
 	{
 		subobjects.push_back(global_rs_subobj);
@@ -1039,8 +1051,7 @@ bool D3D12Context::create_raytracing_pipeline(const RayTracingPipelineDesc& desc
 		}
 	}
 
-	subobjects.push_back(shader_config_subobj);
-	subobjects.push_back(pipeline_config_subobj);
+	assert(!u64_overflows_u32(subobjects.size()));
 
 	D3D12_STATE_OBJECT_DESC state_object_desc
 	{
@@ -1058,6 +1069,65 @@ bool D3D12Context::create_raytracing_pipeline(const RayTracingPipelineDesc& desc
 	set_debug_name(*state_object, debug_name);
 	
 	return true;
+}
+
+D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC D3D12Context::get_buffer_rt_description(D3D12Buffer* vertex_buffer, D3D12Buffer* index_buffer)
+{
+	assert(vertex_buffer);
+	assert(vertex_buffer->desc.visibility & GPU);
+	const auto count = vertex_buffer->desc.size / vertex_buffer->desc.stride;
+	assert(!u64_overflows_u32(count));
+
+	DXGI_FORMAT index_format = DXGI_FORMAT_UNKNOWN;
+	if (index_buffer)
+	{
+		assert(index_buffer->desc.visibility & GPU);
+		assert(index_buffer->desc.stride == 2 || index_buffer->desc.stride == 4);
+		if (index_buffer->desc.stride == 2)
+		{
+			index_format = DXGI_FORMAT_R16_UINT;
+		}
+		else if (index_buffer->desc.stride == 4)
+		{
+			index_format = DXGI_FORMAT_R32_UINT;
+		}
+	}
+
+	return
+	{
+		.Transform3x4 = NULL,
+		.IndexFormat = index_format,
+		.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
+		.VertexCount = static_cast<UINT>(count),
+		.IndexBuffer = index_buffer ? index_buffer->allocation.Get()->GetResource()->GetGPUVirtualAddress() : 0,
+		.VertexBuffer =
+		{
+			.StartAddress = vertex_buffer->allocation.Get()->GetResource()->GetGPUVirtualAddress(),
+			.StrideInBytes = vertex_buffer->desc.stride,
+		},
+	};
+}
+
+D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO D3D12Context::get_acceleration_structure_prebuild_info(
+	const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& desc) const
+{
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO info{};
+	m_device->GetRaytracingAccelerationStructurePrebuildInfo(&desc, &info);
+	return info;
+}
+
+D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC D3D12Context::get_raytracing_acceleration_structure(
+	const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& desc, D3D12Buffer* out, D3D12Buffer* in, D3D12Buffer* scratch) const
+{
+	assert(out);
+	assert(scratch);
+	return
+	{
+		.DestAccelerationStructureData = out->allocation->GetResource()->GetGPUVirtualAddress(),
+		.Inputs = desc,
+		.SourceAccelerationStructureData = in ? in->allocation->GetResource()->GetGPUVirtualAddress() : NULL,
+		.ScratchAccelerationStructureData = scratch->allocation->GetResource()->GetGPUVirtualAddress(),
+	};
 }
 
 bool D3D12Context::init_imgui()
