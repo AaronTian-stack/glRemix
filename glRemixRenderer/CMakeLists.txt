@@ -97,6 +97,14 @@ if(GLREMIX_DEPLOY_DIR)
                 -P "${_GLREMIX_COPY_IF_EXISTS_SCRIPT}"
         )
     endif()
+
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Copying shader files to ${_GLREMIX_RENDERER_DEPLOY_CONFIG_DIR}/shaders"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_GLREMIX_RENDERER_DEPLOY_CONFIG_DIR}/shaders"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/shaders"
+            "${_GLREMIX_RENDERER_DEPLOY_CONFIG_DIR}/shaders"
+    )
 endif()
 
 if(WIN32)
