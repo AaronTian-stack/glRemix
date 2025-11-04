@@ -10,15 +10,45 @@ include("${REPO_ROOT}/cmake/shared_files.cmake")
 set(SHARED_HEADERS ${GLREMIX_SHARED_HEADER_FILES})
 set(SHARED_SOURCES ${GLREMIX_SHARED_SOURCE_FILES})
 
+set(dx_dir "${CMAKE_CURRENT_SOURCE_DIR}/dx")
+
 set(RENDERER_SOURCES
     "main.cpp"
+    "${dx_dir}/d3d12_context.cpp"
+    "${dx_dir}/d3d12_descriptor_heap.cpp"
+    "${dx_dir}/d3d12_pipeline_types.cpp"
+
+    "application.cpp"
+    "rt_app.cpp"
+)
+
+set(RENDERER_HEADERS
+    "${dx_dir}/d3d12_context.h"
+    "${dx_dir}/d3d12_fence.h"
+    "${dx_dir}/d3d12_queue.h"
+    "${dx_dir}/d3d12_command_allocator.h"
+    "${dx_dir}/d3d12_descriptor_heap.h"
+    "${dx_dir}/d3d12_descriptor.h"
+    "${dx_dir}/d3d12_as.h"
+    "${dx_dir}/d3d12_pipeline_types.h"
+    "${dx_dir}/d3d12_buffer.h"
+
+    "application.h"
+    "rt_app.h"
 )
 
 set(D3D12MA_SOURCES
     "${REPO_ROOT}/external/D3D12MemoryAllocator-3.0.1/src/D3D12MemAlloc.cpp"
 )
 
-set(RENDERER_HEADERS
+set(SHADER_FILES
+    "shaders/raster/triangle.hlsl"
+    "shaders/rt/raytracing.hlsl"
+)
+
+set(IMGUI_DIR "${REPO_ROOT}/external/imgui")
+file(GLOB IMGUI_SOURCES
+    "${IMGUI_DIR}/imgui*.cpp"
 )
 
 add_executable(${PROJECT_NAME} 
@@ -27,6 +57,8 @@ add_executable(${PROJECT_NAME}
     ${SHARED_HEADERS}
     ${SHARED_SOURCES}
     ${D3D12MA_SOURCES}
+    ${IMGUI_SOURCES}
+    ${SHADER_FILES}
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE 
@@ -34,6 +66,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     "${GLREMIX_SHARED_DIR}"
     "${REPO_ROOT}/external/robin-map-1.4.0/include"
     "${REPO_ROOT}/external/D3D12MemoryAllocator-3.0.1/include"
+    "${REPO_ROOT}/external/imgui"
 )
 
 set(_GLREMIX_COPY_IF_EXISTS_SCRIPT "${GLREMIX_COPY_IF_EXISTS_SCRIPT}")
@@ -91,6 +124,10 @@ endif()
 set(ALL_RENDERER_FILES ${RENDERER_SOURCES} ${RENDERER_HEADERS})
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${ALL_RENDERER_FILES})
 source_group("shared" FILES ${SHARED_HEADERS} ${SHARED_SOURCES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES ${SHADER_FILES})
+
+# Exclude shader files from build
+set_source_files_properties(${SHADER_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
 
 set(_GLREMIX_SHIM_TARGET_PREFIX "${GLREMIX_SHIM_TARGET_PREFIX}")
 if(NOT _GLREMIX_SHIM_TARGET_PREFIX)
@@ -100,11 +137,20 @@ endif()
 set(_GLREMIX_SHIM_TARGET_WIN32 "${_GLREMIX_SHIM_TARGET_PREFIX}win32")
 set(_GLREMIX_SHIM_TARGET_X64 "${_GLREMIX_SHIM_TARGET_PREFIX}x64")
 
-# shim is not dependency of renderer
-# if(TARGET ${_GLREMIX_SHIM_TARGET_WIN32})
-#     add_dependencies(${PROJECT_NAME} ${_GLREMIX_SHIM_TARGET_WIN32})
-# endif()
-# 
-# if(TARGET ${_GLREMIX_SHIM_TARGET_X64})
-#     add_dependencies(${PROJECT_NAME} ${_GLREMIX_SHIM_TARGET_X64})
-# endif()
+if(TARGET ${_GLREMIX_SHIM_TARGET_WIN32})
+    add_dependencies(${PROJECT_NAME} ${_GLREMIX_SHIM_TARGET_WIN32})
+endif()
+
+if(TARGET ${_GLREMIX_SHIM_TARGET_X64})
+    add_dependencies(${PROJECT_NAME} ${_GLREMIX_SHIM_TARGET_X64})
+endif()
+
+# Compile shaders using SXC.exe
+add_custom_target(CompileShaders ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/shaders
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/shaders/SXC.exe -c ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shaders.config -sm 6_6 -out ${CMAKE_CURRENT_BINARY_DIR}/shaders
+    COMMENT "Compiling shaders with SXC.exe"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_dependencies(${PROJECT_NAME} CompileShaders)

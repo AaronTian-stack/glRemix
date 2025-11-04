@@ -465,3 +465,5 @@ CMakePresets.json
 .vscode/
 
 .github/
+*.dxil
+
