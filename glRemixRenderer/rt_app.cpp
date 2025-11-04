@@ -49,7 +49,7 @@ void glRemix::glRemixRenderer::create()
 
 	// Create raytracing global root signature
 	{
-		std::array<D3D12_DESCRIPTOR_RANGE, 2> descriptor_ranges{};
+		std::array<D3D12_DESCRIPTOR_RANGE, 3> descriptor_ranges{};
 		
 		// Acceleration structure (SRV) at t0
 		descriptor_ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
@@ -64,6 +64,13 @@ void glRemix::glRemixRenderer::create()
 		descriptor_ranges[1].BaseShaderRegister = 0;
 		descriptor_ranges[1].RegisterSpace = 0;
 		descriptor_ranges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+		// Constant buffer at b0
+		descriptor_ranges[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+		descriptor_ranges[2].NumDescriptors = 1;
+		descriptor_ranges[2].BaseShaderRegister = 0;
+		descriptor_ranges[2].RegisterSpace = 0;
+		descriptor_ranges[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 		std::array<D3D12_ROOT_PARAMETER, 3> root_parameters{};
 
@@ -80,10 +87,10 @@ void glRemix::glRemixRenderer::create()
 		root_parameters[1].DescriptorTable.pDescriptorRanges = &descriptor_ranges[1];
 
 		// Parameter 2: Constant buffer at b0
-		root_parameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		root_parameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 		root_parameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-		root_parameters[2].Descriptor.ShaderRegister = 0;
-		root_parameters[2].Descriptor.RegisterSpace = 0;
+		root_parameters[2].DescriptorTable.NumDescriptorRanges = 1;
+		root_parameters[2].DescriptorTable.pDescriptorRanges = &descriptor_ranges[2];
 
 		D3D12_ROOT_SIGNATURE_DESC root_sig_desc{};
 		root_sig_desc.NumParameters = static_cast<UINT>(root_parameters.size());

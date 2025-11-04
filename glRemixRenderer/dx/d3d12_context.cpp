@@ -896,7 +896,6 @@ bool D3D12Context::create_graphics_pipeline(
 bool D3D12Context::create_raytracing_pipeline(const RayTracingPipelineDesc& desc, IDxcBlob* raytracing_shaders,
                                                ID3D12StateObject** state_object, const char* debug_name) const
 {
-	assert(false && "Not working yet");
 	assert(desc.global_root_signature);
 
 	std::array<D3D12_EXPORT_DESC, 5> exports_array{};
@@ -932,7 +931,7 @@ bool D3D12Context::create_raytracing_pipeline(const RayTracingPipelineDesc& desc
 	// Define hit group subobject needed for pipeline
 	D3D12_HIT_GROUP_DESC hg
 	{
-		.HitGroupExport = L"HG_Default",
+		.HitGroupExport = L"HG_Default", // TODO: Option in struct for this?
 		.Type = D3D12_HIT_GROUP_TYPE_TRIANGLES, // or PROCEDURAL TODO: Add option in struct for this
 		.AnyHitShaderImport = desc.export_names[static_cast<UINT>(ExportType::ANY_HIT)],
 		.ClosestHitShaderImport = desc.export_names[static_cast<UINT>(ExportType::CLOSEST_HIT)],
@@ -942,7 +941,7 @@ bool D3D12Context::create_raytracing_pipeline(const RayTracingPipelineDesc& desc
 	D3D12_STATE_SUBOBJECT global_rs_subobj
 	{
 		.Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE,
-		.pDesc = desc.global_root_signature,
+		.pDesc = reinterpret_cast<const void*>(&desc.global_root_signature),
 	};
 
 	std::array<D3D12_STATE_SUBOBJECT, 5> local_rs_subobjs{};
@@ -955,7 +954,7 @@ bool D3D12Context::create_raytracing_pipeline(const RayTracingPipelineDesc& desc
 				local_rs_subobjs[c++] = D3D12_STATE_SUBOBJECT
 				{
 					.Type = D3D12_STATE_SUBOBJECT_TYPE_LOCAL_ROOT_SIGNATURE,
-					.pDesc = rs,
+					.pDesc = &rs,
 				};
 			}
 		}
@@ -1017,6 +1016,9 @@ bool D3D12Context::create_raytracing_pipeline(const RayTracingPipelineDesc& desc
 	subobjects.push_back(lib_sub_obj);
 	subobjects.push_back(hg_subobj);
 
+	subobjects.push_back(shader_config_subobj);
+	subobjects.push_back(pipeline_config_subobj);
+
 	if (desc.global_root_signature)
 	{
 		subobjects.push_back(global_rs_subobj);
@@ -1038,9 +1040,6 @@ bool D3D12Context::create_raytracing_pipeline(const RayTracingPipelineDesc& desc
 			subobjects.push_back(local_rs_association_subobjs[num_associations++]);
 		}
 	}
-
-	subobjects.push_back(shader_config_subobj);
-	subobjects.push_back(pipeline_config_subobj);
 
 	D3D12_STATE_OBJECT_DESC state_object_desc
 	{
