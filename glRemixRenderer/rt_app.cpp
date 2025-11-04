@@ -161,7 +161,10 @@ void glRemix::glRemixRenderer::create()
 		.stride = sizeof(RayGenConstantBuffer),
 		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
 	};
-	THROW_IF_FALSE(m_context.create_buffer(raygen_cb_desc, &m_raygen_constant_buffer, "raygen constant buffer"));
+	for (UINT i = 0; i < m_frames_in_flight; i++)
+	{
+		THROW_IF_FALSE(m_context.create_buffer(raygen_cb_desc, &m_raygen_constant_buffers[i], "raygen constant buffer"));
+	}
 
 	// Create UAV render target
 	XMUINT2 win_dims{};
@@ -208,12 +211,15 @@ void glRemix::glRemixRenderer::create()
 		.pGeometryDescs = &tri_desc,
 	};
 
-	const auto prebuild_info = m_context.get_acceleration_structure_prebuild_info(blas_desc);
-	// TODO: Compute max size for scratch space and use for all BLAS
+	const auto blas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(blas_desc);
+	// TODO: Reuse scratch space for all BLAS
 	// The same could be done for TLAS(s) as well
+
+	constexpr UINT64 scratch_size = 16 * 1024 * 1024;
+	assert(blas_prebuild_info.ScratchDataSizeInBytes < scratch_size);
 	dx::BufferDesc scratch_buffer_desc
 	{
-		.size = prebuild_info.ScratchDataSizeInBytes,
+		.size = scratch_size,
 		.stride = 0,
 		.visibility = dx::GPU,
 		.uav = true, // Scratch space must be in UAV layout
@@ -222,14 +228,14 @@ void glRemix::glRemixRenderer::create()
 
 	dx::BufferDesc blas_buffer_desc
 	{
-		.size = prebuild_info.ResultDataMaxSizeInBytes,
+		.size = blas_prebuild_info.ResultDataMaxSizeInBytes,
 		.stride = 0,
 		.visibility = dx::GPU,
 		.acceleration_structure = true,
 	};
 	THROW_IF_FALSE(m_context.create_buffer(blas_buffer_desc, &m_blas_buffer, "BLAS buffer"));
 	
-	const auto build_desc = m_context.get_raytracing_acceleration_structure(blas_desc, &m_blas_buffer, nullptr, &m_scratch_space);
+	const auto blas_build_desc = m_context.get_raytracing_acceleration_structure(blas_desc, &m_blas_buffer, nullptr, &m_scratch_space);
 
 	// Record transitions, copies
 	THROW_IF_FALSE(SUCCEEDED(m_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
@@ -270,10 +276,10 @@ void glRemix::glRemixRenderer::create()
 
 	cmd_list->Barrier(1, &barrier_group0);
 
-	cmd_list->BuildRaytracingAccelerationStructure(&build_desc, 0, nullptr);
+	cmd_list->BuildRaytracingAccelerationStructure(&blas_build_desc, 0, nullptr);
 
 	// TODO: It would be convenient if resources tracked their current state for barriers
-	// Transition to read state
+	// Transition BLAS to read state
 	blas_buffer_barrier =
 	{
 		.SyncBefore = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
@@ -291,6 +297,97 @@ void glRemix::glRemixRenderer::create()
 		.pBufferBarriers = &blas_buffer_barrier,
 	};
 	cmd_list->Barrier(1, &barrier_group_read);
+
+	// Instance of the BLAS for TLAS
+	D3D12_RAYTRACING_INSTANCE_DESC instance_desc
+	{
+		.Transform
+		{
+			// Identity matrix
+			1.0f, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+		},
+		.InstanceID = 0,
+		.InstanceMask = 0xFF,
+		.InstanceContributionToHitGroupIndex = 0,
+		.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE,
+		.AccelerationStructure = m_blas_buffer.allocation->GetResource()->GetGPUVirtualAddress(),
+	};
+
+	dx::BufferDesc instance_buffer_desc
+	{
+		.size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
+		.stride = sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
+		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+	};
+	THROW_IF_FALSE(m_context.create_buffer(instance_buffer_desc, &m_tlas.instance, "TLAS instance buffer"));
+
+	THROW_IF_FALSE(m_context.map_buffer(&m_tlas.instance, &cpu_ptr));
+	memcpy(cpu_ptr, &instance_desc, instance_buffer_desc.size);
+	m_context.unmap_buffer(&m_tlas.instance);
+
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tlas_desc
+	{
+		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
+		// Lots of options here, probably want to use different ones, especially the update one
+		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
+		.NumDescs = 1,
+		.InstanceDescs = m_tlas.instance.allocation.Get()->GetResource()->GetGPUVirtualAddress(),
+	};
+
+	const auto tlas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(tlas_desc);
+	assert(tlas_prebuild_info.ScratchDataSizeInBytes < scratch_size);
+	dx::BufferDesc tlas_buffer_desc
+	{
+		.size = tlas_prebuild_info.ResultDataMaxSizeInBytes,
+		.stride = 0,
+		.visibility = dx::GPU,
+		.acceleration_structure = true,
+	};
+	THROW_IF_FALSE(m_context.create_buffer(tlas_buffer_desc, &m_tlas.buffer, "TLAS buffer"));
+
+	D3D12_BUFFER_BARRIER tlas_buffer_barrier
+	{
+		.SyncBefore = D3D12_BARRIER_SYNC_NONE,
+		.SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+		.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
+		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
+		.pResource = m_tlas.buffer.allocation->GetResource(),
+		.Offset = 0,
+		.Size = UINT64_MAX,
+	};
+	D3D12_BARRIER_GROUP barrier_group_tlas
+	{
+		.Type = D3D12_BARRIER_TYPE_BUFFER,
+		.NumBarriers = 1,
+		.pBufferBarriers = &tlas_buffer_barrier,
+	};
+	cmd_list->Barrier(1, &barrier_group_tlas);
+
+	const auto tlas_build_desc = m_context.get_raytracing_acceleration_structure(tlas_desc, &m_tlas.buffer, nullptr, &m_scratch_space);
+
+	cmd_list->BuildRaytracingAccelerationStructure(&tlas_build_desc, 0, nullptr);
+
+	// Transition TLAS to read state after build
+	D3D12_BUFFER_BARRIER tlas_buffer_barrier_read
+	{
+		.SyncBefore = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+		.SyncAfter = D3D12_BARRIER_SYNC_RAYTRACING,
+		.AccessBefore = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
+		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ,
+		.pResource = m_tlas.buffer.allocation->GetResource(),
+		.Offset = 0,
+		.Size = UINT64_MAX,
+	};
+
+	D3D12_BARRIER_GROUP tlas_barrier_group_read
+	{
+		.Type = D3D12_BARRIER_TYPE_BUFFER,
+		.NumBarriers = 1,
+		.pBufferBarriers = &tlas_buffer_barrier_read,
+	};
+	cmd_list->Barrier(1, &tlas_barrier_group_read);
 
 	// TODO: Whenever buffers are moved to CPU -> GPU copy method instead of GPU upload heaps record the copy here as well
 

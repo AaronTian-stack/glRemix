@@ -16,16 +16,18 @@ namespace glRemix
 
 		// TODO: Add other per frame constants as needed, rename accordingly
 		// Copy parameters to this buffer each frame
-		dx::D3D12Buffer m_raygen_constant_buffer{};
+		std::array<dx::D3D12Buffer, m_frames_in_flight> m_raygen_constant_buffers{};
 
 		dx::D3D12Buffer m_vertex_buffer{};
 		dx::D3D12Buffer m_index_buffer{};
 
-	dx::D3D12Buffer m_scratch_space{};
-	dx::D3D12Buffer m_blas_buffer{};
-	dx::D3D12TLAS m_tlas{};
+		dx::D3D12Buffer m_scratch_space{};
+		dx::D3D12Buffer m_blas_buffer{};
+		dx::D3D12TLAS m_tlas{};
 
-	ComPtr<D3D12MA::Allocation> m_uav_render_target{};	protected:
+		ComPtr<D3D12MA::Allocation> m_uav_render_target{};
+
+	protected:
 		void create() override;
 		void render() override;
 		void destroy() override;
