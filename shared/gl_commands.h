@@ -78,6 +78,10 @@ namespace glRemix
         uint32_t mode;  // GL_TRIANGLES, GL_QUADS, etc.
     };
 
+    struct GLEndCommand {
+        uint32_t reserved = 0; // to maintain alignment. think of as padding GPUBuffers
+    };
+
     // TODO: Compress these?
 
     // NOTE FOR PERSON DOING SHIM/IPC:

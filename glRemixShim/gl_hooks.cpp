@@ -64,9 +64,21 @@ namespace glRemix::hooks
         return result;
     }
 
+    void APIENTRY gl_begin_ovr(GLenum mode)
+    {
+        glRemix::GLBeginCommand payload{mode};
+        g_recorder.Record(glRemix::GLCommandType::GL_BEGIN, &payload, sizeof(payload));
+    }
+
+    void APIENTRY gl_end_ovr(void)
+    {
+        glRemix::GLEndCommand payload{}; // init with default 0 value
+        g_recorder.Record(glRemix::GLCommandType::GL_END, &payload, sizeof(payload));
+    }
+
     void APIENTRY gl_vertex3f_ovr(GLfloat x, GLfloat y, GLfloat z)
     {
-		// Example override that does nothing.
+        // Example override that does nothing.
         // You can put a breakpoint here.
         glRemix::GLVertex3fCommand payload{x, y, z};
         g_recorder.Record(glRemix::GLCommandType::GL_VERTEX3F, &payload, sizeof(payload));
@@ -177,7 +189,9 @@ namespace glRemix::hooks
 	{
 	    std::call_once(g_install_flag, []()
 	    {
-	        gl::register_hook("glVertex3f", reinterpret_cast<PROC>(&gl_vertex3f_ovr));
+            gl::register_hook("glBegin", reinterpret_cast<PROC>(&gl_begin_ovr));
+            gl::register_hook("glEnd", reinterpret_cast<PROC>(&gl_end_ovr));
+	        // gl::register_hook("glVertex3f", reinterpret_cast<PROC>(&gl_vertex3f_ovr));
             // TODO: Add more OpenGL overrides
             // Just use the name and make sure the signature matches.
             // You can find exports in the generated gl_wrappers.inl, but extensions are not going to be in there.
