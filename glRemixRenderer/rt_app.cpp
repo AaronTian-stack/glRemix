@@ -181,6 +181,7 @@ void glRemix::glRemixRenderer::create()
 			.Quality = 0,
 		},
 		.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN,
+		.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
 	};
 
 	dx::TextureCreateDesc uav_rt_create_desc
@@ -260,16 +261,36 @@ void glRemix::glRemixRenderer::create()
 
 	std::array buffer_barriers{ scratch_space_uav, blas_buffer_barrier };
 
-	D3D12_BARRIER_GROUP barrier_group
+	D3D12_BARRIER_GROUP barrier_group0
 	{
 		.Type = D3D12_BARRIER_TYPE_BUFFER,
 		.NumBarriers = static_cast<UINT>(buffer_barriers.size()),
 		.pBufferBarriers = buffer_barriers.data(),
 	};
 
-	cmd_list->Barrier(1, &barrier_group);
+	cmd_list->Barrier(1, &barrier_group0);
 
 	cmd_list->BuildRaytracingAccelerationStructure(&build_desc, 0, nullptr);
+
+	// TODO: It would be convenient if resources tracked their current state for barriers
+	// Transition to read state
+	blas_buffer_barrier =
+	{
+		.SyncBefore = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+		.SyncAfter = D3D12_BARRIER_SYNC_RAYTRACING,
+		.AccessBefore = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
+		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ,
+		.pResource = m_blas_buffer.allocation->GetResource(),
+		.Offset = 0,
+		.Size = UINT64_MAX,
+	};
+	D3D12_BARRIER_GROUP barrier_group_read
+	{
+		.Type = D3D12_BARRIER_TYPE_BUFFER,
+		.NumBarriers = 1,
+		.pBufferBarriers = &blas_buffer_barrier,
+	};
+	cmd_list->Barrier(1, &barrier_group_read);
 
 	// TODO: Whenever buffers are moved to CPU -> GPU copy method instead of GPU upload heaps record the copy here as well
 
