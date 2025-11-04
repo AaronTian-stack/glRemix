@@ -2,6 +2,7 @@
 
 #include <array>
 #include <vector>
+#include <optional>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 #include <dxgidebug.h>
@@ -16,6 +17,7 @@
 #include "d3d12_fence.h"
 #include "d3d12_queue.h"
 #include "d3d12_pipeline_types.h"
+#include "d3d12_texture.h"
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
@@ -72,8 +74,7 @@ namespace glRemix::dx
 		//void set_descriptor_heap(ID3D12GraphicsCommandList7* cmd_list, const D3D12DescriptorHeap& heap) override;
 		//void set_descriptor_heap(ID3D12GraphicsCommandList7* cmd_list, const D3D12DescriptorHeap& heap, const D3D12DescriptorHeap& sampler_heap) override;
 
-		bool create_texture(const D3D12_RESOURCE_DESC1& desc, D3D12_BARRIER_LAYOUT init_layout, D3D12MA::Allocation** allocation, const char* debug_name = nullptr);
-		bool create_render_target(const D3D12_RESOURCE_DESC1& desc, D3D12MA::Allocation** allocation, const char* debug_name = nullptr);
+		bool create_texture(const D3D12_RESOURCE_DESC1& desc, D3D12MA::Allocation** allocation, const TextureCreateDesc& texture_desc = {}, const char* debug_name = nullptr) const;
 
 		bool create_queue(D3D12_COMMAND_LIST_TYPE type, D3D12Queue* queue, const char* debug_name = nullptr) const;
 		bool create_command_allocator(D3D12CommandAllocator* cmd_allocator, D3D12Queue* queue, const char* debug_name = nullptr) const;

@@ -415,55 +415,51 @@ bool D3D12Context::create_descriptor_heap(const D3D12_DESCRIPTOR_HEAP_DESC& desc
 	return result;
 }
 
-bool D3D12Context::create_texture(const D3D12_RESOURCE_DESC1& desc, const D3D12_BARRIER_LAYOUT init_layout,
-                                  D3D12MA::Allocation** allocation, const char* debug_name)
+bool D3D12Context::create_texture(const D3D12_RESOURCE_DESC1& desc, D3D12MA::Allocation** allocation,
+                                  const TextureCreateDesc& texture_desc, const char* debug_name) const
 {
 	assert(allocation);
-	D3D12MA::ALLOCATION_DESC allocation_desc
-	{
-		.HeapType = D3D12_HEAP_TYPE_GPU_UPLOAD, // GPU Upload only?
-	};
-	if (FAILED(m_allocator->CreateResource3(
-		&allocation_desc,
-		&desc,
-		init_layout,
-		nullptr,
-		0, nullptr,
-		allocation,
-		IID_NULL, NULL)))
-	{
-		OutputDebugStringA("D3D12 ERROR: Failed to create texture\n");
-		return false;
-	}
-	set_debug_name((*allocation)->GetResource(), debug_name);
-	return true;
-}
-
-bool D3D12Context::create_render_target(const D3D12_RESOURCE_DESC1& desc,
-	D3D12MA::Allocation** allocation, const char* debug_name)
-{
-	assert(allocation);
-	D3D12MA::ALLOCATION_DESC allocation_desc
+	const D3D12MA::ALLOCATION_DESC allocation_desc
 	{
 		.HeapType = D3D12_HEAP_TYPE_DEFAULT,
 	};
-	D3D12_CLEAR_VALUE clear
+
+	const D3D12_CLEAR_VALUE* clear_value_ptr;
+	D3D12_CLEAR_VALUE default_color
 	{
 		.Format = desc.Format,
+		.Color = { 0.0f, 0.0f, 0.0f, 1.0f }
 	};
-	if (is_depth_stencil_format(desc.Format))
+	D3D12_CLEAR_VALUE default_depth
 	{
-		clear.DepthStencil = { .Depth = 1.0f, .Stencil = 0 };
+		.DepthStencil
+		{
+			.Depth = 1.0f,
+			.Stencil = 0 // Assume we are not using stencil
+		}
+	};
+
+	if (texture_desc.clear_value.has_value())
+	{
+		clear_value_ptr = &texture_desc.clear_value.value();
 	}
 	else
 	{
-		clear.Color[0] = clear.Color[1] = clear.Color[2] = clear.Color[3] = 0.0f;
+		if (is_depth_stencil_format(desc.Format))
+		{
+			clear_value_ptr = &default_depth;
+		}
+		else
+		{
+			clear_value_ptr = &default_color;
+		}
 	}
+
 	if (FAILED(m_allocator->CreateResource3(
 		&allocation_desc,
 		&desc,
-		D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS, // Raytracing, for raster need to transition to RENDER_TARGET
-		&clear,
+		texture_desc.init_layout,
+		desc.Flags & (D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) ? clear_value_ptr : nullptr,
 		0, nullptr,
 		allocation,
 		IID_NULL, NULL)))

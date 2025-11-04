@@ -163,6 +163,33 @@ void glRemix::glRemixRenderer::create()
 	};
 	THROW_IF_FALSE(m_context.create_buffer(raygen_cb_desc, &m_raygen_constant_buffer, "raygen constant buffer"));
 
+	// Create UAV render target
+	XMUINT2 win_dims{};
+	THROW_IF_FALSE(m_context.get_window_dimensions(&win_dims));
+	
+	D3D12_RESOURCE_DESC1 uav_rt_desc
+	{
+		.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+		.Width = win_dims.x,
+		.Height = win_dims.y,
+		.DepthOrArraySize = 1,
+		.MipLevels = 1,
+		.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+		.SampleDesc
+		{
+			.Count = 1,
+			.Quality = 0,
+		},
+		.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN,
+	};
+
+	dx::TextureCreateDesc uav_rt_create_desc
+	{
+		uav_rt_create_desc.init_layout = D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS,
+	};
+
+	THROW_IF_FALSE(m_context.create_texture(uav_rt_desc, m_uav_render_target.ReleaseAndGetAddressOf(), uav_rt_create_desc, "UAV and RT texture"));
+
 	// Build BLAS here for now, but renderer will construct them dynamically for new geometry in render loop
 	D3D12_RAYTRACING_GEOMETRY_DESC tri_desc
 	{

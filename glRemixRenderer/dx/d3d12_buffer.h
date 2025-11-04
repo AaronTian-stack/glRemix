@@ -18,7 +18,7 @@ namespace glRemix::dx
     struct BufferDesc
     {
         UINT64 size = 0;
-        UINT64 stride = 0;
+        UINT64 stride = 0; // This is metadata that can used in binding vertex buffers 
         BufferVisibility visibility = GPU;
         // Normally you should have some usage enum that could enumerate this stuff and more
         bool uav = false; // Still need to transition after creating resource
