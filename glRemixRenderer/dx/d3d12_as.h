@@ -12,7 +12,7 @@ namespace glRemix::dx
 	
 	struct D3D12TLAS
 	{
-		D3D12Buffer tlas;
+		D3D12Buffer buffer;
 		D3D12Buffer instance; // This should use a GPU upload heap for dynamic updates
 	};
 

@@ -4,6 +4,8 @@ project(glRemix_renderer LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(ENABLE_GPU_BASED_VALIDATION "Enable GPU-based validation for debugging" OFF)
+
 set(GLREMIX_SHARED_DIR "${REPO_ROOT}/shared")
 include("${REPO_ROOT}/cmake/shared_files.cmake")
 
@@ -32,6 +34,7 @@ set(RENDERER_HEADERS
     "${dx_dir}/d3d12_as.h"
     "${dx_dir}/d3d12_pipeline_types.h"
     "${dx_dir}/d3d12_buffer.h"
+    "${dx_dir}/d3d12_texture.h"
 
     "constants.h"
     "helper.h"
@@ -96,6 +99,14 @@ if(GLREMIX_DEPLOY_DIR)
                 -P "${_GLREMIX_COPY_IF_EXISTS_SCRIPT}"
         )
     endif()
+
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "Copying shader files to ${_GLREMIX_RENDERER_DEPLOY_CONFIG_DIR}/shaders"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${_GLREMIX_RENDERER_DEPLOY_CONFIG_DIR}/shaders"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/shaders"
+            "${_GLREMIX_RENDERER_DEPLOY_CONFIG_DIR}/shaders"
+    )
 endif()
 
 if(WIN32)
@@ -105,6 +116,10 @@ if(WIN32)
         _UNICODE
         WIN32_LEAN_AND_MEAN
     )
+    
+    if(ENABLE_GPU_BASED_VALIDATION)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_GPU_BASED_VALIDATION)
+    endif()
     
     if(MSVC)
         target_compile_options(${PROJECT_NAME} PRIVATE /MP) # Enable multi-processor compilation
