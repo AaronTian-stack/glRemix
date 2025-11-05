@@ -18,11 +18,11 @@ extern "C" __declspec(dllexport) PROC WINAPI wglGetProcAddress(LPCSTR name)
     }
 
 	// Find a hook we defined
-    if (PROC hook_proc = glremix::gl::find_hook(name); hook_proc != nullptr)
+    if (PROC hook_proc = glRemix::gl::find_hook(name); hook_proc != nullptr)
     {
         return hook_proc;
     }
 
-    glremix::gl::report_missing_function(name);
+    glRemix::gl::report_missing_function(name);
     return nullptr;
 }

@@ -4,65 +4,83 @@
 #include <string>
 #include <tsl/robin_map.h>
 
-namespace glremix::gl
+#include "framerecorder.h"
+
+#include <ipc_protocol.h>
+
+namespace glRemix
 {
-	// Both WGL and OpenGL functions may be called from multiple threads hence the mutex
-    std::mutex g_hook_mutex;
+FrameRecorder g_recorder;
 
-	// Function pointers for our custom hook implementations
-	tsl::robin_map<std::string, PROC> g_hooks;
+namespace gl
+{
+// Both WGL and OpenGL functions may be called from multiple threads hence the mutex
+std::mutex g_hook_mutex;
 
-	std::once_flag g_initialize_flag;
-	void initialize()
-	{
-		std::call_once(g_initialize_flag, []
-		{
-			// TODO: Setup IPC
-		});
-	}
+// Function pointers for our custom hook implementations
+tsl::robin_map<std::string, PROC> g_hooks;
 
-	void register_hook(const char *name, PROC proc)
-	{
-	    if (name == nullptr)
-	    {
-	        return;
-	    }
+std::once_flag g_initialize_flag;
 
-	    std::scoped_lock lock(g_hook_mutex);
-	    if (proc == nullptr)
-	    {
-	        g_hooks.erase(name);
-	        return;
-	    }
-
-	    g_hooks[name] = proc;
-	}
-
-	PROC find_hook(const char *name)
-	{
-	    if (name == nullptr)
-	    {
-	        return nullptr;
-	    }
-
-	    std::scoped_lock lock(g_hook_mutex);
-	    if (g_hooks.contains(name))
-	    {
-	        return g_hooks[name];
-	    }
-
-	    return nullptr;
-	}
-
-    void report_missing_function(const char *name)
-	{
-		if (name == nullptr)
-		{
-			return;
-		}
-
-		char buffer[256];
-		std::snprintf(buffer, sizeof(buffer), "glRemix ERROR: missing OpenGL symbol: %s\n", name);
-		OutputDebugStringA(buffer);
-	}
+void initialize()
+{
+    std::call_once(g_initialize_flag, [] {
+        if (!g_recorder.Initialize())
+        {
+            OutputDebugStringA("glRemix: Recorder init failed.\n");
+        } else
+        {
+            OutputDebugStringA("glRemix: Recorder ready.\n");
+        }
+        g_recorder.StartFrame();
+    });
 }
+
+void register_hook(const char* name, PROC proc)
+{
+    if (name == nullptr)
+    {
+        return;
+    }
+
+    std::scoped_lock lock(g_hook_mutex);
+    if (proc == nullptr)
+    {
+        g_hooks.erase(name);
+        return;
+    }
+
+    g_hooks[name] = proc;
+}
+
+PROC find_hook(const char* name)
+{
+    if (name == nullptr)
+    {
+        return nullptr;
+    }
+
+    std::scoped_lock lock(g_hook_mutex);
+    if (g_hooks.contains(name))
+    {
+        return g_hooks[name];
+    }
+
+    return nullptr;
+}
+
+void report_missing_function(const char* name)
+{
+    if (name == nullptr)
+    {
+        return;
+    }
+
+    char buffer[256];
+    std::snprintf(buffer, sizeof(buffer), "glRemix ERROR: missing OpenGL symbol: %s\n", name);
+
+    // comment out for testing
+    // OutputDebugStringA(buffer);
+}
+}  // namespace gl
+}  // namespace glRemix

@@ -64,8 +64,15 @@ namespace glRemix
         GL_SHUTDOWN
     };
 
+    enum class GLTopology : uint32_t
+    {
+        GL_QUADS = 0x0007,
+        GL_QUAD_STRIP = 0x0008
+    };
+
+    // Name *Unifs for clear association
     // Header for all commands
-    struct GLCommand
+    struct GLCommandUnifs
     {
         GLCommandType type;
         uint32_t dataSize;
@@ -75,6 +82,10 @@ namespace glRemix
     struct GLBeginCommand
     {
         uint32_t mode;  // GL_TRIANGLES, GL_QUADS, etc.
+    };
+
+    struct GLEndCommand {
+        uint32_t reserved = 0; // to maintain alignment. think of as padding GPUBuffers
     };
 
     // TODO: Compress these?

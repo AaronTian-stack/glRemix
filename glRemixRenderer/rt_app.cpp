@@ -13,17 +13,31 @@ void glRemix::glRemixRenderer::create()
 
 	// Create raster root signature
 	{
+        D3D12_ROOT_PARAMETER root_params[1]{};
+        root_params[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+        root_params[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+        root_params[0].Descriptor.ShaderRegister = 0;
+        root_params[0].Descriptor.RegisterSpace = 0;
+
 		// TODO: Make a singular very large root signature that is used for all raster pipelines
         // TODO: Probably want a texture and sampler as this will be for UI probably
 		D3D12_ROOT_SIGNATURE_DESC root_sig_desc;
-		root_sig_desc.NumParameters = 0;
-		root_sig_desc.pParameters = nullptr;
+		root_sig_desc.NumParameters = 1;
+		root_sig_desc.pParameters = root_params;
 		root_sig_desc.NumStaticSamplers = 0;
 		root_sig_desc.pStaticSamplers = nullptr;
 		root_sig_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
 		THROW_IF_FALSE(m_context.create_root_signature(root_sig_desc, m_root_signature.ReleaseAndGetAddressOf(), "triangle root signature"));
 	}
+	// create mvp buffer
+	dx::BufferDesc mvpDesc
+	{
+		.size = sizeof(MVP),
+		.stride = 0,
+		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+	};
+	THROW_IF_FALSE(m_context.create_buffer(mvpDesc, &m_mvp, "MVP buffer"));
 
 	// Compile dummy raster pipeline for testing
 	ComPtr<IDxcBlobEncoding> vertex_shader;
@@ -168,52 +182,39 @@ void glRemix::glRemixRenderer::create()
 		
 		m_context.unmap_buffer(&m_shader_table);
 	}
+  
+	dx::D3D12Buffer t_vertex_buffer{};
+	dx::D3D12Buffer t_index_buffer{};
+    std::array<Vertex, 3> triangle_vertices{{{{0.0f, 0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}},
+                                             {{0.5f, -0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}},
+                                             {{-0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}}}};
+    std::array<UINT, 3> triangle_indices{0, 1, 2};
+    dx::BufferDesc vertex_buffer_desc{
+        .size = sizeof(Vertex) * triangle_vertices.size(),
+        .stride = sizeof(Vertex),
+        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+    };
+    void* cpu_ptr;
+    THROW_IF_FALSE(
+        m_context.create_buffer(vertex_buffer_desc, &t_vertex_buffer, "triangle vertex buffer"));
 
-	// Simple geometry for triangle. Use GPU upload heaps to make life easier
-	// TODO: Eventually replace with classic CPU -> GPU copy and only use GPU upload heaps for dynamic data
-	struct Vertex
-	{
-		std::array<float, 3> position;
-		std::array<float, 3> color;
-	};
-	std::array<Vertex, 3> triangle_vertices
-	{
-		{
-			{ { 0.0f, 0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
-			{ { 0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f } },
-			{ { -0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f } }
-		}
-	};
-	std::array<UINT, 3> triangle_indices
-	{
-		0, 1, 2
-	};
-	dx::BufferDesc vertex_buffer_desc
-	{
-		.size = sizeof(Vertex) * triangle_vertices.size(),
-		.stride = sizeof(Vertex),
-		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-	};
-	void* cpu_ptr;
-	THROW_IF_FALSE(m_context.create_buffer(vertex_buffer_desc, &m_vertex_buffer, "triangle vertex buffer"));
+    THROW_IF_FALSE(m_context.map_buffer(&t_vertex_buffer, &cpu_ptr));
+    memcpy(cpu_ptr, triangle_vertices.data(), vertex_buffer_desc.size);
+    m_context.unmap_buffer(&t_vertex_buffer);
 
-	THROW_IF_FALSE(m_context.map_buffer(&m_vertex_buffer, &cpu_ptr));
-	memcpy(cpu_ptr, triangle_vertices.data(), vertex_buffer_desc.size);
-	m_context.unmap_buffer(&m_vertex_buffer);
+    dx::BufferDesc index_buffer_desc{
+        .size = sizeof(UINT) * triangle_indices.size(),
+        .stride = sizeof(UINT),
+        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+    };
+    THROW_IF_FALSE(
+        m_context.create_buffer(index_buffer_desc, &t_index_buffer, "triangle index buffer"));
 
-	dx::BufferDesc index_buffer_desc
-	{
-		.size = sizeof(UINT) * triangle_indices.size(),
-		.stride = sizeof(UINT),
-		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-	};
-	THROW_IF_FALSE(m_context.create_buffer(index_buffer_desc, &m_index_buffer, "triangle index buffer"));
+    THROW_IF_FALSE(m_context.map_buffer(&t_index_buffer, &cpu_ptr));
+    memcpy(cpu_ptr, triangle_indices.data(), index_buffer_desc.size);
+    m_context.unmap_buffer(&t_index_buffer);
 
-	THROW_IF_FALSE(m_context.map_buffer(&m_index_buffer, &cpu_ptr));
-	memcpy(cpu_ptr, triangle_indices.data(), index_buffer_desc.size);
-	m_context.unmap_buffer(&m_index_buffer);
-
-	dx::BufferDesc raygen_cb_desc
+    dx::BufferDesc raygen_cb_desc
 	{
 		.size = align_u32(sizeof(RayGenConstantBuffer), 256),
 		.stride = align_u32(sizeof(RayGenConstantBuffer), 256),
@@ -257,7 +258,7 @@ void glRemix::glRemixRenderer::create()
 	{
 		.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
 		.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE, // Try to use this liberally as its faster
-		.Triangles = m_context.get_buffer_rt_description(&m_vertex_buffer, &m_index_buffer),
+		.Triangles = m_context.get_buffer_rt_description(&t_vertex_buffer, &t_index_buffer),
 	};
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS blas_desc
 	{
@@ -487,8 +488,207 @@ void glRemix::glRemixRenderer::create()
 	THROW_IF_FALSE(m_context.wait_fences(wait_info)); // Block CPU until done
 }
 
+// Reads an incoming stream of OpenGL commands and launches corresponding renderer functions
+void glRemix::glRemixRenderer::readGLStream()
+{
+    if (!m_ipc.InitReader())
+    {
+        std::cout << "IPC Manager could not init a reader instance. Have you launched an "
+                     "executable that utilizes glRemix?"
+                  << std::endl;
+        return;
+    }
+
+    const uint32_t bufCapacity = m_ipc.GetCapacity();  // ask shared mem for capacity
+    std::vector<uint8_t> ipcBuf(bufCapacity);          // decoupled local buffer here
+
+    uint32_t bytesRead = 0;
+    if (!m_ipc.TryConsumeFrame(ipcBuf.data(), static_cast<uint32_t>(ipcBuf.size()), &bytesRead))
+    {
+        std::cout << "No frame data available." << std::endl;
+        return;
+    }
+
+    const auto* frameHeader = reinterpret_cast<const glRemix::GLFrameUnifs*>(ipcBuf.data());
+
+    if (frameHeader->payloadSize == 0)
+    {
+        //std::cout << "Frame " << frameHeader->frameIndex << ": no new commands.\n";
+		return;
+    }
+
+    // loop through data from frame
+    // can comment out the logs here too
+	std::vector<Vertex> vertices;
+	std::vector<uint32_t> indices;
+    size_t offset = sizeof(glRemix::GLFrameUnifs); // offset skips header of ipc data payload
+    while (offset + sizeof(glRemix::GLCommandUnifs) <= bytesRead) // while header + additional gl header is not at byte limit
+    {
+        const auto* header = reinterpret_cast<const glRemix::GLCommandUnifs*>(ipcBuf.data() // get most recent header
+                                                                              + offset);
+        offset += sizeof(glRemix::GLCommandUnifs); // move into data payload
+
+        std::cout << "  Command: " << static_cast<int>(header->type)
+                  << " (size: " << header->dataSize << ")" << std::endl;
+
+        switch (header->type)
+        {
+			// if we encounter GL_BEGIN we know that a new geometry is to be created
+			case glRemix::GLCommandType::GL_BEGIN: 
+			{
+				const auto* type = reinterpret_cast<const glRemix::GLBeginCommand*>(ipcBuf.data() + offset); // reach into data payload
+				offset += header->dataSize; // move past data to next command
+				readGeometry(ipcBuf, offset, vertices, indices, static_cast<glRemix::GLTopology>(type->mode), bytesRead); // store geometry data in vertex buffers depending on topology type
+				break;
+			}
+            default:
+			{
+				 std::cout << "    (Unhandled base command)" << std::endl; 
+				 return;
+				 break;
+			}
+        }
+    }
+
+	// set vertex and index buffers
+	dx::BufferDesc vertex_buffer_desc{
+        .size = sizeof(Vertex) * vertices.size(),
+        .stride = sizeof(Vertex),
+        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+    };
+    void* cpu_ptr;
+    THROW_IF_FALSE(
+        m_context.create_buffer(vertex_buffer_desc, &m_vertex_buffer, "vertex buffer"));
+
+    THROW_IF_FALSE(m_context.map_buffer(&m_vertex_buffer, &cpu_ptr));
+    memcpy(cpu_ptr, vertices.data(), vertex_buffer_desc.size);
+    m_context.unmap_buffer(&m_vertex_buffer);
+
+    dx::BufferDesc index_buffer_desc{
+        .size = sizeof(UINT) * indices.size(),
+        .stride = sizeof(UINT),
+        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+    };
+    THROW_IF_FALSE(
+        m_context.create_buffer(index_buffer_desc, &m_index_buffer, "index buffer"));
+
+    THROW_IF_FALSE(m_context.map_buffer(&m_index_buffer, &cpu_ptr));
+    memcpy(cpu_ptr, indices.data(), index_buffer_desc.size);
+    m_context.unmap_buffer(&m_index_buffer);
+
+	return;
+}
+
+// adds to vertex and index buffers depending on topology type
+void glRemix::glRemixRenderer::readGeometry(std::vector<uint8_t>& ipcBuf,
+                                            size_t& offset,
+                                            std::vector<Vertex>& vertices,
+                                            std::vector<uint32_t>& indices,
+                                            glRemix::GLTopology topology,
+                                            uint32_t bytesRead)
+{
+    bool endPrimitive = false;
+    int verticesSize = vertices.size();
+
+    while (offset + sizeof(glRemix::GLCommandUnifs) <= bytesRead)
+    {
+        const auto* header = reinterpret_cast<const glRemix::GLCommandUnifs*>(
+            ipcBuf.data()  // get most recent header
+            + offset);
+
+        std::cout << "  Command: " << static_cast<int>(header->type)
+                  << " (size: " << header->dataSize << ")" << std::endl;
+
+        offset += sizeof(glRemix::GLCommandUnifs);  // move into data payload
+
+        switch (header->type)
+        {
+            case glRemix::GLCommandType::GL_VERTEX3F: {
+                const auto* v = reinterpret_cast<const glRemix::GLVertex3fCommand*>(ipcBuf.data()
+                                                                                    + offset);
+                Vertex vertex{{v->x, v->y, v->z}, {1.0f, 1.0f, 1.0f}};
+                vertices.push_back(vertex);
+                break;
+            }
+            case glRemix::GLCommandType::GL_END: // read vertices until GL_END is encountered at which point we will have reached end of geomtry
+			{
+                endPrimitive = true;
+                break;
+            }
+            default: std::cout << "    (Unhandled primitive command)" << std::endl; break;
+        }
+
+        offset += header->dataSize;  // move past data to next command
+
+        if (endPrimitive)
+        {
+            break;
+        }
+    }
+
+	// determine indices based on specified topology
+    if (topology == glRemix::GLTopology::GL_QUAD_STRIP)
+    {
+        for (uint32_t k = verticesSize; k + 3 < vertices.size(); k += 2)
+        {
+            uint32_t a = k + 0;
+            uint32_t b = k + 1;
+            uint32_t c = k + 2;
+            uint32_t d = k + 3;
+
+            indices.push_back(a);
+            indices.push_back(b);
+            indices.push_back(d);
+            indices.push_back(a);
+            indices.push_back(d);
+            indices.push_back(c);
+        }
+    } else if (topology == glRemix::GLTopology::GL_QUADS)
+    {
+        for (uint32_t k = verticesSize; k + 3 < vertices.size(); k += 4)
+        {
+            uint32_t a = k + 0;
+            uint32_t b = k + 1;
+            uint32_t c = k + 2;
+            uint32_t d = k + 3;
+
+            indices.push_back(a);
+            indices.push_back(b);
+            indices.push_back(c);
+            indices.push_back(a);
+            indices.push_back(c);
+            indices.push_back(d);
+        }
+    }
+}
+
+void glRemix::glRemixRenderer::updateMVP(float rot)
+{
+    using namespace DirectX;
+
+    XMUINT2 win_dims{};
+    m_context.get_window_dimensions(&win_dims);
+
+    MVP* mvpCPU = nullptr;
+    THROW_IF_FALSE(m_context.map_buffer(&m_mvp, reinterpret_cast<void**>(&mvpCPU)));
+
+    const float h = float(win_dims.y) / float(win_dims.x);
+    XMMATRIX M = XMMatrixRotationRollPitchYaw(rot, rot, rot);
+    XMMATRIX V = XMMatrixTranslation(0.0f, 0.0f, -40.0f);
+    XMMATRIX P = XMMatrixPerspectiveOffCenterRH(-1.0f, 1.0f, -h, h, 5.0f, 60.0f);
+
+    XMStoreFloat4x4(&mvpCPU->model, M);
+    XMStoreFloat4x4(&mvpCPU->view, V);
+    XMStoreFloat4x4(&mvpCPU->proj, P);
+
+    m_context.unmap_buffer(&m_mvp);
+}
+
 void glRemix::glRemixRenderer::render()
 {
+	// read GL stream and set resoureces accordingly
+	readGLStream();
+
 	// Start ImGui frame
 	m_context.start_imgui_frame();
 	ImGui::ShowDemoWindow();
@@ -719,9 +919,42 @@ void glRemix::glRemixRenderer::render()
 	m_swapchain_descriptors.heap->get_cpu_descriptor(&swapchain_rtv, m_swapchain_descriptors.offset + swapchain_idx);
 	cmd_list->OMSetRenderTargets(1, &swapchain_rtv, FALSE, nullptr);
 
-	// This is where rasterization could go
+	// This is where rasterization will go
+	rot += 0.01f;
+	updateMVP(rot);
+	auto* cbRes = m_mvp.allocation->GetResource();
 
-	// Render ImGui
+	cmd_list->SetGraphicsRootSignature(m_root_signature.Get());
+	cmd_list->SetPipelineState(m_raster_pipeline.Get());
+
+	cmd_list->SetGraphicsRootConstantBufferView(
+		0,
+		cbRes->GetGPUVirtualAddress());
+
+	cmd_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+    if (m_vertex_buffer.allocation)
+    {
+        D3D12_VERTEX_BUFFER_VIEW vbv{};
+        vbv.BufferLocation = m_vertex_buffer.allocation->GetResource()->GetGPUVirtualAddress();
+        vbv.SizeInBytes = static_cast<UINT>(m_vertex_buffer.desc.size);
+        vbv.StrideInBytes = static_cast<UINT>(m_vertex_buffer.desc.stride);
+        cmd_list->IASetVertexBuffers(0, 1, &vbv);
+    }
+
+    if (m_index_buffer.allocation)
+    {
+        D3D12_INDEX_BUFFER_VIEW ibv{};
+        ibv.BufferLocation = m_index_buffer.allocation->GetResource()->GetGPUVirtualAddress();
+        ibv.SizeInBytes = static_cast<UINT>(m_index_buffer.desc.size);
+        ibv.Format = DXGI_FORMAT_R32_UINT;
+        cmd_list->IASetIndexBuffer(&ibv);
+
+        const UINT indexCount = ibv.SizeInBytes / 4u;
+        cmd_list->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
+    }
+
+    // Render ImGui
 	m_context.render_imgui_draw_data(cmd_list.Get());
 
 	// Transition swapchain image to present
