@@ -4,6 +4,8 @@ project(glRemix_renderer LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(ENABLE_GPU_BASED_VALIDATION "Enable GPU-based validation for debugging" OFF)
+
 set(GLREMIX_SHARED_DIR "${REPO_ROOT}/shared")
 include("${REPO_ROOT}/cmake/shared_files.cmake")
 
@@ -114,6 +116,10 @@ if(WIN32)
         _UNICODE
         WIN32_LEAN_AND_MEAN
     )
+    
+    if(ENABLE_GPU_BASED_VALIDATION)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE ENABLE_GPU_BASED_VALIDATION)
+    endif()
     
     if(MSVC)
         target_compile_options(${PROJECT_NAME} PRIVATE /MP) # Enable multi-processor compilation

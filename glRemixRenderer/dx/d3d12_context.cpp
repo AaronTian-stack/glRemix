@@ -43,7 +43,9 @@ bool D3D12Context::create(bool enable_debug_layer)
 		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&m_debug))))
 		{
 			m_debug->EnableDebugLayer();
-			//m_debug->SetEnableGPUBasedValidation(true); // TODO: Enable this when debugging shaders
+#ifdef ENABLE_GPU_BASED_VALIDATION
+			m_debug->SetEnableGPUBasedValidation(true); // TODO: Enable this when debugging shaders
+#endif
 			dxgi_factory_flags |= DXGI_CREATE_FACTORY_DEBUG;
 		}
 	}
