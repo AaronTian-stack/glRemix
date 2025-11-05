@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <wrl/client.h>
 #include <D3D12MemAlloc.h>
+#include "d3d12_barrier.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -28,7 +29,24 @@ namespace glRemix::dx
     struct D3D12Buffer
     {
         BufferDesc desc;
+
+        // TODO: Delete these
+        D3D12_GPU_VIRTUAL_ADDRESS get_gpu_address() const
+        {
+            assert(allocation);
+            return allocation.Get()->GetResource()->GetGPUVirtualAddress();
+        }
+        ID3D12Resource* get_resource() const
+        {
+            if (allocation)
+            return allocation.Get()->GetResource();
+            return nullptr;
+        }
+
+    private:
+        Resource barrier_state;
         ComPtr<D3D12MA::Allocation> allocation;
+        friend class D3D12Context;
     };
 
 }

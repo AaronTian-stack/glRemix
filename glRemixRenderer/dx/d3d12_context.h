@@ -42,6 +42,7 @@ namespace glRemix::dx
 		ComPtr<IDxcUtils> m_dxc_utils = nullptr;
 
 		HWND m_window = nullptr;
+        XMUINT2 m_swapchain_dims{};
 		ComPtr<IDXGISwapChain3> m_swapchain;
 		std::array<ComPtr<ID3D12Resource>, 2> m_swapchain_buffers; // 2 is upper bound
 		D3D12Queue* m_swapchain_queue = nullptr;
@@ -75,10 +76,10 @@ namespace glRemix::dx
 		void set_descriptor_heaps(ID3D12GraphicsCommandList7* cmd_list, const D3D12DescriptorHeap& cbv_srv_uav_heap, const D3D12DescriptorHeap& sampler_heap) const;
 
 		void create_constant_buffer_view(const D3D12Buffer* buffer, const D3D12DescriptorTable* descriptor_table, UINT descriptor_index) const;
-		void create_shader_resource_view_acceleration_structure(ID3D12Resource* tlas, const D3D12DescriptorTable* descriptor_table, UINT descriptor_index) const;
-		void create_unordered_access_view_texture(D3D12MA::Allocation* texture, DXGI_FORMAT format, const D3D12DescriptorTable* descriptor_table, UINT descriptor_index) const;
+		void create_shader_resource_view_acceleration_structure(const D3D12Buffer& tlas, const D3D12DescriptorTable* descriptor_table, UINT descriptor_index) const;
+		void create_unordered_access_view_texture(D3D12Texture* texture, DXGI_FORMAT format, const D3D12DescriptorTable* descriptor_table, UINT descriptor_index) const;
 
-		bool create_texture(const D3D12_RESOURCE_DESC1& desc, D3D12MA::Allocation** allocation, const TextureCreateDesc& texture_desc = {}, const char* debug_name = nullptr) const;
+		bool create_texture(const TextureDesc& desc, D3D12Texture* texture, D3D12_CLEAR_VALUE* clear_value, const char* debug_name = nullptr) const;
 
 		bool create_queue(D3D12_COMMAND_LIST_TYPE type, D3D12Queue* queue, const char* debug_name = nullptr) const;
 		bool create_command_allocator(D3D12CommandAllocator* cmd_allocator, D3D12Queue* queue, const char* debug_name = nullptr) const;
@@ -86,6 +87,13 @@ namespace glRemix::dx
 
 		bool create_fence(D3D12Fence* fence, uint64_t initial_value, const char* debug_name = nullptr) const;
 		bool wait_fences(const WaitInfo& info) const;
+
+		void set_barrier_resource(D3D12Buffer* buffer, D3D12_BUFFER_BARRIER* barrier);
+        void set_barrier_resource(D3D12Texture* texture, D3D12_TEXTURE_BARRIER* barrier);
+
+		// TODO: Copy parameters
+		void copy_texture_to_swapchain(ID3D12GraphicsCommandList7* cmd_list, const D3D12Texture& texture);
+		//void copy_texture_to_texture()
 
 		bool reflect_input_layout(IDxcBlob* vertex_shader, InputLayoutDesc* input_layout, bool increment_slot, ID3D12ShaderReflection** reflection) const;
 
@@ -113,6 +121,28 @@ namespace glRemix::dx
 		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC get_raytracing_acceleration_structure(
 			const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& desc, D3D12Buffer* out, D3D12Buffer* in, D3D12Buffer* scratch
 		) const;
+
+
+        void mark_use(D3D12Buffer* buffer, Usage use_kind);
+        void mark_use(D3D12Texture* texture, Usage use_kind);
+
+        void emit_barriers(ID3D12GraphicsCommandList7* cmd_list,
+                           D3D12Buffer* const* buffers,
+                           const size_t buffer_count,
+                           D3D12Texture* const* textures,
+                           const size_t texture_count
+		);
+		
+	    void bind_vertex_buffers(ID3D12GraphicsCommandList7* cmd_list,
+                                 UINT start_slot,
+                                 UINT buffer_count,
+                                 const D3D12Buffer* const* buffers,
+                                 const UINT* sizes,
+                                 const UINT* strides,
+                                 const UINT* offsets);
+        void bind_index_buffer(ID3D12GraphicsCommandList7* cmd_list,
+                               const D3D12Buffer& buffer,
+                               UINT offset);
 
 		// Note: ImGui using win32 is blurry, even the sample is like this, so I assume it's expected
 		bool init_imgui();

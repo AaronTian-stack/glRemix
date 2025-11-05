@@ -15,13 +15,6 @@ namespace glRemix
             std::array<float, 3> color;
         };
 
-		struct alignas(16) MVP
-		{
-            DirectX::XMFLOAT4X4 model;
-            DirectX::XMFLOAT4X4 view;
-            DirectX::XMFLOAT4X4 proj;
-        };
-
         std::array<dx::D3D12CommandAllocator, m_frames_in_flight> m_cmd_pools{};
 
 		ComPtr<ID3D12RootSignature> m_root_signature{};
@@ -50,8 +43,7 @@ namespace glRemix
 		UINT64 m_miss_shader_table_offset{};
 		UINT64 m_hit_group_shader_table_offset{};
 
-		ComPtr<D3D12MA::Allocation> m_uav_render_target{};
-		dx::D3D12Buffer m_mvp{};
+        dx::D3D12Texture m_uav_render_target{};
 
 		IPCProtocol m_ipc;
 		
@@ -63,14 +55,14 @@ namespace glRemix
 		void render() override;
 		void destroy() override;
 
+		// TODO: Decoding should go in a separate module
 		void readGLStream();
 		void readGeometry(std::vector<uint8_t>& ipcBuf,
                                             size_t& offset,
                                             std::vector<Vertex>& vertices,
                                             std::vector<uint32_t>& indices,
-                                            glRemix::GLTopology topology,
+                                            GLTopology topology,
                                             uint32_t bytesRead);
-		void updateMVP(float rot);
 
 	public:
 		glRemixRenderer() = default;

@@ -1,8 +1,9 @@
-cbuffer MVP : register(b0)
+struct RayGenConstantBuffer
 {
-    row_major float4x4 model;
-    row_major float4x4 view;
-    row_major float4x4 proj;
+    float4x4 view_proj;
+    float4x4 inv_view_proj;
+    float width;
+    float height;
 };
 
 struct VSInput
@@ -17,12 +18,14 @@ struct PSInput
     float4 Color : COLOR;
 };
 
+RayGenConstantBuffer g_rayGenCB : register(b0);
+
 PSInput VSMain(VSInput input)
 {
     PSInput output;
     
     float4 p = float4(input.Position, 1.0f);
-    output.Position = mul(mul(mul(p, model), view), proj);
+    output.Position = mul(p, g_rayGenCB.view_proj);
     output.Color = input.Color;
     
     return output;

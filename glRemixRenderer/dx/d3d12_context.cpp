@@ -1,5 +1,6 @@
 #include "d3d12_context.h"
 
+#include <algorithm>
 #include <cassert>
 #include <stdexcept>
 
@@ -21,17 +22,21 @@ void glRemix::dx::set_debug_name(ID3D12Object* obj, const char* name)
 	}
 }
 
-bool is_depth_stencil_format(DXGI_FORMAT format)
+// Includes typeless formats
+static bool is_depth_stencil_format(DXGI_FORMAT format)
 {
 	switch (format)
 	{
-	case DXGI_FORMAT_D16_UNORM:
-	case DXGI_FORMAT_D24_UNORM_S8_UINT:
-	case DXGI_FORMAT_D32_FLOAT:
-	case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
-		return true;
-	default:
-		return false;
+	    case DXGI_FORMAT_D16_UNORM:
+	    case DXGI_FORMAT_D24_UNORM_S8_UINT:
+	    case DXGI_FORMAT_D32_FLOAT:
+	    case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+        case DXGI_FORMAT_R32_TYPELESS:
+	    case DXGI_FORMAT_R24G8_TYPELESS:
+	    case DXGI_FORMAT_R24_UNORM_X8_TYPELESS:
+		    return true;
+	    default:
+		    return false;
 	}
 }
 
@@ -253,7 +258,7 @@ bool D3D12Context::create_swapchain(const HWND window, D3D12Queue* const queue, 
 	}
 
 	m_window = window;
-
+    m_swapchain_dims = dims;;
 	m_swapchain_queue = queue;
 	*frame_index = m_swapchain->GetCurrentBackBufferIndex();
 
@@ -384,6 +389,16 @@ bool D3D12Context::create_buffer(const BufferDesc& desc, D3D12Buffer* buffer, co
 
 	set_debug_name(buffer->allocation.Get()->GetResource(), debug_name);
 
+	// Initialize barrier tracking state
+	initialize_tracked_resource(
+        &buffer->barrier_state,
+        buffer->get_resource(),
+        false, // is_texture
+        D3D12_BARRIER_LAYOUT_UNDEFINED,
+        nullptr,
+        desc.size
+        );
+
 	return true;
 }
 
@@ -434,59 +449,89 @@ void D3D12Context::set_descriptor_heaps(ID3D12GraphicsCommandList7* cmd_list, co
 	cmd_list->SetDescriptorHeaps(2, heaps);
 }
 
-bool D3D12Context::create_texture(const D3D12_RESOURCE_DESC1& desc, D3D12MA::Allocation** allocation,
-                                  const TextureCreateDesc& texture_desc, const char* debug_name) const
+bool D3D12Context::create_texture(const TextureDesc& desc, D3D12Texture* texture,
+                                  D3D12_CLEAR_VALUE* clear_value, const char* debug_name) const
 {
-	assert(allocation);
+	assert(texture);
 	const D3D12MA::ALLOCATION_DESC allocation_desc
 	{
 		.HeapType = D3D12_HEAP_TYPE_DEFAULT,
 	};
 
-	const D3D12_CLEAR_VALUE* clear_value_ptr;
-	D3D12_CLEAR_VALUE default_color
+
+	D3D12_RESOURCE_DESC1 resource_desc
 	{
-		.Format = desc.Format,
-		.Color = { 0.0f, 0.0f, 0.0f, 1.0f }
-	};
-	D3D12_CLEAR_VALUE default_depth
-	{
-		.DepthStencil
+		.Dimension = desc.dimension,
+		.Alignment = 0,
+		.Width = desc.width,
+		.Height = desc.height,
+		.DepthOrArraySize = desc.depth_or_array_size,
+		.MipLevels = desc.mip_levels,
+		.Format = desc.format,
+		.SampleDesc =
 		{
-			.Depth = 1.0f,
-			.Stencil = 0 // Assume we are not using stencil
-		}
+			.Count = 1,
+			.Quality = 0,
+		},
+		.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN,
+		.Flags = D3D12_RESOURCE_FLAG_NONE,
 	};
 
-	if (texture_desc.clear_value.has_value())
+    const bool is_ds_format = is_depth_stencil_format(desc.format);
+    if (is_ds_format || desc.is_render_target)
 	{
-		clear_value_ptr = &texture_desc.clear_value.value();
+		clear_value->Format = desc.format;
+        if (is_ds_format)
+		{
+			resource_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+		}
+		if (desc.is_render_target)
+		{
+			resource_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+		}
 	}
 	else
 	{
-		if (is_depth_stencil_format(desc.Format))
-		{
-			clear_value_ptr = &default_depth;
-		}
-		else
-		{
-			clear_value_ptr = &default_color;
-		}
+		clear_value = nullptr;
+	}
+	if (desc.initial_layout == D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS)
+	{
+		resource_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 	}
 
 	if (FAILED(m_allocator->CreateResource3(
 		&allocation_desc,
-		&desc,
-		texture_desc.init_layout,
-		desc.Flags & (D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) ? clear_value_ptr : nullptr,
+		&resource_desc,
+		desc.initial_layout,
+		clear_value,
 		0, nullptr,
-		allocation,
+		texture->allocation.ReleaseAndGetAddressOf(),
 		IID_NULL, NULL)))
 	{
 		OutputDebugStringA("D3D12 ERROR: Failed to create texture\n");
 		return false;
 	}
-	set_debug_name((*allocation)->GetResource(), debug_name);
+    texture->desc = desc;
+	set_debug_name(texture->allocation->GetResource(), debug_name);
+
+	// Initialize barrier tracking state
+	D3D12_BARRIER_SUBRESOURCE_RANGE subresource_range{};
+	subresource_range.IndexOrFirstMipLevel = 0;
+	subresource_range.NumMipLevels = desc.mip_levels;
+	subresource_range.FirstArraySlice = 0;
+	subresource_range.NumArraySlices = desc.depth_or_array_size;
+	subresource_range.FirstPlane = 0;
+	subresource_range.NumPlanes = 1;
+
+	initialize_tracked_resource(
+        &texture->barrier_state,
+        texture->get_resource(),
+        true, // is_texture
+        desc.initial_layout,
+        &subresource_range,
+        0
+        );
+
 	return true;
 }
 
@@ -577,6 +622,55 @@ bool D3D12Context::wait_fences(const WaitInfo& info) const
 	}
 	WaitForMultipleObjectsEx(info.count, wait_handles.data(), info.wait_all, info.timeout, FALSE);
 	return true;
+}
+
+void D3D12Context::set_barrier_resource(D3D12Buffer* buffer, D3D12_BUFFER_BARRIER* barrier)
+{
+    assert(buffer);
+    assert(barrier);
+    barrier->pResource = buffer->allocation->GetResource();
+}
+
+void D3D12Context::set_barrier_resource(D3D12Texture* texture, D3D12_TEXTURE_BARRIER* barrier)
+{
+	assert(texture);
+	assert(barrier);
+    barrier->pResource = texture->allocation->GetResource();
+}
+
+void D3D12Context::copy_texture_to_swapchain(ID3D12GraphicsCommandList7* cmd_list, const D3D12Texture& texture)
+{
+    assert(cmd_list);
+    assert(&texture);
+
+    const UINT copy_width = static_cast<UINT>(std::min(static_cast<uint64_t>(m_swapchain_dims.x), texture.desc.width));
+    const UINT copy_height = std::min(static_cast<uint32_t>(m_swapchain_dims.y), texture.desc.height);
+
+    D3D12_TEXTURE_COPY_LOCATION src
+    {
+        .pResource = texture.get_resource(),
+        .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+        .SubresourceIndex = 0,
+    };
+
+    D3D12_TEXTURE_COPY_LOCATION dst
+    {
+        .pResource = m_swapchain_buffers[get_swapchain_index()].Get(),
+        .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+        .SubresourceIndex = 0,
+    };
+
+    D3D12_BOX src_box
+    {
+        .left = 0,
+        .top = 0,
+        .front = 0,
+        .right = copy_width,
+        .bottom = copy_height,
+        .back = 1,
+    };
+
+    cmd_list->CopyTextureRegion(&dst, 0, 0, 0, &src, &src_box);
 }
 
 bool D3D12Context::wait_idle(D3D12Queue* queue)
@@ -1150,6 +1244,83 @@ D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC D3D12Context::get_raytracing_
 	};
 }
 
+void D3D12Context::mark_use(D3D12Buffer* buffer, const Usage use_kind)
+{
+	assert(buffer);
+    dx::mark_use(buffer->barrier_state, use_kind);
+}
+
+void D3D12Context::mark_use(D3D12Texture* texture, const Usage use_kind)
+{
+	assert(texture);
+    dx::mark_use(texture->barrier_state, use_kind);
+}
+
+void D3D12Context::emit_barriers(ID3D12GraphicsCommandList7* cmd_list,
+                                 D3D12Buffer* const* buffers, const size_t buffer_count,
+                                 D3D12Texture* const* textures, const size_t texture_count)
+{
+    assert(cmd_list);
+    assert(buffers || textures);
+    const size_t total_count = buffer_count + texture_count;
+
+	std::array<Resource*, 16> resources{};
+	assert(total_count <= resources.size());
+
+    auto b_ptr = buffers;
+	size_t index = 0;
+	for (auto ptr = buffers; ptr && *ptr && index < buffer_count; ++ptr)
+	{
+		resources[index++] = &(*ptr)->barrier_state;
+	}
+	for (auto ptr = textures; ptr && *ptr && index < total_count; ++ptr)
+	{
+		resources[index++] = &(*ptr)->barrier_state;
+	}
+
+    dx::emit_barriers(cmd_list, resources.data(), total_count, nullptr);
+}
+
+void D3D12Context::bind_vertex_buffers(ID3D12GraphicsCommandList7* cmd_list,
+                                       const UINT start_slot,
+                                       const UINT buffer_count,
+                                       const D3D12Buffer* const* buffers,
+                                       const UINT* sizes,
+                                       const UINT* strides,
+                                       const UINT* offsets)
+{
+	assert(cmd_list);
+	assert(buffers);
+	assert(buffer_count > 0);
+	std::array<D3D12_VERTEX_BUFFER_VIEW, 8> views;
+	for (UINT i = 0; i < buffer_count; i++)
+	{
+		assert(buffers[i]);
+		views[i] =
+        {
+            .BufferLocation = buffers[i]->allocation->GetResource()->GetGPUVirtualAddress() + (offsets ? offsets[i] : 0),
+            .SizeInBytes = sizes ? sizes[i] : static_cast<UINT>(buffers[i]->desc.size),
+            .StrideInBytes = strides ? strides[i] : static_cast<UINT>(buffers[i]->desc.stride),
+		};
+	}
+    cmd_list->IASetVertexBuffers(start_slot, buffer_count, views.data());
+}
+
+void D3D12Context::bind_index_buffer(ID3D12GraphicsCommandList7* cmd_list,
+    const D3D12Buffer& buffer,
+    const UINT offset)
+{
+	assert(cmd_list);
+    assert(buffer.desc.stride == 2 || buffer.desc.stride == 4);
+	D3D12_INDEX_BUFFER_VIEW view
+	{
+		.BufferLocation = buffer.allocation->GetResource()->GetGPUVirtualAddress() + offset,
+		.SizeInBytes = static_cast<UINT>(buffer.desc.size),
+		.Format = buffer.desc.stride == 2 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT,
+	};
+    cmd_list->IASetIndexBuffer(&view);
+}
+
 bool D3D12Context::init_imgui()
 {
 	IMGUI_CHECKVERSION();
@@ -1264,9 +1435,9 @@ void D3D12Context::create_constant_buffer_view(const D3D12Buffer* buffer, const 
 	m_device->CreateConstantBufferView(&cbv_desc, cpu_handle);
 }
 
-void D3D12Context::create_shader_resource_view_acceleration_structure(ID3D12Resource* tlas, const D3D12DescriptorTable* descriptor_table, UINT descriptor_index) const
+void D3D12Context::create_shader_resource_view_acceleration_structure(const D3D12Buffer& tlas, const D3D12DescriptorTable* descriptor_table, UINT descriptor_index) const
 {
-	assert(tlas);
+    assert(&tlas);
 	assert(descriptor_table);
 
 	D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
@@ -1279,14 +1450,14 @@ void D3D12Context::create_shader_resource_view_acceleration_structure(ID3D12Reso
 		.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
 		.RaytracingAccelerationStructure
 		{
-			.Location = tlas->GetGPUVirtualAddress(),
+			.Location = tlas.get_gpu_address(),
 		},
 	};
 
 	m_device->CreateShaderResourceView(nullptr, &srv_desc, cpu_handle);
 }
 
-void D3D12Context::create_unordered_access_view_texture(D3D12MA::Allocation* texture, DXGI_FORMAT format, const D3D12DescriptorTable* descriptor_table, UINT descriptor_index) const
+void D3D12Context::create_unordered_access_view_texture(D3D12Texture* texture, DXGI_FORMAT format, const D3D12DescriptorTable* descriptor_table, UINT descriptor_index) const
 {
 	assert(texture);
 	assert(descriptor_table);
@@ -1305,7 +1476,7 @@ void D3D12Context::create_unordered_access_view_texture(D3D12MA::Allocation* tex
 		},
 	};
 
-	m_device->CreateUnorderedAccessView(texture->GetResource(), nullptr, &uav_desc, cpu_handle);
+	m_device->CreateUnorderedAccessView(texture->allocation->GetResource(), nullptr, &uav_desc, cpu_handle);
 }
 
 D3D12Context::~D3D12Context()
