@@ -1,3 +1,10 @@
+cbuffer MVP : register(b0)
+{
+    row_major float4x4 model;
+    row_major float4x4 view;
+    row_major float4x4 proj;
+};
+
 struct VSInput
 {
     float3 Position : POSITION;
@@ -14,7 +21,8 @@ PSInput VSMain(VSInput input)
 {
     PSInput output;
     
-    output.Position = float4(input.Position, 1.0f);
+    float4 p = float4(input.Position, 1.0f);
+    output.Position = mul(mul(mul(p, model), view), proj);
     output.Color = input.Color;
     
     return output;

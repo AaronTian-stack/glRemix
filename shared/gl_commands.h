@@ -64,6 +64,12 @@ namespace glRemix
         GL_SHUTDOWN
     };
 
+    enum class GLTopology : uint32_t
+    {
+        GL_QUADS = 0x0007,
+        GL_QUAD_STRIP = 0x0008
+    };
+
     // Name *Unifs for clear association
     // Header for all commands
     struct GLCommandUnifs
