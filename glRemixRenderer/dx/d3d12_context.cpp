@@ -1092,6 +1092,7 @@ D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC D3D12Context::get_buffer_rt_description
 	assert(!u64_overflows_u32(count));
 
 	DXGI_FORMAT index_format = DXGI_FORMAT_UNKNOWN;
+	UINT index_count = 0;
 	if (index_buffer)
 	{
 		assert(index_buffer->desc.visibility & GPU);
@@ -1104,6 +1105,9 @@ D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC D3D12Context::get_buffer_rt_description
 		{
 			index_format = DXGI_FORMAT_R32_UINT;
 		}
+		const auto idx_count = index_buffer->desc.size / index_buffer->desc.stride;
+		assert(!u64_overflows_u32(idx_count) && "Index count must fit in 32 bits");
+		index_count = static_cast<UINT>(idx_count);
 	}
 
 	return
@@ -1111,6 +1115,7 @@ D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC D3D12Context::get_buffer_rt_description
 		.Transform3x4 = NULL,
 		.IndexFormat = index_format,
 		.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
+		.IndexCount = index_count,
 		.VertexCount = static_cast<UINT>(count),
 		.IndexBuffer = index_buffer ? index_buffer->allocation.Get()->GetResource()->GetGPUVirtualAddress() : 0,
 		.VertexBuffer =

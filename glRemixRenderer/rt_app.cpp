@@ -1,6 +1,7 @@
 #include "rt_app.h"
 
 #include "constants.h"
+#include "helper.h"
 #include "imgui.h"
 
 void glRemix::glRemixRenderer::create()
@@ -94,6 +95,20 @@ void glRemix::glRemixRenderer::create()
 		THROW_IF_FALSE(m_context.create_root_signature(root_sig_desc, m_rt_global_root_signature.ReleaseAndGetAddressOf(), "rt global root signature"));
 	}
 
+	// Create ray tracing descriptor heap for TLAS SRV, Output UAV, and constant buffer
+	{
+		D3D12_DESCRIPTOR_HEAP_DESC descriptor_heap_desc
+		{
+			.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+			.NumDescriptors = 3, // TLAS SRV, Output UAV, Raygen CB
+			.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
+		};
+		THROW_IF_FALSE(m_context.create_descriptor_heap(descriptor_heap_desc, &m_rt_descriptor_heap, "ray tracing descriptor heap"));
+
+		// Allocate descriptor table for all ray tracing descriptors (views will be created after resources are ready)
+		THROW_IF_FALSE(m_rt_descriptor_heap.allocate(3, &m_rt_descriptors));
+	}
+
 	// Compile ray tracing pipeline
 	ComPtr<IDxcBlobEncoding> raytracing_shaders;
 	THROW_IF_FALSE(m_context.load_blob_from_file(L"./shaders/raytracing_lib_6_6.dxil", raytracing_shaders.ReleaseAndGetAddressOf()));
@@ -110,6 +125,49 @@ void glRemix::glRemixRenderer::create()
 	rt_desc.payload_size = sizeof(float) * 4;
 	rt_desc.attribute_size = sizeof(float) * 2;
 	THROW_IF_FALSE(m_context.create_raytracing_pipeline(rt_desc, raytracing_shaders.Get(), m_rt_pipeline.ReleaseAndGetAddressOf(), "rt pipeline"));
+
+	// Create shader table buffer for ray tracing pipeline
+	{
+		ComPtr<ID3D12StateObjectProperties> rt_pipeline_properties;
+		THROW_IF_FALSE(SUCCEEDED(m_rt_pipeline->QueryInterface(IID_PPV_ARGS(rt_pipeline_properties.ReleaseAndGetAddressOf()))));
+
+		constexpr UINT64 shader_identifier_size = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
+		constexpr UINT64 shader_table_alignment = D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT;
+		
+		// Calculate aligned offsets for each table
+		m_raygen_shader_table_offset = 0;
+		m_miss_shader_table_offset = align_u64(shader_identifier_size, shader_table_alignment);
+		m_hit_group_shader_table_offset = align_u64(m_miss_shader_table_offset + shader_identifier_size, shader_table_alignment);
+		
+		UINT64 total_shader_table_size = align_u64(m_hit_group_shader_table_offset + shader_identifier_size, shader_table_alignment);
+
+		// Create single buffer for all shader tables
+		dx::BufferDesc shader_table_desc
+		{
+			.size = total_shader_table_size,
+			.stride = 0,
+			.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+		};
+		THROW_IF_FALSE(m_context.create_buffer(shader_table_desc, &m_shader_table, "shader tables"));
+
+		// Fill out shader table
+		void* cpu_ptr;
+		THROW_IF_FALSE(m_context.map_buffer(&m_shader_table, &cpu_ptr));
+
+		void* raygen_identifier = rt_pipeline_properties->GetShaderIdentifier(L"RayGenMain");
+		assert(raygen_identifier);
+		memcpy(static_cast<UINT8*>(cpu_ptr) + m_raygen_shader_table_offset, raygen_identifier, shader_identifier_size);
+
+		void* miss_identifier = rt_pipeline_properties->GetShaderIdentifier(L"MissMain");
+		assert(miss_identifier);
+		memcpy(static_cast<UINT8*>(cpu_ptr) + m_miss_shader_table_offset, miss_identifier, shader_identifier_size);
+
+		void* hit_group_identifier = rt_pipeline_properties->GetShaderIdentifier(L"HG_Default");
+		assert(hit_group_identifier);
+		memcpy(static_cast<UINT8*>(cpu_ptr) + m_hit_group_shader_table_offset, hit_group_identifier, shader_identifier_size);
+		
+		m_context.unmap_buffer(&m_shader_table);
+	}
 
 	// Simple geometry for triangle. Use GPU upload heaps to make life easier
 	// TODO: Eventually replace with classic CPU -> GPU copy and only use GPU upload heaps for dynamic data
@@ -157,8 +215,8 @@ void glRemix::glRemixRenderer::create()
 
 	dx::BufferDesc raygen_cb_desc
 	{
-		.size = sizeof(RayGenConstantBuffer),
-		.stride = sizeof(RayGenConstantBuffer),
+		.size = align_u32(sizeof(RayGenConstantBuffer), 256),
+		.stride = align_u32(sizeof(RayGenConstantBuffer), 256),
 		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
 	};
 	for (UINT i = 0; i < m_frames_in_flight; i++)
@@ -408,6 +466,21 @@ void glRemix::glRemixRenderer::create()
 		.timeout = INFINITE,
 	};
 
+	// Create descriptor views after all resources are ready
+	{
+		XMUINT2 win_dims_for_desc{};
+		m_context.get_window_dimensions(&win_dims_for_desc);
+
+		// TODO: Use CPU descriptors and copy to GPU visible heap
+
+		m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer.allocation->GetResource(), &m_rt_descriptors, 0);
+
+		m_context.create_unordered_access_view_texture(m_uav_render_target.Get(), uav_rt_desc.Format, &m_rt_descriptors, 1);
+
+		// Will be updated each frame
+		m_context.create_constant_buffer_view(&m_raygen_constant_buffers[0], &m_rt_descriptors, 2);
+	}
+
 	// Init ImGui
 	THROW_IF_FALSE(m_context.init_imgui());
 
@@ -429,30 +502,50 @@ void glRemix::glRemixRenderer::render()
 
 	const auto swapchain_idx = m_context.get_swapchain_index();
 
-	// Transition swapchain image
+	auto make_tex_barrier = [](ID3D12Resource* res,
+		D3D12_BARRIER_SYNC sync_before, D3D12_BARRIER_SYNC sync_after,
+		D3D12_BARRIER_ACCESS access_before, D3D12_BARRIER_ACCESS access_after,
+		D3D12_BARRIER_LAYOUT layout_before, D3D12_BARRIER_LAYOUT layout_after) -> D3D12_TEXTURE_BARRIER
 	{
-		D3D12_TEXTURE_BARRIER swapchain_render
+		return D3D12_TEXTURE_BARRIER
 		{
-			.SyncBefore = D3D12_BARRIER_SYNC_DRAW, // Ensure we are not drawing anything to swapchain
-			.SyncAfter = D3D12_BARRIER_SYNC_RENDER_TARGET, // Setting swapchain as render target requires transition to finish first
-
-			.AccessBefore = D3D12_BARRIER_ACCESS_COMMON,
-			.AccessAfter = D3D12_BARRIER_ACCESS_RENDER_TARGET,
-
-			.LayoutBefore = D3D12_BARRIER_LAYOUT_PRESENT,
-			.LayoutAfter = D3D12_BARRIER_LAYOUT_RENDER_TARGET,
-
-			.Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE // Or discard
+			.SyncBefore = sync_before,
+			.SyncAfter = sync_after,
+			.AccessBefore = access_before,
+			.AccessAfter = access_after,
+			.LayoutBefore = layout_before,
+			.LayoutAfter = layout_after,
+			.pResource = res,
+			.Subresources
+			{
+				.IndexOrFirstMipLevel = 0,
+				.NumMipLevels = 1,
+				.FirstArraySlice = 0,
+				.NumArraySlices = 1,
+				.FirstPlane = 0,
+				.NumPlanes = 1,
+			},
+			.Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE,
 		};
-		m_context.set_barrier_swapchain(&swapchain_render);
-		D3D12_BARRIER_GROUP barrier_group =
+	};
+
+	auto submit_tex_barriers = [&](std::initializer_list<D3D12_TEXTURE_BARRIER> barriers)
+	{
+		D3D12_BARRIER_GROUP group
 		{
 			.Type = D3D12_BARRIER_TYPE_TEXTURE,
-			.NumBarriers = 1,
-			.pTextureBarriers = &swapchain_render,
+			.NumBarriers = static_cast<UINT>(barriers.size()),
+			.pTextureBarriers = barriers.begin(),
 		};
-		cmd_list->Barrier(1, &barrier_group);
-	}
+		cmd_list->Barrier(1, &group);
+	};
+
+	auto get_current_swapchain_resource = [&]() -> ID3D12Resource*
+	{
+		D3D12_TEXTURE_BARRIER tmp{};
+		m_context.set_barrier_swapchain(&tmp); // Fills pResource and subresource range
+		return tmp.pResource;
+	};
 
 	XMUINT2 win_dims{};
 	m_context.get_window_dimensions(&win_dims);
@@ -479,33 +572,169 @@ void glRemix::glRemixRenderer::render()
 
 	// Build TLAS
 
-	// Draw everything
+	// Dispatch rays to UAV render target
+	{
+		static float increment = 0.f;
+		increment += 0.01f;
+
+		XMVECTOR eye_position = XMVectorSet(cosf(increment), sinf(increment), -2.0f, 1.0f);
+		XMVECTOR focus_position = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+		XMVECTOR up_direction = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+		
+		XMMATRIX view_matrix = XMMatrixLookAtLH(eye_position, focus_position, up_direction);
+		XMMATRIX projection_matrix = XMMatrixPerspectiveFovLH(
+			XM_PIDIV4,
+			static_cast<float>(win_dims.x) / static_cast<float>(win_dims.y),
+			0.1f,
+			100.0f
+		);
+		
+		XMMATRIX view_projection = XMMatrixMultiply(view_matrix, projection_matrix);
+		XMMATRIX inverse_view_projection = XMMatrixInverse(nullptr, view_projection);
+		
+		RayGenConstantBuffer raygen_cb
+		{
+			.width = static_cast<float>(win_dims.x),
+			.height = static_cast<float>(win_dims.y),
+		};
+		XMStoreFloat4x4(&raygen_cb.projection_matrix, XMMatrixTranspose(view_projection));
+		XMStoreFloat4x4(&raygen_cb.inv_projection_matrix, XMMatrixTranspose(inverse_view_projection));
+		
+		// Copy constant buffer to GPU
+		auto raygen_cb_ptr = &m_raygen_constant_buffers[get_frame_index()];
+		void* cb_ptr;
+		THROW_IF_FALSE(m_context.map_buffer(raygen_cb_ptr, &cb_ptr));
+		memcpy(cb_ptr, &raygen_cb, sizeof(RayGenConstantBuffer));
+		m_context.unmap_buffer(raygen_cb_ptr);
+
+		// Transition UAV texture to UAV layout for raytracing dispatch
+		auto uav_rt_dispatch = make_tex_barrier(
+			m_uav_render_target.Get()->GetResource(),
+			D3D12_BARRIER_SYNC_NONE,
+			D3D12_BARRIER_SYNC_RAYTRACING,
+			D3D12_BARRIER_ACCESS_NO_ACCESS,
+			D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
+			D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS,
+			D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS
+		);
+		D3D12_BARRIER_GROUP barrier_group
+		{
+			.Type = D3D12_BARRIER_TYPE_TEXTURE,
+			.NumBarriers = 1,
+			.pTextureBarriers = &uav_rt_dispatch,
+		};
+		cmd_list->Barrier(1, &barrier_group);
+
+		cmd_list->SetPipelineState1(m_rt_pipeline.Get());
+		cmd_list->SetComputeRootSignature(m_rt_global_root_signature.Get());
+
+		// TODO: Copy from a CPU descriptor heap instead of recreating each frame
+		m_context.create_constant_buffer_view(&m_raygen_constant_buffers[get_frame_index()], &m_rt_descriptors, 2);
+
+		// Set descriptor heap and table our descriptors
+		m_context.set_descriptor_heap(cmd_list.Get(), m_rt_descriptor_heap);
+		D3D12_GPU_DESCRIPTOR_HANDLE descriptor_table_handle{};
+		m_rt_descriptor_heap.get_gpu_descriptor(&descriptor_table_handle, m_rt_descriptors.offset);
+		cmd_list->SetComputeRootDescriptorTable(0, descriptor_table_handle);
+
+		D3D12_GPU_VIRTUAL_ADDRESS shader_table_base_address = m_shader_table.allocation->GetResource()->GetGPUVirtualAddress();
+		
+		D3D12_DISPATCH_RAYS_DESC dispatch_desc
+		{
+			.RayGenerationShaderRecord
+			{
+				.StartAddress = shader_table_base_address + m_raygen_shader_table_offset,
+				.SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+			},
+			.MissShaderTable
+			{
+				.StartAddress = shader_table_base_address + m_miss_shader_table_offset,
+				.SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+				.StrideInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+			},
+			.HitGroupTable
+			{
+				.StartAddress = shader_table_base_address + m_hit_group_shader_table_offset,
+				.SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+				.StrideInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES,
+			},
+			.Width = win_dims.x,
+			.Height = win_dims.y,
+			.Depth = 1,
+		};
+
+		cmd_list->DispatchRays(&dispatch_desc);
+	}
+
+	// Copy the ray traced UAV texture into the current swapchain backbuffer, then render ImGui on top
+	{
+		ID3D12Resource* backbuffer = get_current_swapchain_resource();
+
+		// Transition UAV -> COPY_SOURCE and Swapchain(PRESENT) -> COPY_DEST
+		auto uav_to_copy_src = make_tex_barrier(
+			m_uav_render_target.Get()->GetResource(),
+			D3D12_BARRIER_SYNC_RAYTRACING, D3D12_BARRIER_SYNC_COPY,
+			D3D12_BARRIER_ACCESS_UNORDERED_ACCESS, D3D12_BARRIER_ACCESS_COPY_SOURCE,
+			D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS, D3D12_BARRIER_LAYOUT_COPY_SOURCE);
+
+		auto swap_to_copy_dst = make_tex_barrier(
+			nullptr,
+			D3D12_BARRIER_SYNC_NONE,
+			D3D12_BARRIER_SYNC_COPY,
+			D3D12_BARRIER_ACCESS_NO_ACCESS,
+			D3D12_BARRIER_ACCESS_COPY_DEST,
+			D3D12_BARRIER_LAYOUT_PRESENT,
+			D3D12_BARRIER_LAYOUT_COPY_DEST
+		);
+		m_context.set_barrier_swapchain(&swap_to_copy_dst); // Fills pResource and subresources
+
+
+		submit_tex_barriers({ uav_to_copy_src, swap_to_copy_dst });
+
+		cmd_list->CopyResource(backbuffer, m_uav_render_target.Get()->GetResource());
+
+		// Transition Swapchain COPY_DEST -> RENDER_TARGET and UAV COPY_SOURCE -> UNORDERED_ACCESS
+		auto swap_to_rtv = make_tex_barrier(
+			nullptr,
+			D3D12_BARRIER_SYNC_COPY,
+			D3D12_BARRIER_SYNC_RENDER_TARGET,
+			D3D12_BARRIER_ACCESS_COPY_DEST,
+			D3D12_BARRIER_ACCESS_RENDER_TARGET,
+			D3D12_BARRIER_LAYOUT_COPY_DEST,
+			D3D12_BARRIER_LAYOUT_RENDER_TARGET
+		);
+		m_context.set_barrier_swapchain(&swap_to_rtv);
+
+		auto uav_back_to_uav = make_tex_barrier(
+			m_uav_render_target.Get()->GetResource(),
+			D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_SYNC_RAYTRACING,
+			D3D12_BARRIER_ACCESS_COPY_SOURCE, D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
+			D3D12_BARRIER_LAYOUT_COPY_SOURCE, D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS);
+
+		submit_tex_barriers({ swap_to_rtv, uav_back_to_uav });
+	}
+
+	// Draw everything (ImGui over the copied ray traced image)
 	D3D12_CPU_DESCRIPTOR_HANDLE swapchain_rtv{};
 	m_swapchain_descriptors.heap->get_cpu_descriptor(&swapchain_rtv, m_swapchain_descriptors.offset + swapchain_idx);
-	const std::array clear_color = { 1.0f, 0.0f, 0.0f, 1.0f };
 	cmd_list->OMSetRenderTargets(1, &swapchain_rtv, FALSE, nullptr);
-	cmd_list->ClearRenderTargetView(swapchain_rtv, clear_color.data(), 0, nullptr);
 
-	// This is where rasterization will go
+	// This is where rasterization could go
 
 	// Render ImGui
 	m_context.render_imgui_draw_data(cmd_list.Get());
 
 	// Transition swapchain image to present
 	{
-		D3D12_TEXTURE_BARRIER swapchain_present
-		{
-			.SyncBefore = D3D12_BARRIER_SYNC_DRAW, // Ensure we are not drawing anything to swapchain
-			.SyncAfter = D3D12_BARRIER_SYNC_NONE, // Setting swapchain as render target requires transition to finish first
-
-			.AccessBefore = D3D12_BARRIER_ACCESS_RENDER_TARGET,
-			.AccessAfter = D3D12_BARRIER_ACCESS_NO_ACCESS,
-
-			.LayoutBefore = D3D12_BARRIER_LAYOUT_RENDER_TARGET,
-			.LayoutAfter = D3D12_BARRIER_LAYOUT_PRESENT,
-
-			.Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE // Or discard
-		};
+		auto swapchain_present = make_tex_barrier(
+			nullptr,
+			D3D12_BARRIER_SYNC_DRAW,
+			D3D12_BARRIER_SYNC_NONE,
+			D3D12_BARRIER_ACCESS_RENDER_TARGET,
+			D3D12_BARRIER_ACCESS_NO_ACCESS,
+			D3D12_BARRIER_LAYOUT_RENDER_TARGET,
+			D3D12_BARRIER_LAYOUT_PRESENT
+		);
 		m_context.set_barrier_swapchain(&swapchain_present);
 		D3D12_BARRIER_GROUP barrier_group =
 		{
@@ -549,6 +778,7 @@ void glRemix::glRemixRenderer::render()
 void glRemix::glRemixRenderer::destroy()
 {
 	m_context.destroy_imgui();
+	m_rt_descriptor_heap.deallocate(&m_rt_descriptors);
 }
 
 glRemix::glRemixRenderer::~glRemixRenderer()

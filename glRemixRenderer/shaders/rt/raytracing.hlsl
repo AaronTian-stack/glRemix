@@ -1,8 +1,9 @@
 struct RayGenConstantBuffer
 {
+    float4x4 projection_matrix;
+    float4x4 inv_projection_matrix;
     float width;
     float height;
-    float4x4 projection_matrix;
 };
 
 RaytracingAccelerationStructure Scene : register(t0, space0);
@@ -22,26 +23,38 @@ void RayGenMain()
     float2 uv = (float2)DispatchRaysIndex() / float2(g_rayGenCB.width, g_rayGenCB.height);
 
     float2 ndc = uv * 2.0f - 1.0f;
+    ndc.y = -ndc.y; // Flip Y for correct screen space orientation
 
-    float4 ray_clip = float4(ndc, 1.0f, 1.0f);
-    float4 ray_eye = mul(ray_clip, g_rayGenCB.projection_matrix);
-    ray_eye = float4(ray_eye.xy, 1.0f, 0.0f);
+    // Transform from NDC to world space using inverse view-projection
+    // Near plane point in clip space
+    float4 near_point = float4(ndc, 0.0f, 1.0f);
+    float4 far_point = float4(ndc, 1.0f, 1.0f);
     
-    float3 origin = float3(0.0f, 0.0f, 0.0f);
-    float3 rayDir = normalize(ray_eye.xyz);
+    // Transform to world space
+    float4 near_world = mul(near_point, g_rayGenCB.inv_projection_matrix);
+    float4 far_world = mul(far_point, g_rayGenCB.inv_projection_matrix);
+    
+    near_world /= near_world.w;
+    far_world /= far_world.w;
+    
+    float3 origin = near_world.xyz;
+    float3 ray_dir = normalize(far_world.xyz - near_world.xyz);
 
 
     RayDesc ray;
     ray.Origin = origin;
-    ray.Direction = rayDir;
+    ray.Direction = ray_dir;
 
     ray.TMin = 0.001;
     ray.TMax = 10000.0;
     RayPayload payload = { float4(0, 0, 0, 0) };
+    // Note winding order if you don't see anything
     TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
 
 
     RenderTarget[DispatchRaysIndex().xy] = payload.color;
+    //RenderTarget[DispatchRaysIndex().xy] = float4(uv, 0.0, 1.0);
+    //RenderTarget[DispatchRaysIndex().xy] = float4(ray_dir * 0.5 + 0.5, 1.0);
 }
 
 [shader("closesthit")]
@@ -54,5 +67,5 @@ void ClosestHitMain(inout RayPayload payload, in MyAttributes attr)
 [shader("miss")]
 void MissMain(inout RayPayload payload)
 {
-    payload.color = float4(0, 0, 0, 1);
+    payload.color = float4(1.0, 0.5, 0.0, 1.0);
 }
