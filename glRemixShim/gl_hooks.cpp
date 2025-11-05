@@ -191,7 +191,7 @@ namespace glRemix::hooks
 	    {
             gl::register_hook("glBegin", reinterpret_cast<PROC>(&gl_begin_ovr));
             gl::register_hook("glEnd", reinterpret_cast<PROC>(&gl_end_ovr));
-	        // gl::register_hook("glVertex3f", reinterpret_cast<PROC>(&gl_vertex3f_ovr));
+	        gl::register_hook("glVertex3f", reinterpret_cast<PROC>(&gl_vertex3f_ovr));
             // TODO: Add more OpenGL overrides
             // Just use the name and make sure the signature matches.
             // You can find exports in the generated gl_wrappers.inl, but extensions are not going to be in there.
