@@ -576,6 +576,281 @@ void glRemix::glRemixRenderer::readGLStream()
     memcpy(cpu_ptr, indices.data(), index_buffer_desc.size);
     m_context.unmap_buffer(&m_index_buffer);
 
+		// rt test
+		dx::BufferDesc raygen_cb_desc
+	{
+		.size = align_u32(sizeof(RayGenConstantBuffer), 256),
+		.stride = align_u32(sizeof(RayGenConstantBuffer), 256),
+		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+	};
+	for (UINT i = 0; i < m_frames_in_flight; i++)
+	{
+		THROW_IF_FALSE(m_context.create_buffer(raygen_cb_desc, &m_raygen_constant_buffers[i], "raygen constant buffer"));
+	}
+
+	// Create UAV render target
+	XMUINT2 win_dims{};
+	THROW_IF_FALSE(m_context.get_window_dimensions(&win_dims));
+	
+	D3D12_RESOURCE_DESC1 uav_rt_desc
+	{
+		.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+		.Width = win_dims.x,
+		.Height = win_dims.y,
+		.DepthOrArraySize = 1,
+		.MipLevels = 1,
+		.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+		.SampleDesc
+		{
+			.Count = 1,
+			.Quality = 0,
+		},
+		.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN,
+		.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+	};
+
+	dx::TextureCreateDesc uav_rt_create_desc
+	{
+		uav_rt_create_desc.init_layout = D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS,
+	};
+
+	THROW_IF_FALSE(m_context.create_texture(uav_rt_desc, m_uav_render_target.ReleaseAndGetAddressOf(), uav_rt_create_desc, "UAV and RT texture"));
+
+	// Build BLAS here for now, but renderer will construct them dynamically for new geometry in render loop
+	D3D12_RAYTRACING_GEOMETRY_DESC tri_desc
+	{
+		.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
+		.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE, // Try to use this liberally as its faster
+		.Triangles = m_context.get_buffer_rt_description(&m_vertex_buffer, &m_index_buffer),
+	};
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS blas_desc
+	{
+		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
+		// Lots of options here, probably want to use different ones, especially the update one
+		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
+		.NumDescs = 1,
+		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+		.pGeometryDescs = &tri_desc,
+	};
+
+	const auto blas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(blas_desc);
+	// TODO: Reuse scratch space for all BLAS
+	// The same could be done for TLAS(s) as well
+
+	constexpr UINT64 scratch_size = 16 * 1024 * 1024;
+	assert(blas_prebuild_info.ScratchDataSizeInBytes < scratch_size);
+	dx::BufferDesc scratch_buffer_desc
+	{
+		.size = scratch_size,
+		.stride = 0,
+		.visibility = dx::GPU,
+		.uav = true, // Scratch space must be in UAV layout
+	};
+	THROW_IF_FALSE(m_context.create_buffer(scratch_buffer_desc, &m_scratch_space, "BLAS scratch space"));
+
+	dx::BufferDesc blas_buffer_desc
+	{
+		.size = blas_prebuild_info.ResultDataMaxSizeInBytes,
+		.stride = 0,
+		.visibility = dx::GPU,
+		.acceleration_structure = true,
+	};
+	THROW_IF_FALSE(m_context.create_buffer(blas_buffer_desc, &m_blas_buffer, "BLAS buffer"));
+	
+	const auto blas_build_desc = m_context.get_raytracing_acceleration_structure(blas_desc, &m_blas_buffer, nullptr, &m_scratch_space);
+
+	// Record transitions, copies
+	THROW_IF_FALSE(SUCCEEDED(m_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
+	ComPtr<ID3D12GraphicsCommandList7> cmd_list;
+	THROW_IF_FALSE(m_context.create_command_list(cmd_list.ReleaseAndGetAddressOf(), m_cmd_pools[get_frame_index()]));
+
+	// Transition scratch space to UAV format
+	D3D12_BUFFER_BARRIER scratch_space_uav
+	{
+		.SyncBefore = D3D12_BARRIER_SYNC_NONE,
+		.SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+		.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
+		.AccessAfter = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
+		.pResource = m_scratch_space.allocation->GetResource(),
+		.Offset = 0,
+		.Size = UINT64_MAX,
+	};
+
+	D3D12_BUFFER_BARRIER blas_buffer_barrier
+	{
+		.SyncBefore = D3D12_BARRIER_SYNC_NONE,
+		.SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+		.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
+		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
+		.pResource = m_blas_buffer.allocation->GetResource(),
+		.Offset = 0,
+		.Size = UINT64_MAX,
+	};
+
+	std::array buffer_barriers{ scratch_space_uav, blas_buffer_barrier };
+
+	D3D12_BARRIER_GROUP barrier_group0
+	{
+		.Type = D3D12_BARRIER_TYPE_BUFFER,
+		.NumBarriers = static_cast<UINT>(buffer_barriers.size()),
+		.pBufferBarriers = buffer_barriers.data(),
+	};
+
+	cmd_list->Barrier(1, &barrier_group0);
+
+	cmd_list->BuildRaytracingAccelerationStructure(&blas_build_desc, 0, nullptr);
+
+	// TODO: It would be convenient if resources tracked their current state for barriers
+	// Transition BLAS to read state
+	blas_buffer_barrier =
+	{
+		.SyncBefore = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+		.SyncAfter = D3D12_BARRIER_SYNC_RAYTRACING,
+		.AccessBefore = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
+		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ,
+		.pResource = m_blas_buffer.allocation->GetResource(),
+		.Offset = 0,
+		.Size = UINT64_MAX,
+	};
+	D3D12_BARRIER_GROUP barrier_group_read
+	{
+		.Type = D3D12_BARRIER_TYPE_BUFFER,
+		.NumBarriers = 1,
+		.pBufferBarriers = &blas_buffer_barrier,
+	};
+	cmd_list->Barrier(1, &barrier_group_read);
+
+	// Instance of the BLAS for TLAS
+	D3D12_RAYTRACING_INSTANCE_DESC instance_desc
+	{
+		.Transform
+		{
+			// Identity matrix
+			1.0f, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+		},
+		.InstanceID = 0,
+		.InstanceMask = 0xFF,
+		.InstanceContributionToHitGroupIndex = 0,
+		.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE,
+		.AccelerationStructure = m_blas_buffer.allocation->GetResource()->GetGPUVirtualAddress(),
+	};
+
+	dx::BufferDesc instance_buffer_desc
+	{
+		.size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
+		.stride = sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
+		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+	};
+	THROW_IF_FALSE(m_context.create_buffer(instance_buffer_desc, &m_tlas.instance, "TLAS instance buffer"));
+
+	THROW_IF_FALSE(m_context.map_buffer(&m_tlas.instance, &cpu_ptr));
+	memcpy(cpu_ptr, &instance_desc, instance_buffer_desc.size);
+	m_context.unmap_buffer(&m_tlas.instance);
+
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tlas_desc
+	{
+		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
+		// Lots of options here, probably want to use different ones, especially the update one
+		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
+		.NumDescs = 1,
+		.InstanceDescs = m_tlas.instance.allocation.Get()->GetResource()->GetGPUVirtualAddress(),
+	};
+
+	const auto tlas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(tlas_desc);
+	assert(tlas_prebuild_info.ScratchDataSizeInBytes < scratch_size);
+	dx::BufferDesc tlas_buffer_desc
+	{
+		.size = tlas_prebuild_info.ResultDataMaxSizeInBytes,
+		.stride = 0,
+		.visibility = dx::GPU,
+		.acceleration_structure = true,
+	};
+	THROW_IF_FALSE(m_context.create_buffer(tlas_buffer_desc, &m_tlas.buffer, "TLAS buffer"));
+
+	D3D12_BUFFER_BARRIER tlas_buffer_barrier
+	{
+		.SyncBefore = D3D12_BARRIER_SYNC_NONE,
+		.SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+		.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
+		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
+		.pResource = m_tlas.buffer.allocation->GetResource(),
+		.Offset = 0,
+		.Size = UINT64_MAX,
+	};
+	D3D12_BARRIER_GROUP barrier_group_tlas
+	{
+		.Type = D3D12_BARRIER_TYPE_BUFFER,
+		.NumBarriers = 1,
+		.pBufferBarriers = &tlas_buffer_barrier,
+	};
+	cmd_list->Barrier(1, &barrier_group_tlas);
+
+	const auto tlas_build_desc = m_context.get_raytracing_acceleration_structure(tlas_desc, &m_tlas.buffer, nullptr, &m_scratch_space);
+
+	cmd_list->BuildRaytracingAccelerationStructure(&tlas_build_desc, 0, nullptr);
+
+	// Transition TLAS to read state after build
+	D3D12_BUFFER_BARRIER tlas_buffer_barrier_read
+	{
+		.SyncBefore = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+		.SyncAfter = D3D12_BARRIER_SYNC_RAYTRACING,
+		.AccessBefore = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
+		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ,
+		.pResource = m_tlas.buffer.allocation->GetResource(),
+		.Offset = 0,
+		.Size = UINT64_MAX,
+	};
+
+	D3D12_BARRIER_GROUP tlas_barrier_group_read
+	{
+		.Type = D3D12_BARRIER_TYPE_BUFFER,
+		.NumBarriers = 1,
+		.pBufferBarriers = &tlas_buffer_barrier_read,
+	};
+	cmd_list->Barrier(1, &tlas_barrier_group_read);
+
+	// TODO: Whenever buffers are moved to CPU -> GPU copy method instead of GPU upload heaps record the copy here as well
+
+	THROW_IF_FALSE(SUCCEEDED(cmd_list->Close()));
+	const std::array<ID3D12CommandList*, 1> lists = { cmd_list.Get() };
+	m_gfx_queue.queue->ExecuteCommandLists(1, lists.data());
+
+	// Signal fence and wait for GPU to finish
+	auto current_fence_value = ++m_fence_frame_ready_val[get_frame_index()];
+	m_gfx_queue.queue->Signal(m_fence_frame_ready.fence.Get(), current_fence_value);
+
+	dx::WaitInfo wait_info
+	{
+		.wait_all = true,
+		.count = 1,
+		.fences = &m_fence_frame_ready,
+		.values = &current_fence_value,
+		.timeout = INFINITE,
+	};
+
+	// Create descriptor views after all resources are ready
+	{
+		XMUINT2 win_dims_for_desc{};
+		m_context.get_window_dimensions(&win_dims_for_desc);
+
+		// TODO: Use CPU descriptors and copy to GPU visible heap
+
+		m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer.allocation->GetResource(), &m_rt_descriptors, 0);
+
+		m_context.create_unordered_access_view_texture(m_uav_render_target.Get(), uav_rt_desc.Format, &m_rt_descriptors, 1);
+
+		// Will be updated each frame
+		m_context.create_constant_buffer_view(&m_raygen_constant_buffers[0], &m_rt_descriptors, 2);
+	}
+
+	// Init ImGui
+	THROW_IF_FALSE(m_context.init_imgui());
+
+	THROW_IF_FALSE(m_context.wait_fences(wait_info)); // Block CPU until done
+
+
 	return;
 }
 
@@ -777,7 +1052,7 @@ void glRemix::glRemixRenderer::render()
 		static float increment = 0.f;
 		increment += 0.01f;
 
-		XMVECTOR eye_position = XMVectorSet(cosf(increment), sinf(increment), -2.0f, 1.0f);
+		XMVECTOR eye_position = XMVectorSet(cosf(increment), sinf(increment), -12.0f, 1.0f);
 		XMVECTOR focus_position = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
 		XMVECTOR up_direction = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 		
@@ -920,6 +1195,7 @@ void glRemix::glRemixRenderer::render()
 	cmd_list->OMSetRenderTargets(1, &swapchain_rtv, FALSE, nullptr);
 
 	// This is where rasterization will go
+	static float rot = 0.f;
 	rot += 0.01f;
 	updateMVP(rot);
 	auto* cbRes = m_mvp.allocation->GetResource();
@@ -951,7 +1227,7 @@ void glRemix::glRemixRenderer::render()
         cmd_list->IASetIndexBuffer(&ibv);
 
         const UINT indexCount = ibv.SizeInBytes / 4u;
-        cmd_list->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
+        //cmd_list->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
     }
 
     // Render ImGui

@@ -54,8 +54,6 @@ namespace glRemix
 		dx::D3D12Buffer m_mvp{};
 
 		IPCProtocol m_ipc;
-		
-		float rot = 0;
 
 
 	protected:
