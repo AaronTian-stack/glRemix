@@ -410,9 +410,26 @@ bool D3D12Context::create_descriptor_heap(const D3D12_DESCRIPTOR_HEAP_DESC& desc
                                           const char* debug_name) const
 {
 	assert(heap);
-	const auto result = heap->create(m_device.Get(), desc);
-	set_debug_name(heap->m_heap.Get(), debug_name);
-	return result;
+	if (heap->create(m_device.Get(), desc))
+	{
+		set_debug_name(heap->m_heap.Get(), debug_name);
+		return true;
+	}
+	return false;
+}
+
+void D3D12Context::set_descriptor_heap(ID3D12GraphicsCommandList7* cmd_list, const D3D12DescriptorHeap& heap) const
+{
+	assert(cmd_list);
+	ID3D12DescriptorHeap* heaps[] = { heap.m_heap.Get() };
+	cmd_list->SetDescriptorHeaps(1, heaps);
+}
+
+void D3D12Context::set_descriptor_heaps(ID3D12GraphicsCommandList7* cmd_list, const D3D12DescriptorHeap& cbv_srv_uav_heap, const D3D12DescriptorHeap& sampler_heap) const
+{
+	assert(cmd_list);
+	ID3D12DescriptorHeap* heaps[] = { cbv_srv_uav_heap.m_heap.Get(), sampler_heap.m_heap.Get() };
+	cmd_list->SetDescriptorHeaps(2, heaps);
 }
 
 bool D3D12Context::create_texture(const D3D12_RESOURCE_DESC1& desc, D3D12MA::Allocation** allocation,
@@ -1221,6 +1238,67 @@ void D3D12Context::destroy_imgui()
 	ImGui::DestroyContext();
 	assert(m_imgui_font_desc.heap);
 	m_imgui_srv_heap.deallocate(&m_imgui_font_desc);
+}
+
+void D3D12Context::create_constant_buffer_view(const D3D12Buffer* buffer, const D3D12DescriptorTable* descriptor_table, UINT descriptor_index) const
+{
+	assert(buffer);
+	assert(descriptor_table);
+	
+	D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
+	descriptor_table->heap->get_cpu_descriptor(&cpu_handle, descriptor_table->offset + descriptor_index);
+
+	D3D12_CONSTANT_BUFFER_VIEW_DESC cbv_desc
+	{
+		.BufferLocation = buffer->allocation->GetResource()->GetGPUVirtualAddress(),
+		.SizeInBytes = static_cast<UINT>(buffer->desc.size),
+	};
+
+	m_device->CreateConstantBufferView(&cbv_desc, cpu_handle);
+}
+
+void D3D12Context::create_shader_resource_view_acceleration_structure(ID3D12Resource* tlas, const D3D12DescriptorTable* descriptor_table, UINT descriptor_index) const
+{
+	assert(tlas);
+	assert(descriptor_table);
+
+	D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
+	descriptor_table->heap->get_cpu_descriptor(&cpu_handle, descriptor_table->offset + descriptor_index);
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc
+	{
+		.Format = DXGI_FORMAT_UNKNOWN,
+		.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE,
+		.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+		.RaytracingAccelerationStructure
+		{
+			.Location = tlas->GetGPUVirtualAddress(),
+		},
+	};
+
+	m_device->CreateShaderResourceView(nullptr, &srv_desc, cpu_handle);
+}
+
+void D3D12Context::create_unordered_access_view_texture(D3D12MA::Allocation* texture, DXGI_FORMAT format, const D3D12DescriptorTable* descriptor_table, UINT descriptor_index) const
+{
+	assert(texture);
+	assert(descriptor_table);
+
+	D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
+	descriptor_table->heap->get_cpu_descriptor(&cpu_handle, descriptor_table->offset + descriptor_index);
+
+	D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc
+	{
+		.Format = format,
+		.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D,
+		.Texture2D
+		{
+			.MipSlice = 0,
+			.PlaneSlice = 0,
+		},
+	};
+
+	m_device->CreateUnorderedAccessView(texture->GetResource(), nullptr, &uav_desc, cpu_handle);
 }
 
 D3D12Context::~D3D12Context()
