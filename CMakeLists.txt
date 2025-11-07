@@ -3,6 +3,9 @@ project(glRemix-Workspace)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set_property(GLOBAL PROPERTY CXX_STANDARD 20)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT WIN32)
 	message(FATAL_ERROR "glRemix is Windows only")
@@ -94,3 +97,5 @@ if(GLREMIX_BUILD_SHIM_X64)
 endif()
 
 add_subdirectory(glRemixRenderer)
+
+include("${REPO_ROOT}/cmake/shim_helper.cmake")
