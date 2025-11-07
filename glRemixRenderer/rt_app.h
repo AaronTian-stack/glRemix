@@ -76,16 +76,20 @@ namespace glRemix
 		void render() override;
 		void destroy() override;
 
-		void readGLStream();
-		void readGeometry(std::vector<uint8_t>& ipcBuf,
+		void read_gl_command_stream();
+		void read_geometry(std::vector<uint8_t>& ipcBuf,
                                             size_t& offset,
                                             std::vector<Vertex>& vertices,
                                             std::vector<uint32_t>& indices,
                                             glRemix::GLTopology topology,
                                             uint32_t bytesRead,
 											ComPtr<ID3D12GraphicsCommandList7> cmd_list);
+
+		// acceleration structure builders
+		int build_mesh_blas(uint32_t vertex_count, uint32_t vertex_offset, uint32_t index_count, uint32_t index_offset, ComPtr<ID3D12GraphicsCommandList7> cmd_list);
+		void build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd_list);
+		
 		void updateMVP(float rot);
-		int buildMeshBLAS(uint32_t vertex_count, uint32_t vertex_offset, uint32_t index_count, uint32_t index_offset, ComPtr<ID3D12GraphicsCommandList7> cmd_list);
 
 	public:
 		glRemixRenderer() = default;
