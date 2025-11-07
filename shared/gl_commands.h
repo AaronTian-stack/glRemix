@@ -7,118 +7,263 @@
 
 namespace glRemix
 {
-    enum class GLCommandType : uint32_t
-    {
-        // Basic OpenGL 1.x commands
-        GL_BEGIN = 1,
-        GL_END,
-        GL_VERTEX2F,
-        GL_VERTEX3F,
-        GL_COLOR3F,
-        GL_COLOR4F,
-        GL_NORMAL3F,
-        GL_TEXCOORD2F,
+enum class GLCommandType : uint32_t {
+    // Basic OpenGL 1.x commands
+    GLCMD_BEGIN = 1,
+    GLCMD_END,
+    GLCMD_VERTEX2F,
+    GLCMD_VERTEX3F,
+    GLCMD_COLOR3F,
+    GLCMD_COLOR4F,
+    GLCMD_NORMAL3F,
+    GLCMD_TEXCOORD2F,
 
-        // Matrix operations
-        GL_MATRIX_MODE,
-        GL_LOAD_IDENTITY,
-        GL_LOAD_MATRIX,
-        GL_MULT_MATRIX,
-        GL_PUSH_MATRIX,
-        GL_POP_MATRIX,
-        GL_TRANSLATE,
-        GL_ROTATE,
-        GL_SCALE,
+    // Matrix operations
+    GLCMD_MATRIX_MODE,
+    GLCMD_LOAD_IDENTITY,
+    GLCMD_LOAD_MATRIX,
+    GLCMD_MULT_MATRIX,
+    GLCMD_PUSH_MATRIX,
+    GLCMD_POP_MATRIX,
+    GLCMD_TRANSLATE,
+    GLCMD_ROTATE,
+    GLCMD_SCALE,
 
-        // Texture operations
-        GL_BIND_TEXTURE,
-        GL_GEN_TEXTURES,
-        GL_DELETE_TEXTURES,
-        GL_TEX_IMAGE_2D,
-        GL_TEX_PARAMETER,
+    // Texture operations
+    GLCMD_BIND_TEXTURE,
+    GLCMD_GEN_TEXTURES,
+    GLCMD_DELETE_TEXTURES,
+    GLCMD_TEX_IMAGE_2D,
+    GLCMD_TEX_PARAMETER,
 
-        // Lighting
-        GL_ENABLE,
-        GL_DISABLE,
-        GL_LIGHT,
-        GL_LIGHTF,
-        GL_LIGHTFV,
-        GL_MATERIAL,
-        GL_MATERIALF,
-        GL_MATERIALFV,
+    // Lighting
+    GLCMD_ENABLE,
+    GLCMD_DISABLE,
+    GLCMD_LIGHT,
+    GLCMD_LIGHTF,
+    GLCMD_LIGHTFV,
+    GLCMD_MATERIAL,
+    GLCMD_MATERIALF,
+    GLCMD_MATERIALFV,
 
-        // Buffer operations
-        GL_CLEAR,
-        GL_CLEAR_COLOR,
-        GL_FLUSH,
-        GL_FINISH,
+    // Buffer operations
+    GLCMD_CLEAR,
+    GLCMD_CLEAR_COLOR,
+    GLCMD_FLUSH,
+    GLCMD_FINISH,
 
-        // Viewport and projection
-        GL_VIEWPORT,
-        GL_ORTHO,
-        GL_FRUSTUM,
-        GL_PERSPECTIVE,
+    // Viewport and projection
+    GLCMD_VIEWPORT,
+    GLCMD_ORTHO,
+    GLCMD_FRUSTUM,
+    GLCMD_PERSPECTIVE,
 
-        // Other
-        GL_SWAP_BUFFERS,
-        GL_SHUTDOWN
-    };
+    // Other
+    GLCMD_SWAP_BUFFERS,
+    GLCMD_SHUTDOWN
+};
 
-    // Name *Unifs for clear association
-    // Header for all commands
-    struct GLCommandUnifs
-    {
-        GLCommandType type;
-        uint32_t dataSize;
-    };
+struct GLVec2f
+{
+    float x, y;
+};
 
-    // Specific command structures
-    struct GLBeginCommand
-    {
-        uint32_t mode;  // GL_TRIANGLES, GL_QUADS, etc.
-    };
+struct GLVec3f
+{
+    float x, y, z;
+};
 
-    struct GLEndCommand {
-        uint32_t reserved = 0; // to maintain alignment. think of as padding GPUBuffers
-    };
+struct GLVec4f
+{
+    float x, y, z, w;
+};
 
-    // TODO: Compress these?
+struct GLVec3d
+{
+    double x, y, z;
+};
 
-    // NOTE FOR PERSON DOING SHIM/IPC:
-	// It is not strictly required to have separate structs for each command, but it may make serialization/deserialization more clear.
-	// You could just use the DirectXMath XM types (storage) for vectors of 2/3/4 floats/ints/uints etc.
-    // If you choose to go that route, you can delete the below structs.
+struct GLVec4d
+{
+    double x, y, z, w;
+};
 
-    struct GLVertex3fCommand
-    {
-        float x, y, z;
-    };
+struct GLEmptyCommand
+{
+    uint32_t reserved = 0;  // to maintain alignment. think of as padding GPUBuffers
+};
 
-    struct GLColor4fCommand
-    {
-        float r, g, b, a;
-    };
+// Name *Unifs for clear association
+// Header for all commands
+struct GLCommandUnifs
+{
+    GLCommandType type;
+    uint32_t dataSize;
+};
 
-    struct GLNormal3fCommand
-    {
-        float nx, ny, nz;
-    };
+// Specific command structures
+struct GLBeginCommand
+{
+    uint32_t mode;  // GLCMD_TRIANGLES, GLCMD_QUADS, etc.
+};
 
-    struct GLTexCoord2fCommand
-    {
-        float s, t;
-    };
+using GLEndCommand = GLEmptyCommand;
 
-    struct GLViewportCommand
-    {
-        int x, y;
-        int width, height;
-    };
+using GLVertex2fCommand = GLVec2f;
+using GLVertex3fCommand = GLVec3f;
+using GLColor3fCommand = GLVec3f;
+using GLColor4fCommand = GLVec4f;
+using GLNormal3fCommand = GLVec3f;
+using GLTexCoord2fCommand = GLVec2f;
 
-    struct GLClearColorCommand
-    {
-        float r, g, b, a;
-    };
+// Matrix operations
+struct GLMatrixModeCommand
+{
+    uint32_t mode;
+};
 
-    // TODO: Add more structs as needed
-}
+struct GLLoadMatrixCommand
+{
+    float m[16];
+};
+
+struct GLMultMatrixCommand
+{
+    float m[16];
+};
+
+using GLLoadIdentityCommand = GLEmptyCommand;
+using GLPushMatrixCommand = GLEmptyCommand;
+using GLPopMatrixCommand = GLEmptyCommand;
+
+struct GLTranslateCommand
+{
+    GLVec3f t;
+};
+
+struct GLRotateCommand
+{
+    float angle;
+    GLVec3f axis;
+};
+
+struct GLScaleCommand
+{
+    GLVec3f s;
+};
+
+// Texture operations
+struct GLBindTextureCommand
+{
+    uint32_t target;
+    uint32_t texture;
+};
+
+struct GLGenTexturesCommand
+{
+    uint32_t n;
+};
+
+struct GLDeleteTexturesCommand
+{
+    uint32_t n;
+};
+
+struct GLTexImage2DCommand
+{
+    uint32_t target;
+    int32_t level;
+    int32_t internalFormat;
+    uint32_t width;
+    uint32_t height;
+    int32_t border;
+    uint32_t format;
+    uint32_t type;
+    uint64_t dataPtr;  // optional pointer for serialization
+};
+
+struct GLTexParameterCommand
+{
+    uint32_t target;
+    uint32_t pname;
+    float param;
+};
+
+// Lighting
+struct GLEnableCommand
+{
+    uint32_t cap;
+};
+
+struct GLDisableCommand
+{
+    uint32_t cap;
+};
+
+struct GLLightCommand
+{
+    uint32_t light;
+    uint32_t pname;
+    float param;
+};
+
+struct GLLightfvCommand
+{
+    uint32_t light;
+    uint32_t pname;
+    GLVec4f params;
+};
+
+struct GLMaterialCommand
+{
+    uint32_t face;
+    uint32_t pname;
+    float param;
+};
+
+struct GLMaterialfvCommand
+{
+    uint32_t face;
+    uint32_t pname;
+    GLVec4f params;
+};
+
+// Buffer ops
+struct GLClearCommand
+{
+    uint32_t mask;
+};
+
+struct GLClearColorCommand
+{
+    GLVec4f color;
+};
+
+using GLFlushCommand = GLEmptyCommand;
+using GLFinishCommand = GLEmptyCommand;
+
+// Viewport & projection
+struct GLViewportCommand
+{
+    int32_t x, y, width, height;
+};
+
+struct GLOrthoCommand
+{
+    double left, right, bottom, top, zNear, zFar;
+};
+
+struct GLFrustumCommand
+{
+    double left, right, bottom, top, zNear, zFar;
+};
+
+struct GLPerspectiveCommand
+{
+    double fovY, aspect, zNear, zFar;
+};
+
+// Other
+using GLSwapBuffersCommand = GLEmptyCommand;
+using GLShutdownCommand = GLEmptyCommand;
+}  // namespace glRemix
