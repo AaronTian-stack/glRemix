@@ -15,6 +15,18 @@ namespace glRemix
             std::array<float, 3> color;
         };
 
+		struct MeshRecord
+		{
+			uint32_t meshId; // will eventually be hashed
+			uint32_t vertexOffset; // offset into vertex atlas
+			uint32_t vertexCount;
+			uint32_t indexOffset; // offset into index atlas
+			uint32_t indexCount; // number of indices belonging to this mesh
+			uint32_t blasID;
+			uint32_t MVID; // index into model view array
+			uint32_t texId;
+		};
+
 		struct alignas(16) MVP
 		{
             DirectX::XMFLOAT4X4 model;
@@ -55,6 +67,9 @@ namespace glRemix
 
 		IPCProtocol m_ipc;
 
+		// mesh resources
+		std::vector<MeshRecord> m_meshes;
+		std::vector<dx::D3D12Buffer> m_blas_buffers;
 
 	protected:
 		void create() override;
@@ -67,8 +82,10 @@ namespace glRemix
                                             std::vector<Vertex>& vertices,
                                             std::vector<uint32_t>& indices,
                                             glRemix::GLTopology topology,
-                                            uint32_t bytesRead);
+                                            uint32_t bytesRead,
+											ComPtr<ID3D12GraphicsCommandList7> cmd_list);
 		void updateMVP(float rot);
+		int buildMeshBLAS(uint32_t vertex_count, uint32_t vertex_offset, uint32_t index_count, uint32_t index_offset, ComPtr<ID3D12GraphicsCommandList7> cmd_list);
 
 	public:
 		glRemixRenderer() = default;

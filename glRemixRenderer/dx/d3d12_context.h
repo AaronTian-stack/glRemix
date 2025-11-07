@@ -108,6 +108,7 @@ namespace glRemix::dx
 
 		// TODO: Similar function for AABB buffers? Need it for area lights.
 		D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC get_buffer_rt_description(D3D12Buffer* vertex_buffer, D3D12Buffer* index_buffer);
+		D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC get_buffer_rt_description_subrange(D3D12Buffer* vertex_buffer, uint32_t vertex_count, uint32_t vertex_offset, D3D12Buffer* index_buffer, uint32_t index_count, uint32_t index_offset);
 		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO get_acceleration_structure_prebuild_info(
 			const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& desc) const;
 		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC get_raytracing_acceleration_structure(
