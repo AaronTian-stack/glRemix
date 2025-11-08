@@ -389,10 +389,9 @@ bool D3D12Context::create_buffer(const BufferDesc& desc, D3D12Buffer* buffer, co
 
 	set_debug_name(buffer->allocation.Get()->GetResource(), debug_name);
 
-	// Initialize barrier tracking state
 	initialize_tracked_resource(
         &buffer->barrier_state,
-        buffer->get_resource(),
+        buffer->allocation->GetResource(),
         false, // is_texture
         D3D12_BARRIER_LAYOUT_UNDEFINED,
         nullptr,
@@ -515,17 +514,19 @@ bool D3D12Context::create_texture(const TextureDesc& desc, D3D12Texture* texture
 	set_debug_name(texture->allocation->GetResource(), debug_name);
 
 	// Initialize barrier tracking state
-	D3D12_BARRIER_SUBRESOURCE_RANGE subresource_range{};
-	subresource_range.IndexOrFirstMipLevel = 0;
-	subresource_range.NumMipLevels = desc.mip_levels;
-	subresource_range.FirstArraySlice = 0;
-	subresource_range.NumArraySlices = desc.depth_or_array_size;
-	subresource_range.FirstPlane = 0;
-	subresource_range.NumPlanes = 1;
+	D3D12_BARRIER_SUBRESOURCE_RANGE subresource_range
+    {
+        .IndexOrFirstMipLevel = 0,
+        .NumMipLevels = desc.mip_levels,
+        .FirstArraySlice = 0,
+        .NumArraySlices = desc.depth_or_array_size,
+        .FirstPlane = 0,
+        .NumPlanes = 1,
+    };
 
 	initialize_tracked_resource(
         &texture->barrier_state,
-        texture->get_resource(),
+        texture->allocation->GetResource(),
         true, // is_texture
         desc.initial_layout,
         &subresource_range,
@@ -648,7 +649,7 @@ void D3D12Context::copy_texture_to_swapchain(ID3D12GraphicsCommandList7* cmd_lis
 
     D3D12_TEXTURE_COPY_LOCATION src
     {
-        .pResource = texture.get_resource(),
+        .pResource = texture.allocation->GetResource(),
         .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
         .SubresourceIndex = 0,
     };
@@ -1213,10 +1214,10 @@ D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC D3D12Context::get_buffer_rt_description
 		.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
 		.IndexCount = index_count,
 		.VertexCount = static_cast<UINT>(count),
-		.IndexBuffer = index_buffer ? index_buffer->allocation.Get()->GetResource()->GetGPUVirtualAddress() : 0,
+		.IndexBuffer = index_buffer ? index_buffer->get_gpu_address() : 0,
 		.VertexBuffer =
 		{
-			.StartAddress = vertex_buffer->allocation.Get()->GetResource()->GetGPUVirtualAddress(),
+			.StartAddress = vertex_buffer->get_gpu_address(),
 			.StrideInBytes = vertex_buffer->desc.stride,
 		},
 	};
@@ -1237,23 +1238,23 @@ D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC D3D12Context::get_raytracing_
 	assert(scratch);
 	return
 	{
-		.DestAccelerationStructureData = out->allocation->GetResource()->GetGPUVirtualAddress(),
+		.DestAccelerationStructureData = out->get_gpu_address(),
 		.Inputs = desc,
-		.SourceAccelerationStructureData = in ? in->allocation->GetResource()->GetGPUVirtualAddress() : NULL,
-		.ScratchAccelerationStructureData = scratch->allocation->GetResource()->GetGPUVirtualAddress(),
+		.SourceAccelerationStructureData = in ? in->get_gpu_address() : NULL,
+		.ScratchAccelerationStructureData = scratch->get_gpu_address(),
 	};
 }
 
-void D3D12Context::mark_use(D3D12Buffer* buffer, const Usage use_kind)
+bool D3D12Context::mark_use(D3D12Buffer* buffer, const Usage use_kind)
 {
 	assert(buffer);
-    dx::mark_use(buffer->barrier_state, use_kind);
+    return dx::mark_use(buffer->barrier_state, use_kind);
 }
 
-void D3D12Context::mark_use(D3D12Texture* texture, const Usage use_kind)
+bool D3D12Context::mark_use(D3D12Texture* texture, const Usage use_kind)
 {
 	assert(texture);
-    dx::mark_use(texture->barrier_state, use_kind);
+    return dx::mark_use(texture->barrier_state, use_kind);
 }
 
 void D3D12Context::emit_barriers(ID3D12GraphicsCommandList7* cmd_list,

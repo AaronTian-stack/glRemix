@@ -17,6 +17,7 @@ namespace
 
     // Collapse barriers into a smaller subset of possible combinations
     // Kind of like https://github.com/Tobski/simple_vulkan_synchronization
+    // These need to be in the correct order as the enum
     constexpr std::array use_definitions =
     {
         // SRV uses
@@ -141,17 +142,23 @@ namespace
         return false;
     }
 
-    D3D12_BARRIER_LAYOUT choose_layout(D3D12_BARRIER_LAYOUT current_layout,
-                                       D3D12_BARRIER_LAYOUT candidate)
+    bool choose_layout(D3D12_BARRIER_LAYOUT current_layout,
+                       D3D12_BARRIER_LAYOUT candidate,
+                       D3D12_BARRIER_LAYOUT* out)
     {
+        assert(out);
         if (candidate == D3D12_BARRIER_LAYOUT_UNDEFINED)
         {
-            return current_layout;
+            *out = current_layout;
+            return true;
         }
 
-        assert(are_layouts_compatible(current_layout, candidate));
-
-        return candidate;
+        if (!are_layouts_compatible(current_layout, candidate))
+        {
+            return false;
+        }
+        *out = candidate;
+        return true;
     }
 
 }
@@ -207,9 +214,9 @@ namespace
         }
     }
 
-    void mark_use(Resource& resource, Usage use_kind)
+    bool mark_use(Resource& resource, const Usage usage)
     {
-        const UseDefinition& definition = lookup_use_definition(use_kind);
+        const UseDefinition& definition = lookup_use_definition(usage);
 
         if (!resource.touched)
         {
@@ -227,9 +234,15 @@ namespace
             resource.next_sync |= definition.sync;
             if (resource.is_texture)
             {
-                resource.next_layout = choose_layout(resource.next_layout, definition.layout);
+                D3D12_BARRIER_LAYOUT layout;
+                if (!choose_layout(resource.next_layout, definition.layout, &layout))
+                {
+                    return false;
+                }
+                resource.next_layout = layout;
             }
         }
+        return true;
     }
 
     void emit_barriers(

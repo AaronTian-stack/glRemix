@@ -71,7 +71,7 @@ namespace glRemix::dx
         uint64_t explicit_size_in_bytes = 0
         );
 
-    void mark_use(Resource& resource, Usage use_kind);
+    bool mark_use(Resource& resource, Usage usage);
 
     void emit_barriers(
         ID3D12GraphicsCommandList7* command_list,

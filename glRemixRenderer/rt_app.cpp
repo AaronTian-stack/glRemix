@@ -677,7 +677,7 @@ void glRemix::glRemixRenderer::render()
 		m_context.unmap_buffer(raygen_cb_ptr);
 
 		// Mark UAV texture for raytracing use and emit barrier
-		m_context.mark_use(&m_uav_render_target, dx::Usage::UAV_RT);
+        THROW_IF_FALSE(m_context.mark_use(&m_uav_render_target, dx::Usage::UAV_RT));
 		std::array rt_textures = { &m_uav_render_target };
 		m_context.emit_barriers(cmd_list.Get(), nullptr, 0, rt_textures.data(), rt_textures.size());
 
@@ -735,7 +735,7 @@ void glRemix::glRemixRenderer::render()
 		};
 
 		// Transition UAV texture from UAV to copy source
-		m_context.mark_use(&m_uav_render_target, dx::Usage::COPY_SRC);
+		THROW_IF_FALSE(m_context.mark_use(&m_uav_render_target, dx::Usage::COPY_SRC));
 		std::array copy_textures = { &m_uav_render_target };
 		m_context.emit_barriers(cmd_list.Get(), nullptr, 0, copy_textures.data(), copy_textures.size());
 
@@ -782,7 +782,7 @@ void glRemix::glRemixRenderer::render()
 		cmd_list->Barrier(1, &swap_rtv_barrier_group);
 
 		// Transition UAV back to UAV layout for next frame
-		m_context.mark_use(&m_uav_render_target, dx::Usage::UAV_RT);
+	    THROW_IF_FALSE(m_context.mark_use(&m_uav_render_target, dx::Usage::UAV_RT));
 		std::array post_copy_textures = { &m_uav_render_target };
 		m_context.emit_barriers(cmd_list.Get(), nullptr, 0, post_copy_textures.data(), post_copy_textures.size());
 	}
@@ -793,7 +793,7 @@ void glRemix::glRemixRenderer::render()
 	cmd_list->OMSetRenderTargets(1, &swapchain_rtv, FALSE, nullptr);
 
 	// This is where rasterization could go
-	if (m_vertex_buffer.get_resource() && m_index_buffer.get_resource())
+	if (m_vertex_buffer.desc.size > 0 && m_index_buffer.desc.size > 0)
 	{
         cmd_list->SetGraphicsRootSignature(m_root_signature.Get());
         cmd_list->SetPipelineState(m_raster_pipeline.Get());

@@ -123,8 +123,8 @@ namespace glRemix::dx
 		) const;
 
 
-        void mark_use(D3D12Buffer* buffer, Usage use_kind);
-        void mark_use(D3D12Texture* texture, Usage use_kind);
+        bool mark_use(D3D12Buffer* buffer, Usage use_kind);
+        bool mark_use(D3D12Texture* texture, Usage use_kind);
 
         void emit_barriers(ID3D12GraphicsCommandList7* cmd_list,
                            D3D12Buffer* const* buffers,

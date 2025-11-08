@@ -9,6 +9,19 @@ using Microsoft::WRL::ComPtr;
 
 namespace glRemix::dx
 {
+    struct D3D12Resource
+    {
+    protected:
+        Resource barrier_state{};
+        ComPtr<D3D12MA::Allocation> allocation{};
+    public:
+        D3D12_GPU_VIRTUAL_ADDRESS get_gpu_address() const
+        {
+            assert(allocation);
+            return allocation.Get()->GetResource()->GetGPUVirtualAddress();
+        }
+    };
+
     // Bitfield
     enum BufferVisibility : uint8_t
     {
@@ -26,27 +39,10 @@ namespace glRemix::dx
         bool acceleration_structure = false;
     };
 
-    struct D3D12Buffer
+    struct D3D12Buffer : D3D12Resource
     {
         BufferDesc desc;
-
-        // TODO: Delete these
-        D3D12_GPU_VIRTUAL_ADDRESS get_gpu_address() const
-        {
-            assert(allocation);
-            return allocation.Get()->GetResource()->GetGPUVirtualAddress();
-        }
-        ID3D12Resource* get_resource() const
-        {
-            if (allocation)
-            return allocation.Get()->GetResource();
-            return nullptr;
-        }
-
-    private:
-        Resource barrier_state;
-        ComPtr<D3D12MA::Allocation> allocation;
-        friend class D3D12Context;
+        friend class D3D12Context; // It would be better if the internals were just exposed as a void pointer or something
     };
 
 }
