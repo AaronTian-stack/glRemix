@@ -19,6 +19,7 @@ set(RENDERER_SOURCES
     "${dx_dir}/d3d12_context.cpp"
     "${dx_dir}/d3d12_descriptor_heap.cpp"
     "${dx_dir}/d3d12_pipeline_types.cpp"
+    "${dx_dir}/d3d12_barrier.cpp"
 
     "application.cpp"
     "rt_app.cpp"
@@ -35,6 +36,7 @@ set(RENDERER_HEADERS
     "${dx_dir}/d3d12_pipeline_types.h"
     "${dx_dir}/d3d12_buffer.h"
     "${dx_dir}/d3d12_texture.h"
+    "${dx_dir}/d3d12_barrier.h"
 
     "constants.h"
     "helper.h"

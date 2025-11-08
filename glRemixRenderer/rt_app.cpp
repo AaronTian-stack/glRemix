@@ -3,6 +3,9 @@
 #include "constants.h"
 #include "helper.h"
 #include "imgui.h"
+#include "dx/d3d12_barrier.h"
+#include <cstdio>
+#include <cmath>
 
 void glRemix::glRemixRenderer::create()
 {
@@ -10,6 +13,23 @@ void glRemix::glRemixRenderer::create()
 	{
 		THROW_IF_FALSE(m_context.create_command_allocator(&m_cmd_pools[i], &m_gfx_queue, "frame command allocator"));
 	}
+
+	//{
+ //       dx::Resource texture{};
+ //       initialize_tracked_resource(texture, nullptr, true, D3D12_BARRIER_LAYOUT_COMMON, nullptr, 0);
+
+ //       std::vector<dx::BarrierLogEvent> log;
+ //       std::array batch{&texture};
+
+ //       mark_use(texture, dx::Usage::SRV_PIXEL);
+ //       emit_barriers(nullptr, batch.data(), batch.size(), &log);
+
+ //       mark_use(texture, dx::Usage::UAV_COMPUTE);
+ //       emit_barriers(nullptr, batch.data(), batch.size(), &log);
+
+ //       mark_use(texture, dx::Usage::SRV_PIXEL);
+ //       emit_barriers(nullptr, batch.data(), batch.size(), &log);
+	//}
 
 	// Create raster root signature
 	{
@@ -30,14 +50,6 @@ void glRemix::glRemixRenderer::create()
 
 		THROW_IF_FALSE(m_context.create_root_signature(root_sig_desc, m_root_signature.ReleaseAndGetAddressOf(), "triangle root signature"));
 	}
-	// create mvp buffer
-	dx::BufferDesc mvpDesc
-	{
-		.size = sizeof(MVP),
-		.stride = 0,
-		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-	};
-	THROW_IF_FALSE(m_context.create_buffer(mvpDesc, &m_mvp, "MVP buffer"));
 
 	// Compile dummy raster pipeline for testing
 	ComPtr<IDxcBlobEncoding> vertex_shader;
@@ -228,30 +240,24 @@ void glRemix::glRemixRenderer::create()
 	// Create UAV render target
 	XMUINT2 win_dims{};
 	THROW_IF_FALSE(m_context.get_window_dimensions(&win_dims));
-	
-	D3D12_RESOURCE_DESC1 uav_rt_desc
-	{
-		.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-		.Width = win_dims.x,
-		.Height = win_dims.y,
-		.DepthOrArraySize = 1,
-		.MipLevels = 1,
-		.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
-		.SampleDesc
-		{
-			.Count = 1,
-			.Quality = 0,
-		},
-		.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN,
-		.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
-	};
 
-	dx::TextureCreateDesc uav_rt_create_desc
-	{
-		uav_rt_create_desc.init_layout = D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS,
-	};
+	dx::TextureDesc uav_rt_desc
+    {
+        .width = win_dims.x,
+        .height = win_dims.y,
+        .depth_or_array_size = 1,
+        .mip_levels = 1,
+        .format = DXGI_FORMAT_R8G8B8A8_UNORM,
+        .dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+        .is_render_target = false,
+    };
 
-	THROW_IF_FALSE(m_context.create_texture(uav_rt_desc, m_uav_render_target.ReleaseAndGetAddressOf(), uav_rt_create_desc, "UAV and RT texture"));
+    THROW_IF_FALSE(
+        m_context.create_texture(uav_rt_desc, 
+			D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS, 
+			&m_uav_render_target, 
+			nullptr, 
+			"UAV and RT texture"));
 
 	// Build BLAS here for now, but renderer will construct them dynamically for new geometry in render loop
 	D3D12_RAYTRACING_GEOMETRY_DESC tri_desc
@@ -301,61 +307,24 @@ void glRemix::glRemixRenderer::create()
 	ComPtr<ID3D12GraphicsCommandList7> cmd_list;
 	THROW_IF_FALSE(m_context.create_command_list(cmd_list.ReleaseAndGetAddressOf(), m_cmd_pools[get_frame_index()]));
 
-	// Transition scratch space to UAV format
-	D3D12_BUFFER_BARRIER scratch_space_uav
-	{
-		.SyncBefore = D3D12_BARRIER_SYNC_NONE,
-		.SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-		.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
-		.AccessAfter = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
-		.pResource = m_scratch_space.allocation->GetResource(),
-		.Offset = 0,
-		.Size = UINT64_MAX,
-	};
+	// Mark resources as needing UAV access for build
+	m_context.mark_use(&m_scratch_space, dx::Usage::UAV_COMPUTE);
+	m_context.mark_use(&m_blas_buffer, dx::Usage::AS_WRITE);
 
-	D3D12_BUFFER_BARRIER blas_buffer_barrier
-	{
-		.SyncBefore = D3D12_BARRIER_SYNC_NONE,
-		.SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-		.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
-		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
-		.pResource = m_blas_buffer.allocation->GetResource(),
-		.Offset = 0,
-		.Size = UINT64_MAX,
-	};
-
-	std::array buffer_barriers{ scratch_space_uav, blas_buffer_barrier };
-
-	D3D12_BARRIER_GROUP barrier_group0
-	{
-		.Type = D3D12_BARRIER_TYPE_BUFFER,
-		.NumBarriers = static_cast<UINT>(buffer_barriers.size()),
-		.pBufferBarriers = buffer_barriers.data(),
-	};
-
-	cmd_list->Barrier(1, &barrier_group0);
+	// Emit barriers for BLAS build
+	std::array build_resources = { &m_scratch_space, &m_blas_buffer };
+    m_context.emit_barriers(cmd_list.Get(), build_resources.data(), build_resources.size(), nullptr, 0);
 
 	cmd_list->BuildRaytracingAccelerationStructure(&blas_build_desc, 0, nullptr);
 
-	// TODO: It would be convenient if resources tracked their current state for barriers
-	// Transition BLAS to read state
-	blas_buffer_barrier =
-	{
-		.SyncBefore = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-		.SyncAfter = D3D12_BARRIER_SYNC_RAYTRACING,
-		.AccessBefore = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
-		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ,
-		.pResource = m_blas_buffer.allocation->GetResource(),
-		.Offset = 0,
-		.Size = UINT64_MAX,
-	};
-	D3D12_BARRIER_GROUP barrier_group_read
-	{
-		.Type = D3D12_BARRIER_TYPE_BUFFER,
-		.NumBarriers = 1,
-		.pBufferBarriers = &blas_buffer_barrier,
-	};
-	cmd_list->Barrier(1, &barrier_group_read);
+	// Transition BLAS to read state for use in TLAS
+	m_context.mark_use(&m_blas_buffer, dx::Usage::AS_READ);
+	std::array blas_read_resources = { &m_blas_buffer };
+    m_context.emit_barriers(cmd_list.Get(),
+                            blas_read_resources.data(),
+                            blas_read_resources.size(),
+                            nullptr,
+                            0);
 
 	// Instance of the BLAS for TLAS
 	D3D12_RAYTRACING_INSTANCE_DESC instance_desc
@@ -371,7 +340,7 @@ void glRemix::glRemixRenderer::create()
 		.InstanceMask = 0xFF,
 		.InstanceContributionToHitGroupIndex = 0,
 		.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE,
-		.AccelerationStructure = m_blas_buffer.allocation->GetResource()->GetGPUVirtualAddress(),
+		.AccelerationStructure = m_blas_buffer.get_gpu_address(),
 	};
 
 	dx::BufferDesc instance_buffer_desc
@@ -392,7 +361,7 @@ void glRemix::glRemixRenderer::create()
 		// Lots of options here, probably want to use different ones, especially the update one
 		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
 		.NumDescs = 1,
-		.InstanceDescs = m_tlas.instance.allocation.Get()->GetResource()->GetGPUVirtualAddress(),
+		.InstanceDescs = m_tlas.instance.get_gpu_address(),
 	};
 
 	const auto tlas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(tlas_desc);
@@ -406,47 +375,27 @@ void glRemix::glRemixRenderer::create()
 	};
 	THROW_IF_FALSE(m_context.create_buffer(tlas_buffer_desc, &m_tlas.buffer, "TLAS buffer"));
 
-	D3D12_BUFFER_BARRIER tlas_buffer_barrier
-	{
-		.SyncBefore = D3D12_BARRIER_SYNC_NONE,
-		.SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-		.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
-		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
-		.pResource = m_tlas.buffer.allocation->GetResource(),
-		.Offset = 0,
-		.Size = UINT64_MAX,
-	};
-	D3D12_BARRIER_GROUP barrier_group_tlas
-	{
-		.Type = D3D12_BARRIER_TYPE_BUFFER,
-		.NumBarriers = 1,
-		.pBufferBarriers = &tlas_buffer_barrier,
-	};
-	cmd_list->Barrier(1, &barrier_group_tlas);
+	// Mark TLAS for build (write access)
+	m_context.mark_use(&m_tlas.buffer, dx::Usage::AS_WRITE);
+	std::array tlas_write_resources = { &m_tlas.buffer };
+    m_context.emit_barriers(cmd_list.Get(),
+                            tlas_write_resources.data(),
+                            tlas_write_resources.size(),
+                            nullptr,
+                            0);
 
 	const auto tlas_build_desc = m_context.get_raytracing_acceleration_structure(tlas_desc, &m_tlas.buffer, nullptr, &m_scratch_space);
 
 	cmd_list->BuildRaytracingAccelerationStructure(&tlas_build_desc, 0, nullptr);
 
-	// Transition TLAS to read state after build
-	D3D12_BUFFER_BARRIER tlas_buffer_barrier_read
-	{
-		.SyncBefore = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-		.SyncAfter = D3D12_BARRIER_SYNC_RAYTRACING,
-		.AccessBefore = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
-		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ,
-		.pResource = m_tlas.buffer.allocation->GetResource(),
-		.Offset = 0,
-		.Size = UINT64_MAX,
-	};
-
-	D3D12_BARRIER_GROUP tlas_barrier_group_read
-	{
-		.Type = D3D12_BARRIER_TYPE_BUFFER,
-		.NumBarriers = 1,
-		.pBufferBarriers = &tlas_buffer_barrier_read,
-	};
-	cmd_list->Barrier(1, &tlas_barrier_group_read);
+	// Transition TLAS to read state for raytracing
+	m_context.mark_use(&m_tlas.buffer, dx::Usage::AS_READ);
+	std::array tlas_read_resources = { &m_tlas.buffer };
+    m_context.emit_barriers(cmd_list.Get(),
+                            tlas_read_resources.data(),
+                            tlas_read_resources.size(),
+                            nullptr,
+                            0);
 
 	// TODO: Whenever buffers are moved to CPU -> GPU copy method instead of GPU upload heaps record the copy here as well
 
@@ -474,9 +423,9 @@ void glRemix::glRemixRenderer::create()
 
 		// TODO: Use CPU descriptors and copy to GPU visible heap
 
-		m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer.allocation->GetResource(), &m_rt_descriptors, 0);
+		m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer, &m_rt_descriptors, 0);
 
-		m_context.create_unordered_access_view_texture(m_uav_render_target.Get(), uav_rt_desc.Format, &m_rt_descriptors, 1);
+		m_context.create_unordered_access_view_texture(&m_uav_render_target, uav_rt_desc.format, &m_rt_descriptors, 1);
 
 		// Will be updated each frame
 		m_context.create_constant_buffer_view(&m_raygen_constant_buffers[0], &m_rt_descriptors, 2);
@@ -493,9 +442,6 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
 {
     if (!m_ipc.InitReader())
     {
-        std::cout << "IPC Manager could not init a reader instance. Have you launched an "
-                     "executable that utilizes glRemix?"
-                  << std::endl;
         return;
     }
 
@@ -505,7 +451,7 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     uint32_t bytesRead = 0;
     if (!m_ipc.TryConsumeFrame(ipcBuf.data(), static_cast<uint32_t>(ipcBuf.size()), &bytesRead))
     {
-        std::cout << "No frame data available." << std::endl;
+        printf("No frame data available.\n");
         return;
     }
 
@@ -526,32 +472,30 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     // can comment out the logs here too
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
-    size_t offset = sizeof(glRemix::GLFrameUnifs); // offset skips header of ipc data payload
-    while (offset + sizeof(glRemix::GLCommandUnifs) <= bytesRead) // while header + additional gl header is not at byte limit
+    size_t offset = sizeof(GLFrameUnifs); // offset skips header of ipc data payload
+    while (offset + sizeof(GLCommandUnifs) <= bytesRead) // while header + additional gl header is not at byte limit
     {
-        const auto* header = reinterpret_cast<const glRemix::GLCommandUnifs*>(ipcBuf.data() // get most recent header
+        const auto* header = reinterpret_cast<const GLCommandUnifs*>(ipcBuf.data() // get most recent header
                                                                               + offset);
-        offset += sizeof(glRemix::GLCommandUnifs); // move into data payload
+        offset += sizeof(GLCommandUnifs); // move into data payload
 
-        std::cout << "  Command: " << static_cast<int>(header->type)
-                  << " (size: " << header->dataSize << ")" << std::endl;
+        printf("  Command: %d (size: %u)\n", static_cast<int>(header->type), header->dataSize);
 
         switch (header->type)
         {
 			// if we encounter GL_BEGIN we know that a new geometry is to be created
-			case glRemix::GLCommandType::GL_BEGIN: 
+			case GLCommandType::GL_BEGIN: 
 			{
-				const auto* type = reinterpret_cast<const glRemix::GLBeginCommand*>(ipcBuf.data() + offset); // reach into data payload
+				const auto* type = reinterpret_cast<const GLBeginCommand*>(ipcBuf.data() + offset); // reach into data payload
 				offset += header->dataSize; // move past data to next command
 				read_geometry(ipcBuf, offset, vertices, indices, static_cast<glRemix::GLTopology>(type->mode), bytesRead, cmd_list); // store geometry data in vertex buffers depending on topology type
 				break;
 			}
             default:
 			{
-				 std::cout << "    (Unhandled base command)" << std::endl; 
+				 printf("    (Unhandled base command)\n");
 				 return;
-				 break;
-			}
+            }
         }
     }
 
@@ -610,7 +554,7 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
 		.timeout = INFINITE,
 	};
 
-	m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer.allocation->GetResource(), &m_rt_descriptors, 0);
+	m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer, &m_rt_descriptors, 0);
 	THROW_IF_FALSE(m_context.wait_fences(wait_info)); // Block CPU until done
 
 	return;
@@ -621,7 +565,7 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
                                             size_t& offset,
                                             std::vector<Vertex>& vertices,
                                             std::vector<uint32_t>& indices,
-                                            glRemix::GLTopology topology,
+                                            GLTopology topology,
                                             uint32_t bytesRead,
 											ComPtr<ID3D12GraphicsCommandList7> cmd_list)
 {
@@ -638,8 +582,7 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
             ipcBuf.data()  // get most recent header
             + offset);
 
-        std::cout << "  Command: " << static_cast<int>(header->type)
-                  << " (size: " << header->dataSize << ")" << std::endl;
+        printf("  Command: %d (size: %u)\n", static_cast<int>(header->type), header->dataSize);
 
         offset += sizeof(glRemix::GLCommandUnifs);  // move into data payload
 
@@ -657,7 +600,7 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
                 endPrimitive = true;
                 break;
             }
-            default: std::cout << "    (Unhandled primitive command)" << std::endl; break;
+            default: printf("    (Unhandled primitive command)\n"); break;
         }
 
         offset += header->dataSize;  // move past data to next command
@@ -787,61 +730,18 @@ int glRemix::glRemixRenderer::build_mesh_blas(uint32_t vertex_count, uint32_t ve
 	
 	const auto blas_build_desc = m_context.get_raytracing_acceleration_structure(blas_desc, &t_blas_buffer, nullptr, &m_scratch_space);
 
-	// Transition scratch space to UAV format
-	D3D12_BUFFER_BARRIER scratch_space_uav
-	{
-		.SyncBefore = D3D12_BARRIER_SYNC_NONE,
-		.SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-		.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
-		.AccessAfter = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
-		.pResource = m_scratch_space.allocation->GetResource(),
-		.Offset = 0,
-		.Size = UINT64_MAX,
-	};
-
-	D3D12_BUFFER_BARRIER blas_buffer_barrier
-	{
-		.SyncBefore = D3D12_BARRIER_SYNC_NONE,
-		.SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-		.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
-		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
-		.pResource = t_blas_buffer.allocation->GetResource(),
-		.Offset = 0,
-		.Size = UINT64_MAX,
-	};
-
-	std::array buffer_barriers{ scratch_space_uav, blas_buffer_barrier };
-
-	D3D12_BARRIER_GROUP barrier_group0
-	{
-		.Type = D3D12_BARRIER_TYPE_BUFFER,
-		.NumBarriers = static_cast<UINT>(buffer_barriers.size()),
-		.pBufferBarriers = buffer_barriers.data(),
-	};
-
-	cmd_list->Barrier(1, &barrier_group0);
+	// Mark resources for BLAS build
+	m_context.mark_use(&m_scratch_space, dx::Usage::UAV_COMPUTE);
+	m_context.mark_use(&t_blas_buffer, dx::Usage::AS_WRITE);
+	std::array build_resources = { &m_scratch_space, &t_blas_buffer };
+	m_context.emit_barriers(cmd_list.Get(), build_resources.data(), build_resources.size(), nullptr, 0);
 
 	cmd_list->BuildRaytracingAccelerationStructure(&blas_build_desc, 0, nullptr);
 
-	// TODO: It would be convenient if resources tracked their current state for barriers
 	// Transition BLAS to read state
-	blas_buffer_barrier =
-	{
-		.SyncBefore = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-		.SyncAfter = D3D12_BARRIER_SYNC_RAYTRACING,
-		.AccessBefore = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
-		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ,
-		.pResource = t_blas_buffer.allocation->GetResource(),
-		.Offset = 0,
-		.Size = UINT64_MAX,
-	};
-	D3D12_BARRIER_GROUP barrier_group_read
-	{
-		.Type = D3D12_BARRIER_TYPE_BUFFER,
-		.NumBarriers = 1,
-		.pBufferBarriers = &blas_buffer_barrier,
-	};
-	cmd_list->Barrier(1, &barrier_group_read);
+	m_context.mark_use(&t_blas_buffer, dx::Usage::AS_READ);
+	std::array read_resources = { &t_blas_buffer };
+	m_context.emit_barriers(cmd_list.Get(), read_resources.data(), read_resources.size(), nullptr, 0);
 
 	m_blas_buffers.push_back(t_blas_buffer);
 	return m_blas_buffers.size() - 1;
@@ -872,7 +772,7 @@ void glRemix::glRemixRenderer::build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd
 			.InstanceMask = 0xFF,
 			.InstanceContributionToHitGroupIndex = 0,
 			.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE,
-			.AccelerationStructure = m_blas_buffers[i].allocation->GetResource()->GetGPUVirtualAddress(),
+			.AccelerationStructure = m_blas_buffers[i].get_gpu_address(),
 		};
 	}
 
@@ -896,7 +796,7 @@ void glRemix::glRemixRenderer::build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd
 		// Lots of options here, probably want to use different ones, especially the update one
 		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
 		.NumDescs = instance_count,
-		.InstanceDescs = m_tlas.instance.allocation.Get()->GetResource()->GetGPUVirtualAddress(),
+		.InstanceDescs = m_tlas.instance.get_gpu_address(),
 	};
 
 	constexpr UINT64 scratch_size = 16 * 1024 * 1024;
@@ -911,69 +811,19 @@ void glRemix::glRemixRenderer::build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd
 	};
 	THROW_IF_FALSE(m_context.create_buffer(tlas_buffer_desc, &m_tlas.buffer, "TLAS buffer"));
 
-	D3D12_BUFFER_BARRIER tlas_buffer_barrier
-	{
-		.SyncBefore = D3D12_BARRIER_SYNC_NONE,
-		.SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-		.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
-		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
-		.pResource = m_tlas.buffer.allocation->GetResource(),
-		.Offset = 0,
-		.Size = UINT64_MAX,
-	};
-	D3D12_BARRIER_GROUP barrier_group_tlas
-	{
-		.Type = D3D12_BARRIER_TYPE_BUFFER,
-		.NumBarriers = 1,
-		.pBufferBarriers = &tlas_buffer_barrier,
-	};
-	cmd_list->Barrier(1, &barrier_group_tlas);
+	// Mark TLAS for build
+	m_context.mark_use(&m_tlas.buffer, dx::Usage::AS_WRITE);
+	std::array write_resources = { &m_tlas.buffer };
+	m_context.emit_barriers(cmd_list.Get(), write_resources.data(), write_resources.size(), nullptr, 0);
 
 	const auto tlas_build_desc = m_context.get_raytracing_acceleration_structure(tlas_desc, &m_tlas.buffer, nullptr, &m_scratch_space);
 
 	cmd_list->BuildRaytracingAccelerationStructure(&tlas_build_desc, 0, nullptr);
 
-	// Transition TLAS to read state after build
-	D3D12_BUFFER_BARRIER tlas_buffer_barrier_read
-	{
-		.SyncBefore = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
-		.SyncAfter = D3D12_BARRIER_SYNC_RAYTRACING,
-		.AccessBefore = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
-		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ,
-		.pResource = m_tlas.buffer.allocation->GetResource(),
-		.Offset = 0,
-		.Size = UINT64_MAX,
-	};
-
-	D3D12_BARRIER_GROUP tlas_barrier_group_read
-	{
-		.Type = D3D12_BARRIER_TYPE_BUFFER,
-		.NumBarriers = 1,
-		.pBufferBarriers = &tlas_buffer_barrier_read,
-	};
-	cmd_list->Barrier(1, &tlas_barrier_group_read);
-}
-
-void glRemix::glRemixRenderer::updateMVP(float rot)
-{
-    using namespace DirectX;
-
-    XMUINT2 win_dims{};
-    m_context.get_window_dimensions(&win_dims);
-
-    MVP* mvpCPU = nullptr;
-    THROW_IF_FALSE(m_context.map_buffer(&m_mvp, reinterpret_cast<void**>(&mvpCPU)));
-
-    const float h = float(win_dims.y) / float(win_dims.x);
-    XMMATRIX M = XMMatrixRotationRollPitchYaw(rot, rot, rot);
-    XMMATRIX V = XMMatrixTranslation(0.0f, 0.0f, -40.0f);
-    XMMATRIX P = XMMatrixPerspectiveOffCenterRH(-1.0f, 1.0f, -h, h, 5.0f, 60.0f);
-
-    XMStoreFloat4x4(&mvpCPU->model, M);
-    XMStoreFloat4x4(&mvpCPU->view, V);
-    XMStoreFloat4x4(&mvpCPU->proj, P);
-
-    m_context.unmap_buffer(&m_mvp);
+	// Transition TLAS to read state
+	m_context.mark_use(&m_tlas.buffer, dx::Usage::AS_READ);
+	std::array read_resources = { &m_tlas.buffer };
+	m_context.emit_barriers(cmd_list.Get(), read_resources.data(), read_resources.size(), nullptr, 0);
 }
 
 void glRemix::glRemixRenderer::render()
@@ -995,51 +845,6 @@ void glRemix::glRemixRenderer::render()
 	THROW_IF_FALSE(m_context.create_command_list(cmd_list.ReleaseAndGetAddressOf(), m_cmd_pools[get_frame_index()]));
 
 	const auto swapchain_idx = m_context.get_swapchain_index();
-
-	auto make_tex_barrier = [](ID3D12Resource* res,
-		D3D12_BARRIER_SYNC sync_before, D3D12_BARRIER_SYNC sync_after,
-		D3D12_BARRIER_ACCESS access_before, D3D12_BARRIER_ACCESS access_after,
-		D3D12_BARRIER_LAYOUT layout_before, D3D12_BARRIER_LAYOUT layout_after) -> D3D12_TEXTURE_BARRIER
-	{
-		return D3D12_TEXTURE_BARRIER
-		{
-			.SyncBefore = sync_before,
-			.SyncAfter = sync_after,
-			.AccessBefore = access_before,
-			.AccessAfter = access_after,
-			.LayoutBefore = layout_before,
-			.LayoutAfter = layout_after,
-			.pResource = res,
-			.Subresources
-			{
-				.IndexOrFirstMipLevel = 0,
-				.NumMipLevels = 1,
-				.FirstArraySlice = 0,
-				.NumArraySlices = 1,
-				.FirstPlane = 0,
-				.NumPlanes = 1,
-			},
-			.Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE,
-		};
-	};
-
-	auto submit_tex_barriers = [&](std::initializer_list<D3D12_TEXTURE_BARRIER> barriers)
-	{
-		D3D12_BARRIER_GROUP group
-		{
-			.Type = D3D12_BARRIER_TYPE_TEXTURE,
-			.NumBarriers = static_cast<UINT>(barriers.size()),
-			.pTextureBarriers = barriers.begin(),
-		};
-		cmd_list->Barrier(1, &group);
-	};
-
-	auto get_current_swapchain_resource = [&]() -> ID3D12Resource*
-	{
-		D3D12_TEXTURE_BARRIER tmp{};
-		m_context.set_barrier_swapchain(&tmp); // Fills pResource and subresource range
-		return tmp.pResource;
-	};
 
 	XMUINT2 win_dims{};
 	m_context.get_window_dimensions(&win_dims);
@@ -1072,7 +877,7 @@ void glRemix::glRemixRenderer::render()
 		static float increment = 0.f;
 		increment += 0.01f;
 
-		XMVECTOR eye_position = XMVectorSet(cosf(increment), sinf(increment), -12.0f, 1.0f);
+		XMVECTOR eye_position = XMVectorSet(cosf(increment) * 5.f, sinf(increment) * 5.f, -12.0f, 1.0f);
 		XMVECTOR focus_position = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
 		XMVECTOR up_direction = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 		
@@ -1102,23 +907,10 @@ void glRemix::glRemixRenderer::render()
 		memcpy(cb_ptr, &raygen_cb, sizeof(RayGenConstantBuffer));
 		m_context.unmap_buffer(raygen_cb_ptr);
 
-		// Transition UAV texture to UAV layout for raytracing dispatch
-		auto uav_rt_dispatch = make_tex_barrier(
-			m_uav_render_target.Get()->GetResource(),
-			D3D12_BARRIER_SYNC_NONE,
-			D3D12_BARRIER_SYNC_RAYTRACING,
-			D3D12_BARRIER_ACCESS_NO_ACCESS,
-			D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
-			D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS,
-			D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS
-		);
-		D3D12_BARRIER_GROUP barrier_group
-		{
-			.Type = D3D12_BARRIER_TYPE_TEXTURE,
-			.NumBarriers = 1,
-			.pTextureBarriers = &uav_rt_dispatch,
-		};
-		cmd_list->Barrier(1, &barrier_group);
+		// Mark UAV texture for raytracing use and emit barrier
+        THROW_IF_FALSE(m_context.mark_use(&m_uav_render_target, dx::Usage::UAV_RT));
+		std::array rt_textures = { &m_uav_render_target };
+		m_context.emit_barriers(cmd_list.Get(), nullptr, 0, rt_textures.data(), rt_textures.size());
 
 		cmd_list->SetPipelineState1(m_rt_pipeline.Get());
 		cmd_list->SetComputeRootSignature(m_rt_global_root_signature.Get());
@@ -1132,7 +924,7 @@ void glRemix::glRemixRenderer::render()
 		m_rt_descriptor_heap.get_gpu_descriptor(&descriptor_table_handle, m_rt_descriptors.offset);
 		cmd_list->SetComputeRootDescriptorTable(0, descriptor_table_handle);
 
-		D3D12_GPU_VIRTUAL_ADDRESS shader_table_base_address = m_shader_table.allocation->GetResource()->GetGPUVirtualAddress();
+		D3D12_GPU_VIRTUAL_ADDRESS shader_table_base_address = m_shader_table.get_gpu_address();
 		
 		D3D12_DISPATCH_RAYS_DESC dispatch_desc
 		{
@@ -1163,50 +955,67 @@ void glRemix::glRemixRenderer::render()
 
 	// Copy the ray traced UAV texture into the current swapchain backbuffer, then render ImGui on top
 	{
-		ID3D12Resource* backbuffer = get_current_swapchain_resource();
+		constexpr D3D12_BARRIER_SUBRESOURCE_RANGE subresource_range
+		{
+			.IndexOrFirstMipLevel = 0,
+			.NumMipLevels = 1,
+			.FirstArraySlice = 0,
+			.NumArraySlices = 1,
+			.FirstPlane = 0,
+			.NumPlanes = 1,
+		};
 
-		// Transition UAV -> COPY_SOURCE and Swapchain(PRESENT) -> COPY_DEST
-		auto uav_to_copy_src = make_tex_barrier(
-			m_uav_render_target.Get()->GetResource(),
-			D3D12_BARRIER_SYNC_RAYTRACING, D3D12_BARRIER_SYNC_COPY,
-			D3D12_BARRIER_ACCESS_UNORDERED_ACCESS, D3D12_BARRIER_ACCESS_COPY_SOURCE,
-			D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS, D3D12_BARRIER_LAYOUT_COPY_SOURCE);
+		// Transition UAV texture from UAV to copy source
+		THROW_IF_FALSE(m_context.mark_use(&m_uav_render_target, dx::Usage::COPY_SRC));
+		std::array copy_textures = { &m_uav_render_target };
+		m_context.emit_barriers(cmd_list.Get(), nullptr, 0, copy_textures.data(), copy_textures.size());
 
-		auto swap_to_copy_dst = make_tex_barrier(
-			nullptr,
-			D3D12_BARRIER_SYNC_NONE,
-			D3D12_BARRIER_SYNC_COPY,
-			D3D12_BARRIER_ACCESS_NO_ACCESS,
-			D3D12_BARRIER_ACCESS_COPY_DEST,
-			D3D12_BARRIER_LAYOUT_PRESENT,
-			D3D12_BARRIER_LAYOUT_COPY_DEST
-		);
-		m_context.set_barrier_swapchain(&swap_to_copy_dst); // Fills pResource and subresources
+		// Transition swapchain from PRESENT to COPY_DEST manually
+		D3D12_TEXTURE_BARRIER swap_to_copy_dest
+		{
+			.SyncBefore = D3D12_BARRIER_SYNC_NONE,
+			.SyncAfter = D3D12_BARRIER_SYNC_COPY,
+			.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
+			.AccessAfter = D3D12_BARRIER_ACCESS_COPY_DEST,
+			.LayoutBefore = D3D12_BARRIER_LAYOUT_PRESENT,
+			.LayoutAfter = D3D12_BARRIER_LAYOUT_COPY_DEST,
+			.Subresources = subresource_range,
+		};
+		m_context.set_barrier_swapchain(&swap_to_copy_dest);
+		D3D12_BARRIER_GROUP swap_barrier_group
+		{
+			.Type = D3D12_BARRIER_TYPE_TEXTURE,
+			.NumBarriers = 1,
+			.pTextureBarriers = &swap_to_copy_dest,
+		};
+		cmd_list->Barrier(1, &swap_barrier_group);
 
+        m_context.copy_texture_to_swapchain(cmd_list.Get(), m_uav_render_target);
 
-		submit_tex_barriers({ uav_to_copy_src, swap_to_copy_dst });
-
-		cmd_list->CopyResource(backbuffer, m_uav_render_target.Get()->GetResource());
-
-		// Transition Swapchain COPY_DEST -> RENDER_TARGET and UAV COPY_SOURCE -> UNORDERED_ACCESS
-		auto swap_to_rtv = make_tex_barrier(
-			nullptr,
-			D3D12_BARRIER_SYNC_COPY,
-			D3D12_BARRIER_SYNC_RENDER_TARGET,
-			D3D12_BARRIER_ACCESS_COPY_DEST,
-			D3D12_BARRIER_ACCESS_RENDER_TARGET,
-			D3D12_BARRIER_LAYOUT_COPY_DEST,
-			D3D12_BARRIER_LAYOUT_RENDER_TARGET
-		);
+		// Transition swapchain from COPY_DEST to RENDER_TARGET
+		D3D12_TEXTURE_BARRIER swap_to_rtv
+		{
+			.SyncBefore = D3D12_BARRIER_SYNC_COPY,
+			.SyncAfter = D3D12_BARRIER_SYNC_RENDER_TARGET,
+			.AccessBefore = D3D12_BARRIER_ACCESS_COPY_DEST,
+			.AccessAfter = D3D12_BARRIER_ACCESS_RENDER_TARGET,
+			.LayoutBefore = D3D12_BARRIER_LAYOUT_COPY_DEST,
+			.LayoutAfter = D3D12_BARRIER_LAYOUT_RENDER_TARGET,
+			.Subresources = subresource_range,
+		};
 		m_context.set_barrier_swapchain(&swap_to_rtv);
+		D3D12_BARRIER_GROUP swap_rtv_barrier_group
+		{
+			.Type = D3D12_BARRIER_TYPE_TEXTURE,
+			.NumBarriers = 1,
+			.pTextureBarriers = &swap_to_rtv,
+		};
+		cmd_list->Barrier(1, &swap_rtv_barrier_group);
 
-		auto uav_back_to_uav = make_tex_barrier(
-			m_uav_render_target.Get()->GetResource(),
-			D3D12_BARRIER_SYNC_COPY, D3D12_BARRIER_SYNC_RAYTRACING,
-			D3D12_BARRIER_ACCESS_COPY_SOURCE, D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
-			D3D12_BARRIER_LAYOUT_COPY_SOURCE, D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS);
-
-		submit_tex_barriers({ swap_to_rtv, uav_back_to_uav });
+		// Transition UAV back to UAV layout for next frame
+	    THROW_IF_FALSE(m_context.mark_use(&m_uav_render_target, dx::Usage::UAV_RT));
+		std::array post_copy_textures = { &m_uav_render_target };
+		m_context.emit_barriers(cmd_list.Get(), nullptr, 0, post_copy_textures.data(), post_copy_textures.size());
 	}
 
 	// Draw everything (ImGui over the copied ray traced image)
@@ -1214,70 +1023,50 @@ void glRemix::glRemixRenderer::render()
 	m_swapchain_descriptors.heap->get_cpu_descriptor(&swapchain_rtv, m_swapchain_descriptors.offset + swapchain_idx);
 	cmd_list->OMSetRenderTargets(1, &swapchain_rtv, FALSE, nullptr);
 
-	// rasterization for testing
+	// This is where rasterization could go
+	if (m_vertex_buffer.desc.size > 0 && m_index_buffer.desc.size > 0)
 	{
-        static float rot = 0.f;
-        rot += 0.01f;
-        updateMVP(rot);
-        auto* cbRes = m_mvp.allocation->GetResource();
-
         cmd_list->SetGraphicsRootSignature(m_root_signature.Get());
         cmd_list->SetPipelineState(m_raster_pipeline.Get());
 
-        cmd_list->SetGraphicsRootConstantBufferView(0, cbRes->GetGPUVirtualAddress());
+        cmd_list->SetGraphicsRootConstantBufferView(0, m_raygen_constant_buffers[get_frame_index()].get_gpu_address());
 
-        cmd_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-        if (m_vertex_buffer.allocation)
-        {
-            D3D12_VERTEX_BUFFER_VIEW vbv{};
-            vbv.BufferLocation = m_vertex_buffer.allocation->GetResource()->GetGPUVirtualAddress();
-            vbv.SizeInBytes = static_cast<UINT>(m_vertex_buffer.desc.size);
-            vbv.StrideInBytes = static_cast<UINT>(m_vertex_buffer.desc.stride);
-            cmd_list->IASetVertexBuffers(0, 1, &vbv);
-        }
-
-        if (m_index_buffer.allocation)
-        {
-            D3D12_INDEX_BUFFER_VIEW ibv{};
-            ibv.BufferLocation = m_index_buffer.allocation->GetResource()->GetGPUVirtualAddress();
-            ibv.SizeInBytes = static_cast<UINT>(m_index_buffer.desc.size);
-            ibv.Format = DXGI_FORMAT_R32_UINT;
-            cmd_list->IASetIndexBuffer(&ibv);
-
-            const UINT indexCount = ibv.SizeInBytes / 4u;
-			
-			for (const MeshRecord& mesh : m_meshes)
-			{
-				/*
-				cmd_list->DrawIndexedInstanced
-				(
-					mesh.indexCount,
-					1,
-					mesh.indexOffset,
-					mesh.vertexOffset,
-					0
-				);*/
-			}
-        }
-    }
+        const auto vb = &m_vertex_buffer;
+        m_context.bind_vertex_buffers(cmd_list.Get(), 0, 1, &vb, nullptr, nullptr, nullptr);
+        m_context.bind_index_buffer(cmd_list.Get(), m_index_buffer, DXGI_FORMAT_R32_UINT);
+        const UINT index_count = static_cast<UINT>(m_index_buffer.desc.size
+                                                   / m_index_buffer.desc.stride);
+        cmd_list->DrawIndexedInstanced(index_count, 1, 0, 0, 0); 
+	}
 
     // Render ImGui
 	m_context.render_imgui_draw_data(cmd_list.Get());
 
 	// Transition swapchain image to present
 	{
-		auto swapchain_present = make_tex_barrier(
-			nullptr,
-			D3D12_BARRIER_SYNC_DRAW,
-			D3D12_BARRIER_SYNC_NONE,
-			D3D12_BARRIER_ACCESS_RENDER_TARGET,
-			D3D12_BARRIER_ACCESS_NO_ACCESS,
-			D3D12_BARRIER_LAYOUT_RENDER_TARGET,
-			D3D12_BARRIER_LAYOUT_PRESENT
-		);
+		constexpr D3D12_BARRIER_SUBRESOURCE_RANGE subresource_range
+		{
+			.IndexOrFirstMipLevel = 0,
+			.NumMipLevels = 1,
+			.FirstArraySlice = 0,
+			.NumArraySlices = 1,
+			.FirstPlane = 0,
+			.NumPlanes = 1,
+		};
+		
+		D3D12_TEXTURE_BARRIER swapchain_present
+		{
+			.SyncBefore = D3D12_BARRIER_SYNC_DRAW,
+			.SyncAfter = D3D12_BARRIER_SYNC_NONE,
+			.AccessBefore = D3D12_BARRIER_ACCESS_RENDER_TARGET,
+			.AccessAfter = D3D12_BARRIER_ACCESS_NO_ACCESS,
+			.LayoutBefore = D3D12_BARRIER_LAYOUT_RENDER_TARGET,
+			.LayoutAfter = D3D12_BARRIER_LAYOUT_PRESENT,
+			.Subresources = subresource_range,
+        };
 		m_context.set_barrier_swapchain(&swapchain_present);
-		D3D12_BARRIER_GROUP barrier_group =
+		
+		D3D12_BARRIER_GROUP barrier_group
 		{
 			.Type = D3D12_BARRIER_TYPE_TEXTURE,
 			.NumBarriers = 1,
@@ -1293,9 +1082,9 @@ void glRemix::glRemixRenderer::render()
 	m_gfx_queue.queue->ExecuteCommandLists(1, lists.data());
 
 	// End of all work for queue, signal fence
-	m_gfx_queue.queue->Signal(m_fence_frame_ready.fence.Get(), current_fence_value);
+	THROW_IF_FALSE(SUCCEEDED(m_gfx_queue.queue->Signal(m_fence_frame_ready.fence.Get(), current_fence_value)));
 
-	// Present
+	// PRESENT
 	m_context.present();
 
 	increment_frame_index();

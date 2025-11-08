@@ -3,7 +3,6 @@
 #include "dx/d3d12_as.h"
 #include <DirectXMath.h>
 #include <ipc_protocol.h>
-#include <iostream>
 
 namespace glRemix
 {
@@ -62,8 +61,7 @@ namespace glRemix
 		UINT64 m_miss_shader_table_offset{};
 		UINT64 m_hit_group_shader_table_offset{};
 
-		ComPtr<D3D12MA::Allocation> m_uav_render_target{};
-		dx::D3D12Buffer m_mvp{};
+        dx::D3D12Texture m_uav_render_target{};
 
 		IPCProtocol m_ipc;
 
@@ -89,8 +87,6 @@ namespace glRemix
 		// acceleration structure builders
 		int build_mesh_blas(uint32_t vertex_count, uint32_t vertex_offset, uint32_t index_count, uint32_t index_offset, ComPtr<ID3D12GraphicsCommandList7> cmd_list);
 		void build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd_list);
-		
-		void updateMVP(float rot);
 
 	public:
 		glRemixRenderer() = default;

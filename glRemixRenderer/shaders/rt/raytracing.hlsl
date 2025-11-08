@@ -1,7 +1,7 @@
 struct RayGenConstantBuffer
 {
-    float4x4 projection_matrix;
-    float4x4 inv_projection_matrix;
+    float4x4 view_proj;
+    float4x4 inv_view_proj;
     float width;
     float height;
 };
@@ -31,8 +31,8 @@ void RayGenMain()
     float4 far_point = float4(ndc, 1.0f, 1.0f);
     
     // Transform to world space
-    float4 near_world = mul(near_point, g_rayGenCB.inv_projection_matrix);
-    float4 far_world = mul(far_point, g_rayGenCB.inv_projection_matrix);
+    float4 near_world = mul(near_point, g_rayGenCB.inv_view_proj);
+    float4 far_world = mul(far_point, g_rayGenCB.inv_view_proj);
     
     near_world /= near_world.w;
     far_world /= far_world.w;
