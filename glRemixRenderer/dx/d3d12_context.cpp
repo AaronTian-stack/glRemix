@@ -448,8 +448,8 @@ void D3D12Context::set_descriptor_heaps(ID3D12GraphicsCommandList7* cmd_list, co
 	cmd_list->SetDescriptorHeaps(2, heaps);
 }
 
-bool D3D12Context::create_texture(const TextureDesc& desc, D3D12Texture* texture,
-                                  D3D12_CLEAR_VALUE* clear_value, const char* debug_name) const
+bool D3D12Context::create_texture(const TextureDesc& desc, const D3D12_BARRIER_LAYOUT init_layout,
+                                  D3D12Texture* texture, D3D12_CLEAR_VALUE* clear_value, const char* debug_name) const
 {
 	assert(texture);
 	const D3D12MA::ALLOCATION_DESC allocation_desc
@@ -493,7 +493,7 @@ bool D3D12Context::create_texture(const TextureDesc& desc, D3D12Texture* texture
 	{
 		clear_value = nullptr;
 	}
-	if (desc.initial_layout == D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS)
+    if (init_layout == D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS)
 	{
 		resource_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 	}
@@ -501,7 +501,7 @@ bool D3D12Context::create_texture(const TextureDesc& desc, D3D12Texture* texture
 	if (FAILED(m_allocator->CreateResource3(
 		&allocation_desc,
 		&resource_desc,
-		desc.initial_layout,
+                                            init_layout,
 		clear_value,
 		0, nullptr,
 		texture->allocation.ReleaseAndGetAddressOf(),
@@ -527,8 +527,8 @@ bool D3D12Context::create_texture(const TextureDesc& desc, D3D12Texture* texture
 	initialize_tracked_resource(
         &texture->barrier_state,
         texture->allocation->GetResource(),
-        true, // is_texture
-        desc.initial_layout,
+        true,
+        init_layout,
         &subresource_range,
         0
         );

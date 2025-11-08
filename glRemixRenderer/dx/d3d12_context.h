@@ -79,7 +79,7 @@ namespace glRemix::dx
 		void create_shader_resource_view_acceleration_structure(const D3D12Buffer& tlas, const D3D12DescriptorTable* descriptor_table, UINT descriptor_index) const;
 		void create_unordered_access_view_texture(D3D12Texture* texture, DXGI_FORMAT format, const D3D12DescriptorTable* descriptor_table, UINT descriptor_index) const;
 
-		bool create_texture(const TextureDesc& desc, D3D12Texture* texture, D3D12_CLEAR_VALUE* clear_value, const char* debug_name = nullptr) const;
+		bool create_texture(const TextureDesc& desc, D3D12_BARRIER_LAYOUT init_layout, D3D12Texture* texture, D3D12_CLEAR_VALUE* clear_value, const char* debug_name = nullptr) const;
 
 		bool create_queue(D3D12_COMMAND_LIST_TYPE type, D3D12Queue* queue, const char* debug_name = nullptr) const;
 		bool create_command_allocator(D3D12CommandAllocator* cmd_allocator, D3D12Queue* queue, const char* debug_name = nullptr) const;

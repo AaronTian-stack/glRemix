@@ -247,11 +247,15 @@ void glRemix::glRemixRenderer::create()
         .mip_levels = 1,
         .format = DXGI_FORMAT_R8G8B8A8_UNORM,
         .dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-        .initial_layout = D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS,
         .is_render_target = false,
     };
 
-    THROW_IF_FALSE(m_context.create_texture(uav_rt_desc, &m_uav_render_target, nullptr, "UAV and RT texture"));
+    THROW_IF_FALSE(
+        m_context.create_texture(uav_rt_desc, 
+			D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS, 
+			&m_uav_render_target, 
+			nullptr, 
+			"UAV and RT texture"));
 
 	// Build BLAS here for now, but renderer will construct them dynamically for new geometry in render loop
 	D3D12_RAYTRACING_GEOMETRY_DESC tri_desc

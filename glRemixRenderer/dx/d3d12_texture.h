@@ -16,7 +16,6 @@ namespace glRemix::dx
         DXGI_FORMAT format;
         // UINT16 sample_count = 1; // TODO: MSAA
         D3D12_RESOURCE_DIMENSION dimension;
-        D3D12_BARRIER_LAYOUT initial_layout = D3D12_BARRIER_LAYOUT_COMMON; // If UAV is used the flag is added
         bool is_render_target = false;
     };
 
