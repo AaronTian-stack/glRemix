@@ -97,8 +97,11 @@ if(GLREMIX_BUILD_SHIM_X64)
 	glRemix_add_shim_builder("x64" "x64" "Build 64-bit OpenGL shim")
 endif()
 
+# Only include shim helper (intellisense target) when building a shim
+if(GLREMIX_BUILD_SHIM_WIN32 OR GLREMIX_BUILD_SHIM_X64)
+	include("${REPO_ROOT}/cmake/shim_helper.cmake")
+endif()
+
 if(GLREMIX_BUILD_RENDERER)
 	add_subdirectory(glRemixRenderer)
 endif()
-
-include("${REPO_ROOT}/cmake/shim_helper.cmake")
