@@ -19,6 +19,7 @@ include(ExternalProject)
 
 option(GLREMIX_BUILD_SHIM_WIN32 "Build 32-bit OpenGL shim" ON)
 option(GLREMIX_BUILD_SHIM_X64 "Build 64-bit OpenGL shim" OFF)
+option(GLREMIX_BUILD_RENDERER "Build renderer" ON)
 
 set(GLREMIX_COPY_IF_EXISTS_SCRIPT "${REPO_ROOT}/cmake/copy_if_exists.cmake")
 
@@ -84,8 +85,8 @@ function(glremix_add_shim_builder suffix generator_platform description)
 	set_property(TARGET ${target} PROPERTY SOURCES ${GLREMIX_SHIM_ALL_FILES})
 endfunction()
 
-if((GLREMIX_BUILD_SHIM_WIN32 AND GLREMIX_BUILD_SHIM_X64) OR (NOT GLREMIX_BUILD_SHIM_WIN32 AND NOT GLREMIX_BUILD_SHIM_X64))
-	message(FATAL_ERROR "Enable exactly one of GLREMIX_BUILD_SHIM_WIN32 or GLREMIX_BUILD_SHIM_X64")
+if((GLREMIX_BUILD_SHIM_WIN32 AND GLREMIX_BUILD_SHIM_X64) OR (NOT GLREMIX_BUILD_SHIM_WIN32 AND NOT GLREMIX_BUILD_SHIM_X64 AND NOT GLREMIX_BUILD_RENDERER))
+	message(FATAL_ERROR "Enable exactly one shim architecture unless performing a renderer-only build (set GLREMIX_BUILD_RENDERER=ON)")
 endif()
 
 if(GLREMIX_BUILD_SHIM_WIN32)
@@ -96,6 +97,8 @@ if(GLREMIX_BUILD_SHIM_X64)
 	glRemix_add_shim_builder("x64" "x64" "Build 64-bit OpenGL shim")
 endif()
 
-add_subdirectory(glRemixRenderer)
+if(GLREMIX_BUILD_RENDERER)
+	add_subdirectory(glRemixRenderer)
+endif()
 
 include("${REPO_ROOT}/cmake/shim_helper.cmake")

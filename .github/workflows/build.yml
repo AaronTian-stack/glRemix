@@ -23,9 +23,9 @@ jobs:
       - name: Create build directory
         run: mkdir build
 
-      - name: Configure project (32-bit shim + renderer)
+      - name: Configure project (32-bit shim)
         working-directory: build
-        run: cmake .. -G "Visual Studio 17 2022" -A Win32
+        run: cmake .. -G "Visual Studio 17 2022" -A Win32 -DGLREMIX_BUILD_RENDERER=OFF -DGLREMIX_BUILD_SHIM_WIN32=ON -DGLREMIX_BUILD_SHIM_X64=OFF
 
       - name: Build project
         working-directory: build
@@ -35,8 +35,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: glremix-win32-${{ matrix.configuration }}
-          path: deploy/
+          name: glremix-shim-win32-${{ matrix.configuration }}
+          path: deploy/${{ matrix.configuration }}/shim/win32
           retention-days: 7
 
   build-shim-64:
@@ -55,9 +55,9 @@ jobs:
       - name: Create build directory
         run: mkdir build
 
-      - name: Configure project (64-bit shim + renderer)
+      - name: Configure project (64-bit shim)
         working-directory: build
-        run: cmake .. -G "Visual Studio 17 2022" -A x64 -DGLREMIX_BUILD_SHIM_X64=ON -DGLREMIX_BUILD_SHIM_WIN32=OFF
+        run: cmake .. -G "Visual Studio 17 2022" -A x64 -DGLREMIX_BUILD_RENDERER=OFF -DGLREMIX_BUILD_SHIM_X64=ON -DGLREMIX_BUILD_SHIM_WIN32=OFF
 
       - name: Build project
         working-directory: build
@@ -67,6 +67,38 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: glremix-x64-${{ matrix.configuration }}
-          path: deploy/
+          name: glremix-shim-x64-${{ matrix.configuration }}
+          path: deploy/${{ matrix.configuration }}/shim/x64
+          retention-days: 7
+
+  build-renderer:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup cmake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.29'
+
+      - name: Create build directory
+        run: mkdir build
+
+      - name: Configure project (renderer only)
+        working-directory: build
+        run: cmake .. -G "Visual Studio 17 2022" -A x64 -DGLREMIX_BUILD_RENDERER=ON -DGLREMIX_BUILD_SHIM_X64=OFF -DGLREMIX_BUILD_SHIM_WIN32=OFF
+
+      - name: Build project
+        working-directory: build
+        run: cmake --build . --config ${{ matrix.configuration }} --target glRemix_renderer
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: glremix-renderer-${{ matrix.configuration }}
+          path: deploy/${{ matrix.configuration }}/renderer
           retention-days: 7
