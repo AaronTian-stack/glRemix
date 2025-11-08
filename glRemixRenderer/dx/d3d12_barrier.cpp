@@ -169,47 +169,55 @@ namespace
         const bool is_texture,
         const D3D12_BARRIER_LAYOUT initial_layout,
         const D3D12_BARRIER_SUBRESOURCE_RANGE* subresources,
-        const uint64_t explicit_size_in_bytes)
+        const UINT64 explicit_size_in_bytes)
     {
         assert(resource);
         resource->resource = d3d_resource;
         resource->is_texture = is_texture;
         resource->tracked_layout = initial_layout;
         resource->next_layout = initial_layout;
-        resource->size_in_bytes = explicit_size_in_bytes;
 
-        if (subresources)
+        if (is_texture)
         {
-            resource->subresource_range = *subresources;
-        } 
+            // Initialize texture-specific data in the union
+            if (subresources)
+            {
+                resource->subresource_range = *subresources;
+            } 
+            else
+            {
+                D3D12_BARRIER_SUBRESOURCE_RANGE range
+                {
+                    .IndexOrFirstMipLevel = 0,
+                    .NumMipLevels = 1,
+                    .FirstArraySlice = 0,
+                    .NumArraySlices = 1,
+                    .FirstPlane = 0,
+                    .NumPlanes = 1,
+                };
+
+                if (resource->resource)
+                {
+                    const D3D12_RESOURCE_DESC desc = resource->resource->GetDesc();
+                    range.NumMipLevels = desc.MipLevels;
+                    range.NumArraySlices = desc.DepthOrArraySize;
+                }
+
+                resource->subresource_range = range;
+            }
+        }
         else
         {
-            D3D12_BARRIER_SUBRESOURCE_RANGE range
-            {
-                .IndexOrFirstMipLevel = 0,
-                .NumMipLevels = 1,
-                .FirstArraySlice = 0,
-                .NumArraySlices = 1,
-                .FirstPlane = 0,
-                .NumPlanes = 1,
-            };
+            // Initialize buffer-specific data in the union
+            resource->size_in_bytes = explicit_size_in_bytes;
 
-            if (resource->is_texture && resource->resource)
+            if (resource->resource && !resource->size_in_bytes)
             {
                 const D3D12_RESOURCE_DESC desc = resource->resource->GetDesc();
-                range.NumMipLevels = desc.MipLevels;
-                range.NumArraySlices = desc.DepthOrArraySize;
-            }
-
-            resource->subresource_range = range;
-        }
-
-        if (resource->resource && !resource->size_in_bytes)
-        {
-            const D3D12_RESOURCE_DESC desc = resource->resource->GetDesc();
-            if (desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
-            {
-                resource->size_in_bytes = desc.Width;
+                if (desc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
+                {
+                    resource->size_in_bytes = desc.Width;
+                }
             }
         }
     }
@@ -248,7 +256,7 @@ namespace
     void emit_barriers(
         ID3D12GraphicsCommandList7* command_list,
         Resource* const* resources,
-        size_t resource_count,
+        const size_t resource_count,
         std::vector<BarrierLogEvent>* debug_log)
     {
         constexpr size_t max_texture_barriers = 8;
@@ -266,17 +274,12 @@ namespace
         for (size_t i = 0; i < resource_count; ++i)
         {
             Resource* resource_ptr = resources[i];
-            if (!resource_ptr)
+            if (!resource_ptr || !resource_ptr->touched)
             {
                 continue;
             }
 
             Resource& resource = *resource_ptr;
-
-            if (!resource.touched)
-            {
-                continue;
-            }
 
             const D3D12_BARRIER_ACCESS access_before = resource.tracked_valid
                                                            ? resource.tracked_access
@@ -288,107 +291,105 @@ namespace
                                                            ? resource.tracked_layout
                                                            : D3D12_BARRIER_LAYOUT_COMMON;
 
-            if (resource.touched)
+            if (resource.is_texture)
             {
-                if (resource.is_texture)
+                D3D12_TEXTURE_BARRIER barrier
                 {
-                    D3D12_TEXTURE_BARRIER barrier
-                    {
-                        .SyncBefore = sync_before,
-                        .SyncAfter = resource.next_sync,
-                        .AccessBefore = access_before,
-                        .AccessAfter = resource.next_access,
-                        .LayoutBefore = layout_before,
-                        .LayoutAfter = resource.next_layout,
-                        .pResource = resource.resource,
-                        .Subresources = resource.subresource_range,
-                        .Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE,
-                    };
+                    .SyncBefore = sync_before,
+                    .SyncAfter = resource.next_sync,
+                    .AccessBefore = access_before,
+                    .AccessAfter = resource.next_access,
+                    .LayoutBefore = layout_before,
+                    .LayoutAfter = resource.next_layout,
+                    .pResource = resource.resource,
+                    .Subresources = resource.subresource_range,
+                    .Flags = D3D12_TEXTURE_BARRIER_FLAG_NONE,
+                };
 
-                    const bool requires_barrier =
-                        !resource.tracked_valid ||
-                        barrier.SyncBefore != barrier.SyncAfter ||
-                        barrier.AccessBefore != barrier.AccessAfter ||
-                        barrier.LayoutBefore != barrier.LayoutAfter;
+                const bool requires_barrier =
+                    !resource.tracked_valid ||
+                    barrier.SyncBefore != barrier.SyncAfter ||
+                    barrier.AccessBefore != barrier.AccessAfter ||
+                    barrier.LayoutBefore != barrier.LayoutAfter;
 
-                    if (requires_barrier)
-                    {
-                        assert(texture_barrier_count < max_texture_barriers);
-                        texture_barriers[texture_barrier_count++] = barrier;
-                        
-                        if (debug_log)
-                        {
-                            BarrierLogEvent event
-                            {
-                                .resource = resource.resource,
-                                .barrier_type = D3D12_BARRIER_TYPE_TEXTURE,
-                                .access_before = barrier.AccessBefore,
-                                .access_after = barrier.AccessAfter,
-                                .sync_before = barrier.SyncBefore,
-                                .sync_after = barrier.SyncAfter,
-                                .layout_before = barrier.LayoutBefore,
-                                .layout_after = barrier.LayoutAfter,
-                            };
-                            debug_log->push_back(event);
-                        }
-                    }
-
-                    resource.tracked_layout = resource.next_layout;
-                } else
+                if (requires_barrier)
                 {
-                    D3D12_BUFFER_BARRIER barrier
+                    assert(texture_barrier_count < max_texture_barriers);
+                    texture_barriers[texture_barrier_count++] = barrier;
+                    
+                    if (debug_log)
                     {
-                        .SyncBefore = sync_before,
-                        .SyncAfter = resource.next_sync,
-                        .AccessBefore = access_before,
-                        .AccessAfter = resource.next_access,
-                        .pResource = resource.resource,
-                        .Offset = 0,
-                        .Size = resource.size_in_bytes,
-                    };
-
-                    if (!barrier.Size && barrier.pResource)
-                    {
-                        barrier.Size = barrier.pResource->GetDesc().Width;
-                    }
-
-                    const bool requires_barrier =
-                        !resource.tracked_valid ||
-                        barrier.SyncBefore != barrier.SyncAfter ||
-                        barrier.AccessBefore != barrier.AccessAfter;
-
-                    if (requires_barrier)
-                    {
-                        assert(buffer_barrier_count < max_buffer_barriers);
-                        buffer_barriers[buffer_barrier_count++] = barrier;
-                        
-                        if (debug_log)
+                        BarrierLogEvent event
                         {
-                            BarrierLogEvent event
-                            {
-                                .resource = resource.resource,
-                                .barrier_type = D3D12_BARRIER_TYPE_BUFFER,
-                                .access_before = barrier.AccessBefore,
-                                .access_after = barrier.AccessAfter,
-                                .sync_before = barrier.SyncBefore,
-                                .sync_after = barrier.SyncAfter,
-                                .layout_before = D3D12_BARRIER_LAYOUT_UNDEFINED,
-                                .layout_after = D3D12_BARRIER_LAYOUT_UNDEFINED,
-                            };
-                            debug_log->push_back(event);
-                        }
+                            .resource = resource.resource,
+                            .barrier_type = D3D12_BARRIER_TYPE_TEXTURE,
+                            .access_before = barrier.AccessBefore,
+                            .access_after = barrier.AccessAfter,
+                            .sync_before = barrier.SyncBefore,
+                            .sync_after = barrier.SyncAfter,
+                            .layout_before = barrier.LayoutBefore,
+                            .layout_after = barrier.LayoutAfter,
+                        };
+                        debug_log->push_back(event);
                     }
                 }
-
-                resource.tracked_access = resource.next_access;
-                resource.tracked_sync = resource.next_sync;
-                if (resource.is_texture)
+            }
+            else
+            {
+                D3D12_BUFFER_BARRIER barrier
                 {
-                    resource.tracked_layout = resource.next_layout;
+                    .SyncBefore = sync_before,
+                    .SyncAfter = resource.next_sync,
+                    .AccessBefore = access_before,
+                    .AccessAfter = resource.next_access,
+                    .pResource = resource.resource,
+                    .Offset = 0,
+                    .Size = resource.size_in_bytes,
+                };
+
+                if (!barrier.Size && barrier.pResource)
+                {
+                    barrier.Size = barrier.pResource->GetDesc().Width;
                 }
-                resource.tracked_valid = true;
+
+                const bool requires_barrier =
+                    !resource.tracked_valid ||
+                    barrier.SyncBefore != barrier.SyncAfter ||
+                    barrier.AccessBefore != barrier.AccessAfter;
+
+                if (requires_barrier)
+                {
+                    assert(buffer_barrier_count < max_buffer_barriers);
+                    buffer_barriers[buffer_barrier_count++] = barrier;
+                    
+                    if (debug_log)
+                    {
+                        BarrierLogEvent event
+                        {
+                            .resource = resource.resource,
+                            .barrier_type = D3D12_BARRIER_TYPE_BUFFER,
+                            .access_before = barrier.AccessBefore,
+                            .access_after = barrier.AccessAfter,
+                            .sync_before = barrier.SyncBefore,
+                            .sync_after = barrier.SyncAfter,
+                            .layout_before = D3D12_BARRIER_LAYOUT_UNDEFINED,
+                            .layout_after = D3D12_BARRIER_LAYOUT_UNDEFINED,
+                        };
+                        debug_log->push_back(event);
+                    }
+                }
             }
 
+            // Update tracked state
+            resource.tracked_access = resource.next_access;
+            resource.tracked_sync = resource.next_sync;
+            if (resource.is_texture)
+            {
+                resource.tracked_layout = resource.next_layout;
+            }
+            resource.tracked_valid = true;
+
+            // Reset for next usage
             resource.touched = false;
             resource.next_access = D3D12_BARRIER_ACCESS_NO_ACCESS;
             resource.next_sync = D3D12_BARRIER_SYNC_NONE;
@@ -401,7 +402,7 @@ namespace
         if (texture_barrier_count > 0)
         {
             assert(barrier_group_count < max_barrier_groups);
-            D3D12_BARRIER_GROUP group
+            const D3D12_BARRIER_GROUP group
             {
                 .Type = D3D12_BARRIER_TYPE_TEXTURE,
                 .NumBarriers = texture_barrier_count,
@@ -413,10 +414,10 @@ namespace
         if (buffer_barrier_count > 0)
         {
             assert(barrier_group_count < max_barrier_groups);
-            D3D12_BARRIER_GROUP group
+            const D3D12_BARRIER_GROUP group
             {
                 .Type = D3D12_BARRIER_TYPE_BUFFER,
-                .NumBarriers = (buffer_barrier_count),
+                .NumBarriers = buffer_barrier_count,
                 .pBufferBarriers = buffer_barriers,
             };
             barrier_groups[barrier_group_count++] = group;

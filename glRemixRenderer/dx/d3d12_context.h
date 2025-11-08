@@ -85,7 +85,7 @@ namespace glRemix::dx
 		bool create_command_allocator(D3D12CommandAllocator* cmd_allocator, D3D12Queue* queue, const char* debug_name = nullptr) const;
 		bool create_command_list(ID3D12GraphicsCommandList7** cmd_list, const D3D12CommandAllocator& cmd_allocator, const char* debug_name = nullptr) const;
 
-		bool create_fence(D3D12Fence* fence, uint64_t initial_value, const char* debug_name = nullptr) const;
+		bool create_fence(D3D12Fence* fence, UINT64 initial_value, const char* debug_name = nullptr) const;
 		bool wait_fences(const WaitInfo& info) const;
 
 		void set_barrier_resource(D3D12Buffer* buffer, D3D12_BUFFER_BARRIER* barrier);

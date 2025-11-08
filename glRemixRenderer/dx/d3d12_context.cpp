@@ -590,7 +590,7 @@ bool D3D12Context::create_command_list(ID3D12GraphicsCommandList7** cmd_list, co
 	return true;
 }
 
-bool D3D12Context::create_fence(D3D12Fence* fence, const uint64_t initial_value, const char* debug_name) const
+bool D3D12Context::create_fence(D3D12Fence* fence, const UINT64 initial_value, const char* debug_name) const
 {
 	assert(fence);
 	if (FAILED(m_device->CreateFence(initial_value, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(fence->fence.ReleaseAndGetAddressOf()))))
@@ -644,8 +644,8 @@ void D3D12Context::copy_texture_to_swapchain(ID3D12GraphicsCommandList7* cmd_lis
     assert(cmd_list);
     assert(&texture);
 
-    const UINT copy_width = static_cast<UINT>(std::min(static_cast<uint64_t>(m_swapchain_dims.x), texture.desc.width));
-    const UINT copy_height = std::min(static_cast<uint32_t>(m_swapchain_dims.y), texture.desc.height);
+    const UINT copy_width = std::min(m_swapchain_dims.x, texture.desc.width);
+    const UINT copy_height = std::min(m_swapchain_dims.y, texture.desc.height);
 
     D3D12_TEXTURE_COPY_LOCATION src
     {

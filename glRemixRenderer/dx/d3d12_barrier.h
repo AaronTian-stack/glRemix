@@ -6,12 +6,14 @@
 
 namespace glRemix::dx
 {
-    // TODO: Reduce size of this struct
     struct Resource
     {
         ID3D12Resource* resource = nullptr;
-        D3D12_BARRIER_SUBRESOURCE_RANGE subresource_range{};
-        uint64_t size_in_bytes = 0;
+        union
+        {
+            D3D12_BARRIER_SUBRESOURCE_RANGE subresource_range; // Textures
+            UINT64 size_in_bytes;                              // Buffers
+        };
         D3D12_BARRIER_ACCESS tracked_access = D3D12_BARRIER_ACCESS_NO_ACCESS;
         D3D12_BARRIER_ACCESS next_access = D3D12_BARRIER_ACCESS_NO_ACCESS;
         D3D12_BARRIER_SYNC tracked_sync = D3D12_BARRIER_SYNC_NONE;
@@ -68,7 +70,7 @@ namespace glRemix::dx
         bool is_texture,
         D3D12_BARRIER_LAYOUT initial_layout = D3D12_BARRIER_LAYOUT_COMMON,
         const D3D12_BARRIER_SUBRESOURCE_RANGE* subresources = nullptr,
-        uint64_t explicit_size_in_bytes = 0
+        UINT64 explicit_size_in_bytes = 0
         );
 
     bool mark_use(Resource& resource, Usage usage);
