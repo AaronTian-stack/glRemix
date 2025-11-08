@@ -711,12 +711,42 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
     }
 
 	// record mesh
-	mesh.meshId = m_meshes.size(); // will eventually be hashed
 	mesh.vertexCount = vertices.size() - verticesSize;
 	mesh.indexCount = indices.size() - mesh.indexOffset;
 
+	// hashing - logic from boost::hash_combine
+	size_t seed = 0;
+	auto hash_combine = [&seed](auto const& v) {
+		seed ^= std::hash<std::decay_t<decltype(v)>>{}(v) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+	};
+
+	// reduces floating point instability
+	auto quantize = [](float v, float precision = 1e-5f) -> float {
+		return std::round(v / precision) * precision;
+	};
+
+	// get vertex data to hash
+	for (int i = 0; i < mesh.vertexCount; ++i) {
+		const Vertex& vertex = vertices[mesh.vertexOffset + i];
+		hash_combine(quantize(vertex.position[0]));
+		hash_combine(quantize(vertex.position[1]));
+		hash_combine(quantize(vertex.position[2]));
+		hash_combine(quantize(vertex.color[0]));
+		hash_combine(quantize(vertex.color[1]));
+		hash_combine(quantize(vertex.color[2]));
+	}
+
+	// get index data to hash
+	for (int i = 0; i < mesh.indexCount; ++i) {
+		const uint32_t& index = indices[mesh.indexOffset + i];
+		hash_combine(index);
+	}
+
+	mesh.meshId = static_cast<uint64_t>(seed); // set hash to meshID
+
 	m_meshes.push_back(mesh);
 }
+
 
 int glRemix::glRemixRenderer::build_mesh_blas(uint32_t vertex_count, uint32_t vertex_offset, uint32_t index_count, uint32_t index_offset, ComPtr<ID3D12GraphicsCommandList7> cmd_list)
 {
@@ -869,6 +899,7 @@ void glRemix::glRemixRenderer::build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd
 		.InstanceDescs = m_tlas.instance.allocation.Get()->GetResource()->GetGPUVirtualAddress(),
 	};
 
+	constexpr UINT64 scratch_size = 16 * 1024 * 1024;
 	const auto tlas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(tlas_desc);
 	assert(tlas_prebuild_info.ScratchDataSizeInBytes < scratch_size);
 	dx::BufferDesc tlas_buffer_desc

@@ -85,6 +85,7 @@ namespace glRemix
                                             uint32_t bytesRead,
 											ComPtr<ID3D12GraphicsCommandList7> cmd_list);
 
+
 		// acceleration structure builders
 		int build_mesh_blas(uint32_t vertex_count, uint32_t vertex_offset, uint32_t index_count, uint32_t index_offset, ComPtr<ID3D12GraphicsCommandList7> cmd_list);
 		void build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd_list);
