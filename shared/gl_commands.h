@@ -65,14 +65,6 @@ enum class GLCommandType : uint32_t {
 
 enum class GLTopology : uint32_t { GL_QUADS = 0x0007, GL_QUAD_STRIP = 0x0008 };
 
-// Name *Unifs for clear association
-// Header for all commands
-struct GLCommandUnifs
-{
-    GLCommandType type;
-    uint32_t dataSize;
-};
-
 struct GLVec2f
 {
     float x, y;

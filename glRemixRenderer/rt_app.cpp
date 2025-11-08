@@ -539,13 +539,20 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
         switch (header->type)
         {
 			// if we encounter GL_BEGIN we know that a new geometry is to be created
-			case glRemix::GLCommandType::GL_BEGIN: 
+			case glRemix::GLCommandType::GLCMD_BEGIN: 
 			{
 				const auto* type = reinterpret_cast<const glRemix::GLBeginCommand*>(ipcBuf.data() + offset); // reach into data payload
 				offset += header->dataSize; // move past data to next command
 				read_geometry(ipcBuf, offset, vertices, indices, static_cast<glRemix::GLTopology>(type->mode), bytesRead, cmd_list); // store geometry data in vertex buffers depending on topology type
 				break;
 			}
+			case glRemix::GLCommandType::GLCMD_VERTEX3F: {
+                    const auto* v = reinterpret_cast<const glRemix::GLVertex3fCommand*>(
+                        ipcBuf.data() + offset);
+                     std::cout << "    glVertex3f(" << v->x << ", " << v->y << ", " << v->z << ")"
+                               << std::endl;
+                    break;
+					}
             default:
 			{
 				 std::cout << "    (Unhandled base command)" << std::endl; 
@@ -645,14 +652,14 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
 
         switch (header->type)
         {
-            case glRemix::GLCommandType::GL_VERTEX3F: {
+            case glRemix::GLCommandType::GLCMD_VERTEX3F: {
                 const auto* v = reinterpret_cast<const glRemix::GLVertex3fCommand*>(ipcBuf.data()
                                                                                     + offset);
                 Vertex vertex{{v->x, v->y, v->z}, {1.0f, 1.0f, 1.0f}};
                 vertices.push_back(vertex);
                 break;
             }
-            case glRemix::GLCommandType::GL_END: // read vertices until GL_END is encountered at which point we will have reached end of geomtry
+            case glRemix::GLCommandType::GLCMD_END: // read vertices until GL_END is encountered at which point we will have reached end of geomtry
 			{
                 endPrimitive = true;
                 break;
