@@ -79,8 +79,7 @@ void report_missing_function(const char* name)
     char buffer[256];
     std::snprintf(buffer, sizeof(buffer), "glRemix ERROR: missing OpenGL symbol: %s\n", name);
 
-    // comment out for testing
-    // OutputDebugStringA(buffer);
+    OutputDebugStringA(buffer);
 }
 }  // namespace gl
 }  // namespace glRemix

@@ -83,7 +83,7 @@ void _readGLFromIPC()
 
             switch (header->type)
             {
-                case glRemix::GLCommandType::GL_VERTEX3F: {
+                case glRemix::GLCommandType::GLCMD_VERTEX3F: {
                     const auto* v = reinterpret_cast<const glRemix::GLVertex3fCommand*>(
                         ipcBuf.data() + offset);
                      std::cout << "    glVertex3f(" << v->x << ", " << v->y << ", " << v->z << ")"

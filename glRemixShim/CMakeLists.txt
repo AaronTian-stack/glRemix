@@ -3,6 +3,7 @@ project(glRemix_shim LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set_property(GLOBAL PROPERTY CXX_STANDARD 20)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -41,6 +42,13 @@ add_custom_command(
 
 add_custom_target(glremix_generate_gl_wrappers DEPENDS "${GL_GENERATED_WRAPPERS}" "${GL_GENERATED_ALIASES}")
 add_custom_target(glremix_generate_wgl_wrappers DEPENDS "${WGL_GENERATED_WRAPPERS}")
+
+add_custom_target(glRemixShim_GeneratedHeaders
+    DEPENDS
+        "${GL_GENERATED_WRAPPERS}"
+        "${GL_GENERATED_ALIASES}"
+        "${WGL_GENERATED_WRAPPERS}"
+)
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/shim_sources.cmake)
 
@@ -118,23 +126,5 @@ if(_GLREMIX_SHIM_DEPLOY_CONFIG_DIR)
     endif()
 endif()
 
-if(WIN32)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE
-        NOMINMAX
-        UNICODE
-        _UNICODE
-        WIN32_LEAN_AND_MEAN
-        GLREMIX_EXPORTS
-    )
-
-    if(MSVC)
-        target_compile_options(${PROJECT_NAME} PRIVATE /MP)
-    endif()
-
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-        kernel32
-        user32
-        advapi32
-        ole32
-    )
-endif()
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/shim_compile_spec.cmake)
+set_shim_compile_specifications(${PROJECT_NAME})
