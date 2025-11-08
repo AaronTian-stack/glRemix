@@ -436,7 +436,7 @@ void glRemix::glRemixRenderer::create()
 }
 
 // Reads an incoming stream of OpenGL commands and launches corresponding renderer functions
-void glRemix::glRemixRenderer::readGLStream()
+void glRemix::glRemixRenderer::read_gl_command_stream()
 {
     if (!m_ipc.InitReader())
     {
@@ -461,6 +461,11 @@ void glRemix::glRemixRenderer::readGLStream()
 		return;
     }
 
+	// for acceleration structure building
+	THROW_IF_FALSE(SUCCEEDED(m_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
+	ComPtr<ID3D12GraphicsCommandList7> cmd_list;
+	THROW_IF_FALSE(m_context.create_command_list(cmd_list.ReleaseAndGetAddressOf(), m_cmd_pools[get_frame_index()]));
+
     // loop through data from frame
     // can comment out the logs here too
 	std::vector<Vertex> vertices;
@@ -482,7 +487,7 @@ void glRemix::glRemixRenderer::readGLStream()
 			{
 				const auto* type = reinterpret_cast<const GLBeginCommand*>(ipcBuf.data() + offset); // reach into data payload
 				offset += header->dataSize; // move past data to next command
-				readGeometry(ipcBuf, offset, vertices, indices, static_cast<GLTopology>(type->mode), bytesRead); // store geometry data in vertex buffers depending on topology type
+				read_geometry(ipcBuf, offset, vertices, indices, static_cast<glRemix::GLTopology>(type->mode), bytesRead, cmd_list); // store geometry data in vertex buffers depending on topology type
 				break;
 			}
             default:
@@ -518,18 +523,57 @@ void glRemix::glRemixRenderer::readGLStream()
     THROW_IF_FALSE(m_context.map_buffer(&m_index_buffer, &cpu_ptr));
     memcpy(cpu_ptr, indices.data(), index_buffer_desc.size);
     m_context.unmap_buffer(&m_index_buffer);
+
+	constexpr UINT64 scratch_size = 16 * 1024 * 1024;
+
+	// build blasses per mesh
+	const UINT instance_count = (UINT)m_meshes.size();
+	for (int i = 0; i < instance_count; i++)
+	{
+		MeshRecord mesh = m_meshes[i];
+		m_meshes[i].blasID = build_mesh_blas(mesh.vertexCount, mesh.vertexOffset, mesh.indexCount, mesh.indexOffset, cmd_list);
+	}
+
+	build_tlas(cmd_list); // builds top level acceleration structure with blas buffer (can be called each frame likely)
+
+	THROW_IF_FALSE(SUCCEEDED(cmd_list->Close()));
+	const std::array<ID3D12CommandList*, 1> lists = { cmd_list.Get() };
+	m_gfx_queue.queue->ExecuteCommandLists(1, lists.data());
+
+	// Signal fence and wait for GPU to finish
+	auto current_fence_value = ++m_fence_frame_ready_val[get_frame_index()];
+	m_gfx_queue.queue->Signal(m_fence_frame_ready.fence.Get(), current_fence_value);
+
+	dx::WaitInfo wait_info
+	{
+		.wait_all = true,
+		.count = 1,
+		.fences = &m_fence_frame_ready,
+		.values = &current_fence_value,
+		.timeout = INFINITE,
+	};
+
+	m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer.allocation->GetResource(), &m_rt_descriptors, 0);
+	THROW_IF_FALSE(m_context.wait_fences(wait_info)); // Block CPU until done
+
+	return;
 }
 
 // adds to vertex and index buffers depending on topology type
-void glRemix::glRemixRenderer::readGeometry(std::vector<uint8_t>& ipcBuf,
+void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
                                             size_t& offset,
                                             std::vector<Vertex>& vertices,
                                             std::vector<uint32_t>& indices,
                                             glRemix::GLTopology topology,
-                                            uint32_t bytesRead)
+                                            uint32_t bytesRead,
+											ComPtr<ID3D12GraphicsCommandList7> cmd_list)
 {
     bool endPrimitive = false;
     int verticesSize = vertices.size();
+
+	MeshRecord mesh; // glBegin indicates start of new mesh
+	mesh.vertexOffset = verticesSize;
+	mesh.indexOffset = indices.size();
 
     while (offset + sizeof(glRemix::GLCommandUnifs) <= bytesRead)
     {
@@ -568,6 +612,9 @@ void glRemix::glRemixRenderer::readGeometry(std::vector<uint8_t>& ipcBuf,
     }
 
 	// determine indices based on specified topology
+	// push absolute indices into index buffer
+	uint32_t base = verticesSize;
+	uint32_t numIndices = 0;
     if (topology == glRemix::GLTopology::GL_QUAD_STRIP)
     {
         for (uint32_t k = verticesSize; k + 3 < vertices.size(); k += 2)
@@ -577,12 +624,14 @@ void glRemix::glRemixRenderer::readGeometry(std::vector<uint8_t>& ipcBuf,
             uint32_t c = k + 2;
             uint32_t d = k + 3;
 
-            indices.push_back(a);
-            indices.push_back(b);
-            indices.push_back(d);
-            indices.push_back(a);
-            indices.push_back(d);
-            indices.push_back(c);
+            indices.push_back(a - base);
+            indices.push_back(b - base);
+            indices.push_back(d - base);
+            indices.push_back(a - base);
+            indices.push_back(d - base);
+            indices.push_back(c - base);
+
+			numIndices += 6;
         }
     } else if (topology == glRemix::GLTopology::GL_QUADS)
     {
@@ -593,23 +642,293 @@ void glRemix::glRemixRenderer::readGeometry(std::vector<uint8_t>& ipcBuf,
             uint32_t c = k + 2;
             uint32_t d = k + 3;
 
-            indices.push_back(a);
-            indices.push_back(b);
-            indices.push_back(c);
-            indices.push_back(a);
-            indices.push_back(c);
-            indices.push_back(d);
+            indices.push_back(a - base);
+            indices.push_back(b - base);
+            indices.push_back(c - base);
+            indices.push_back(a - base);
+            indices.push_back(c - base);
+            indices.push_back(d - base);
+
+			numIndices += 6;
         }
     }
+
+	// record mesh
+	mesh.vertexCount = vertices.size() - verticesSize;
+	mesh.indexCount = indices.size() - mesh.indexOffset;
+
+	// hashing - logic from boost::hash_combine
+	size_t seed = 0;
+	auto hash_combine = [&seed](auto const& v) {
+		seed ^= std::hash<std::decay_t<decltype(v)>>{}(v) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+	};
+
+	// reduces floating point instability
+	auto quantize = [](float v, float precision = 1e-5f) -> float {
+		return std::round(v / precision) * precision;
+	};
+
+	// get vertex data to hash
+	for (int i = 0; i < mesh.vertexCount; ++i) {
+		const Vertex& vertex = vertices[mesh.vertexOffset + i];
+		hash_combine(quantize(vertex.position[0]));
+		hash_combine(quantize(vertex.position[1]));
+		hash_combine(quantize(vertex.position[2]));
+		hash_combine(quantize(vertex.color[0]));
+		hash_combine(quantize(vertex.color[1]));
+		hash_combine(quantize(vertex.color[2]));
+	}
+
+	// get index data to hash
+	for (int i = 0; i < mesh.indexCount; ++i) {
+		const uint32_t& index = indices[mesh.indexOffset + i];
+		hash_combine(index);
+	}
+
+	mesh.meshId = static_cast<uint64_t>(seed); // set hash to meshID
+
+	m_meshes.push_back(mesh);
+}
+
+
+int glRemix::glRemixRenderer::build_mesh_blas(uint32_t vertex_count, uint32_t vertex_offset, uint32_t index_count, uint32_t index_offset, ComPtr<ID3D12GraphicsCommandList7> cmd_list)
+{
+	dx::D3D12Buffer t_blas_buffer;
+
+	// Build BLAS here for now, but renderer will construct them dynamically for new geometry in render loop
+	D3D12_RAYTRACING_GEOMETRY_DESC tri_desc
+	{
+		.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
+		.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE, // Try to use this liberally as its faster
+		.Triangles = m_context.get_buffer_rt_description_subrange(&m_vertex_buffer, vertex_count, vertex_offset, &m_index_buffer, index_count, index_offset),
+	};
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS blas_desc
+	{
+		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
+		// Lots of options here, probably want to use different ones, especially the update one
+		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
+		.NumDescs = 1,
+		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+		.pGeometryDescs = &tri_desc,
+	};
+
+	const auto blas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(blas_desc);
+	// TODO: Reuse scratch space for all BLAS
+	// The same could be done for TLAS(s) as well
+
+	constexpr UINT64 scratch_size = 16 * 1024 * 1024;
+	assert(blas_prebuild_info.ScratchDataSizeInBytes < scratch_size);
+
+	dx::BufferDesc blas_buffer_desc
+	{
+		.size = blas_prebuild_info.ResultDataMaxSizeInBytes,
+		.stride = 0,
+		.visibility = dx::GPU,
+		.acceleration_structure = true,
+	};
+	THROW_IF_FALSE(m_context.create_buffer(blas_buffer_desc, &t_blas_buffer, "BLAS buffer"));
+	
+	const auto blas_build_desc = m_context.get_raytracing_acceleration_structure(blas_desc, &t_blas_buffer, nullptr, &m_scratch_space);
+
+	// Transition scratch space to UAV format
+	D3D12_BUFFER_BARRIER scratch_space_uav
+	{
+		.SyncBefore = D3D12_BARRIER_SYNC_NONE,
+		.SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+		.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
+		.AccessAfter = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
+		.pResource = m_scratch_space.allocation->GetResource(),
+		.Offset = 0,
+		.Size = UINT64_MAX,
+	};
+
+	D3D12_BUFFER_BARRIER blas_buffer_barrier
+	{
+		.SyncBefore = D3D12_BARRIER_SYNC_NONE,
+		.SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+		.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
+		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
+		.pResource = t_blas_buffer.allocation->GetResource(),
+		.Offset = 0,
+		.Size = UINT64_MAX,
+	};
+
+	std::array buffer_barriers{ scratch_space_uav, blas_buffer_barrier };
+
+	D3D12_BARRIER_GROUP barrier_group0
+	{
+		.Type = D3D12_BARRIER_TYPE_BUFFER,
+		.NumBarriers = static_cast<UINT>(buffer_barriers.size()),
+		.pBufferBarriers = buffer_barriers.data(),
+	};
+
+	cmd_list->Barrier(1, &barrier_group0);
+
+	cmd_list->BuildRaytracingAccelerationStructure(&blas_build_desc, 0, nullptr);
+
+	// TODO: It would be convenient if resources tracked their current state for barriers
+	// Transition BLAS to read state
+	blas_buffer_barrier =
+	{
+		.SyncBefore = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+		.SyncAfter = D3D12_BARRIER_SYNC_RAYTRACING,
+		.AccessBefore = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
+		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ,
+		.pResource = t_blas_buffer.allocation->GetResource(),
+		.Offset = 0,
+		.Size = UINT64_MAX,
+	};
+	D3D12_BARRIER_GROUP barrier_group_read
+	{
+		.Type = D3D12_BARRIER_TYPE_BUFFER,
+		.NumBarriers = 1,
+		.pBufferBarriers = &blas_buffer_barrier,
+	};
+	cmd_list->Barrier(1, &barrier_group_read);
+
+	m_blas_buffers.push_back(t_blas_buffer);
+	return m_blas_buffers.size() - 1;
+}
+
+ // builds top level acceleration structure with blas buffer (can be called each frame likely)
+void glRemix::glRemixRenderer::build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd_list)
+{
+	// create an instance descriptor for all geometry
+	const UINT instance_count = (UINT)m_meshes.size();
+
+	if (instance_count == 0) return;
+
+	std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instance_descs(instance_count);
+	for (int i = 0; i < instance_count; i++)
+	{
+		MeshRecord mesh = m_meshes[i];
+		instance_descs[i] = 
+		{
+			.Transform
+			{
+				// Identity matrix (eventually change to mesh's associated matrix)
+				1.0f, 0.0f, 0.0f, 0.0f,
+				0.0f, 1.0f, 0.0f, 0.0f,
+				0.0f, 0.0f, 1.0f, 0.0f,
+			},
+			.InstanceID = (UINT)i,
+			.InstanceMask = 0xFF,
+			.InstanceContributionToHitGroupIndex = 0,
+			.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE,
+			.AccelerationStructure = m_blas_buffers[i].allocation->GetResource()->GetGPUVirtualAddress(),
+		};
+	}
+
+	
+	dx::BufferDesc instance_buffer_desc
+	{
+		.size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instance_count,
+		.stride = sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
+		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+	};
+	THROW_IF_FALSE(m_context.create_buffer(instance_buffer_desc, &m_tlas.instance, "TLAS instance buffer"));
+	
+	void* cpu_ptr;
+	THROW_IF_FALSE(m_context.map_buffer(&m_tlas.instance, &cpu_ptr));
+	memcpy(cpu_ptr, instance_descs.data(), instance_buffer_desc.size);
+	m_context.unmap_buffer(&m_tlas.instance);
+
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tlas_desc
+	{
+		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
+		// Lots of options here, probably want to use different ones, especially the update one
+		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
+		.NumDescs = instance_count,
+		.InstanceDescs = m_tlas.instance.allocation.Get()->GetResource()->GetGPUVirtualAddress(),
+	};
+
+	constexpr UINT64 scratch_size = 16 * 1024 * 1024;
+	const auto tlas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(tlas_desc);
+	assert(tlas_prebuild_info.ScratchDataSizeInBytes < scratch_size);
+	dx::BufferDesc tlas_buffer_desc
+	{
+		.size = tlas_prebuild_info.ResultDataMaxSizeInBytes,
+		.stride = 0,
+		.visibility = dx::GPU,
+		.acceleration_structure = true,
+	};
+	THROW_IF_FALSE(m_context.create_buffer(tlas_buffer_desc, &m_tlas.buffer, "TLAS buffer"));
+
+	D3D12_BUFFER_BARRIER tlas_buffer_barrier
+	{
+		.SyncBefore = D3D12_BARRIER_SYNC_NONE,
+		.SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+		.AccessBefore = D3D12_BARRIER_ACCESS_NO_ACCESS,
+		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
+		.pResource = m_tlas.buffer.allocation->GetResource(),
+		.Offset = 0,
+		.Size = UINT64_MAX,
+	};
+	D3D12_BARRIER_GROUP barrier_group_tlas
+	{
+		.Type = D3D12_BARRIER_TYPE_BUFFER,
+		.NumBarriers = 1,
+		.pBufferBarriers = &tlas_buffer_barrier,
+	};
+	cmd_list->Barrier(1, &barrier_group_tlas);
+
+	const auto tlas_build_desc = m_context.get_raytracing_acceleration_structure(tlas_desc, &m_tlas.buffer, nullptr, &m_scratch_space);
+
+	cmd_list->BuildRaytracingAccelerationStructure(&tlas_build_desc, 0, nullptr);
+
+	// Transition TLAS to read state after build
+	D3D12_BUFFER_BARRIER tlas_buffer_barrier_read
+	{
+		.SyncBefore = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+		.SyncAfter = D3D12_BARRIER_SYNC_RAYTRACING,
+		.AccessBefore = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
+		.AccessAfter = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_READ,
+		.pResource = m_tlas.buffer.allocation->GetResource(),
+		.Offset = 0,
+		.Size = UINT64_MAX,
+	};
+
+	D3D12_BARRIER_GROUP tlas_barrier_group_read
+	{
+		.Type = D3D12_BARRIER_TYPE_BUFFER,
+		.NumBarriers = 1,
+		.pBufferBarriers = &tlas_buffer_barrier_read,
+	};
+	cmd_list->Barrier(1, &tlas_barrier_group_read);
+}
+
+void glRemix::glRemixRenderer::updateMVP(float rot)
+{
+    using namespace DirectX;
+
+    XMUINT2 win_dims{};
+    m_context.get_window_dimensions(&win_dims);
+
+    MVP* mvpCPU = nullptr;
+    THROW_IF_FALSE(m_context.map_buffer(&m_mvp, reinterpret_cast<void**>(&mvpCPU)));
+
+    const float h = float(win_dims.y) / float(win_dims.x);
+    XMMATRIX M = XMMatrixRotationRollPitchYaw(rot, rot, rot);
+    XMMATRIX V = XMMatrixTranslation(0.0f, 0.0f, -40.0f);
+    XMMATRIX P = XMMatrixPerspectiveOffCenterRH(-1.0f, 1.0f, -h, h, 5.0f, 60.0f);
+
+    XMStoreFloat4x4(&mvpCPU->model, M);
+    XMStoreFloat4x4(&mvpCPU->view, V);
+    XMStoreFloat4x4(&mvpCPU->proj, P);
+
+    m_context.unmap_buffer(&m_mvp);
 }
 
 void glRemix::glRemixRenderer::render()
 {
-	readGLStream();
+	// read GL stream and set resoureces accordingly
+	read_gl_command_stream();
 
 	// Start ImGui frame
 	m_context.start_imgui_frame();
 	ImGui::ShowDemoWindow();
+
+	//if (!m_vertex_buffer.allocation) return;
 
 	// Be careful not to call the ID3D12Interface reset instead
 	THROW_IF_FALSE(SUCCEEDED(m_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
@@ -644,13 +963,14 @@ void glRemix::glRemixRenderer::render()
 	cmd_list->RSSetScissorRects(1, &scissor_rect);
 
 	// Build TLAS
+	build_tlas(cmd_list);
 
 	// Dispatch rays to UAV render target
 	{
 		static float increment = 0.f;
 		increment += 0.01f;
 
-		XMVECTOR eye_position = XMVectorSet(cosf(increment), sinf(increment), -2.0f, 1.0f);
+		XMVECTOR eye_position = XMVectorSet(cosf(increment), sinf(increment), -12.0f, 1.0f);
 		XMVECTOR focus_position = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
 		XMVECTOR up_direction = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 		

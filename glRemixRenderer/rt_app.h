@@ -15,6 +15,25 @@ namespace glRemix
             std::array<float, 3> color;
         };
 
+		struct MeshRecord
+		{
+			uint32_t meshId; // will eventually be hashed
+			uint32_t vertexOffset; // offset into vertex atlas
+			uint32_t vertexCount;
+			uint32_t indexOffset; // offset into index atlas
+			uint32_t indexCount; // number of indices belonging to this mesh
+			uint32_t blasID;
+			uint32_t MVID; // index into model view array
+			uint32_t texId;
+		};
+
+		struct alignas(16) MVP
+		{
+            DirectX::XMFLOAT4X4 model;
+            DirectX::XMFLOAT4X4 view;
+            DirectX::XMFLOAT4X4 proj;
+        };
+
         std::array<dx::D3D12CommandAllocator, m_frames_in_flight> m_cmd_pools{};
 
 		ComPtr<ID3D12RootSignature> m_root_signature{};
@@ -46,23 +65,31 @@ namespace glRemix
         dx::D3D12Texture m_uav_render_target{};
 
 		IPCProtocol m_ipc;
-		
-		float rot = 0;
 
+		// mesh resources
+		std::vector<MeshRecord> m_meshes;
+		std::vector<dx::D3D12Buffer> m_blas_buffers;
 
 	protected:
 		void create() override;
 		void render() override;
 		void destroy() override;
 
-		// TODO: Decoding should go in a separate module
-		void readGLStream();
-		void readGeometry(std::vector<uint8_t>& ipcBuf,
+		void read_gl_command_stream();
+		void read_geometry(std::vector<uint8_t>& ipcBuf,
                                             size_t& offset,
                                             std::vector<Vertex>& vertices,
                                             std::vector<uint32_t>& indices,
-                                            GLTopology topology,
-                                            uint32_t bytesRead);
+                                            glRemix::GLTopology topology,
+                                            uint32_t bytesRead,
+											ComPtr<ID3D12GraphicsCommandList7> cmd_list);
+
+
+		// acceleration structure builders
+		int build_mesh_blas(uint32_t vertex_count, uint32_t vertex_offset, uint32_t index_count, uint32_t index_offset, ComPtr<ID3D12GraphicsCommandList7> cmd_list);
+		void build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd_list);
+		
+		void updateMVP(float rot);
 
 	public:
 		glRemixRenderer() = default;
