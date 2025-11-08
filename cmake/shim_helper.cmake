@@ -33,4 +33,6 @@ include("${GLREMIX_SHIM_SOURCE_DIR}/cmake/shim_compile_spec.cmake")
 set_shim_compile_specifications(_glRemix_shim_intellisense)
 
 # allow the renderer target to inherit its include paths
-target_link_libraries(glRemix_renderer PRIVATE _glRemix_shim_intellisense)
+if(TARGET glRemix_renderer)
+    target_link_libraries(glRemix_renderer PRIVATE _glRemix_shim_intellisense)
+endif()
