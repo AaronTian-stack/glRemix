@@ -93,7 +93,7 @@ namespace
                       .sync = D3D12_BARRIER_SYNC_RAYTRACING,
                       .layout = D3D12_BARRIER_LAYOUT_COMMON,},
         UseDefinition{.access = D3D12_BARRIER_ACCESS_RAYTRACING_ACCELERATION_STRUCTURE_WRITE,
-                      .sync = D3D12_BARRIER_SYNC_RAYTRACING,
+                      .sync = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
                       .layout = D3D12_BARRIER_LAYOUT_COMMON,},
     };
 
@@ -289,7 +289,7 @@ namespace
                                                        : D3D12_BARRIER_SYNC_NONE;
             const D3D12_BARRIER_LAYOUT layout_before = resource.tracked_valid
                                                            ? resource.tracked_layout
-                                                           : D3D12_BARRIER_LAYOUT_COMMON;
+                                                           : (resource.is_texture ? D3D12_BARRIER_LAYOUT_UNDEFINED : D3D12_BARRIER_LAYOUT_COMMON);
 
             if (resource.is_texture)
             {

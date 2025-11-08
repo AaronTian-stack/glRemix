@@ -3,7 +3,6 @@
 #include "dx/d3d12_as.h"
 #include <DirectXMath.h>
 #include <ipc_protocol.h>
-#include <iostream>
 
 namespace glRemix
 {
@@ -88,8 +87,6 @@ namespace glRemix
 		// acceleration structure builders
 		int build_mesh_blas(uint32_t vertex_count, uint32_t vertex_offset, uint32_t index_count, uint32_t index_offset, ComPtr<ID3D12GraphicsCommandList7> cmd_list);
 		void build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd_list);
-		
-		void updateMVP(float rot);
 
 	public:
 		glRemixRenderer() = default;
