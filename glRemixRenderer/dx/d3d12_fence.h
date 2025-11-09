@@ -25,7 +25,7 @@ namespace glRemix::dx
 		bool wait_all; // If false will wait on any of the fences
 		UINT count;
 		D3D12Fence* fences;
-		uint64_t* values;
-		uint64_t timeout = INFINITE;
+		UINT64* values;
+		UINT64 timeout = INFINITE;
 	};
 }
