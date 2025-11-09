@@ -10,7 +10,7 @@ enum class GLMatrixMode : uint32_t
 {
     MODELVIEW = 0x1700,
     PROJECTION = 0x1701,
-    TEXTURE = 0x1702 // the 02 is just a guess im not sure what the actual enum expands to
+    TEXTURE = 0x1702
 };
 
 class glMatrixStack

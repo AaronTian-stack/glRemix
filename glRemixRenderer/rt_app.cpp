@@ -512,15 +512,41 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
                 buildGeometry = true;
                 break;
             }
-			case glRemix::GLCommandType::GLCMD_MATERIALFV: // (incomplete add ambient + diffuse later)
+			case glRemix::GLCommandType::GLCMD_MATERIALF:
+			{
+				std::cout << "GL_MATERIALF: " << header->dataSize << std::endl;
+				const auto* mat = reinterpret_cast<const glRemix::GLMaterialCommand*>(ipcBuf.data() + offset);  // reach into data payload
+
+				// TODO: when material f is encountered, edit the current m_material based on the param and value
+
+				break;
+			}
+			case glRemix::GLCommandType::GLCMD_MATERIALFV: 
 			{
 				std::cout << "GL_MATERIALFV: " << header->dataSize << std::endl;
 
 				const auto* mat = reinterpret_cast<const glRemix::GLMaterialfvCommand*>(ipcBuf.data() + offset);  // reach into data payload
-				color[0] = mat->params.x;
-				color[1] = mat->params.y;
-				color[2] = mat->params.z;
-				color[3] = mat->params.w;
+
+				// TODO: when material fv is encountered, edit the current m_material based on the param and value
+
+				break;
+			}
+			case glRemix::GLCommandType::GLCMD_LIGHTF: 
+			{
+				std::cout << "GL_LIGHTF: " << header->dataSize << std::endl;
+				const auto* light = reinterpret_cast<const glRemix::GLLightCommand*>(ipcBuf.data() + offset);  // reach into data payload
+
+				// TODO: when light f is encountered, edit the current m_light based on the param and value
+
+				break;
+			}
+			case glRemix::GLCommandType::GLCMD_LIGHTFV:
+			{
+				std::cout << "GL_LIGHTFV: " << header->dataSize << std::endl;
+				const auto* light = reinterpret_cast<const glRemix::GLLightfvCommand*>(ipcBuf.data() + offset);  // reach into data payload
+
+				// TODO: when light fv is encountered, edit the current m_light based on the param and value
+
 				break;
 			}
 			case glRemix::GLCommandType::GLCMD_MATRIX_MODE:
@@ -821,6 +847,10 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
 	}
 
 	mesh.meshId = static_cast<uint64_t>(seed); // set hash to meshID
+
+	// we assign materials here
+	mesh.matID = static_cast<uint32_t>(m_materials.size());
+	m_materials.push_back(m_material); // store the current state of the material in the materials buffer
 
 	mesh.MVID = static_cast<uint32_t>(m_matrix_pool.size());
 	m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
