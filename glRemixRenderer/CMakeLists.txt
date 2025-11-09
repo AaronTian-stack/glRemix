@@ -13,6 +13,7 @@ set(SHARED_HEADERS ${GLREMIX_SHARED_HEADER_FILES})
 set(SHARED_SOURCES ${GLREMIX_SHARED_SOURCE_FILES})
 
 set(dx_dir "${CMAKE_CURRENT_SOURCE_DIR}/dx")
+set(gl_dir "${CMAKE_CURRENT_SOURCE_DIR}/gl")
 
 set(RENDERER_SOURCES
     "main.cpp"
@@ -20,6 +21,8 @@ set(RENDERER_SOURCES
     "${dx_dir}/d3d12_descriptor_heap.cpp"
     "${dx_dir}/d3d12_pipeline_types.cpp"
     "${dx_dir}/d3d12_barrier.cpp"
+
+    "${gl_dir}/gl_matrix_stack.cpp"
 
     "application.cpp"
     "rt_app.cpp"
@@ -37,6 +40,8 @@ set(RENDERER_HEADERS
     "${dx_dir}/d3d12_buffer.h"
     "${dx_dir}/d3d12_texture.h"
     "${dx_dir}/d3d12_barrier.h"
+
+    "${gl_dir}/gl_matrix_stack.h"
 
     "constants.h"
     "helper.h"

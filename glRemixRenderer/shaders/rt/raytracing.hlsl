@@ -27,8 +27,8 @@ void RayGenMain()
 
     // Transform from NDC to world space using inverse view-projection
     // Near plane point in clip space
-    float4 near_point = float4(ndc, 0.0f, 1.0f);
-    float4 far_point = float4(ndc, 1.0f, 1.0f);
+    float4 near_point = float4(ndc, 1.0f, 1.0f);
+    float4 far_point = float4(ndc, -1.0f, 1.0f); // look down -Z match gl convention
     
     // Transform to world space
     float4 near_world = mul(near_point, g_rayGenCB.inv_view_proj);

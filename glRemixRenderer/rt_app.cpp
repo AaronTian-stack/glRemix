@@ -199,8 +199,8 @@ void glRemix::glRemixRenderer::create()
 		
 		m_context.unmap_buffer(&m_shader_table);
 	}
-  
-	dx::D3D12Buffer t_vertex_buffer{};
+
+    dx::D3D12Buffer t_vertex_buffer{};
 	dx::D3D12Buffer t_index_buffer{};
     std::array<Vertex, 3> triangle_vertices{{{{0.0f, 0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}},
                                              {{0.5f, -0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}},
@@ -453,8 +453,6 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
         std::this_thread::sleep_for(std::chrono::milliseconds(60));
     }
 
-    std::cout << "IPC reader instance successfully initialized" << std::endl;
-
     const uint32_t bufCapacity = m_ipc.GetCapacity();  // ask shared mem for capacity
     std::vector<uint8_t> ipcBuf(bufCapacity);          // decoupled local buffer here
 
@@ -482,6 +480,9 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
 
+	// matrix intialization
+	m_matrix_pool.clear(); // reset matrix pool each frame
+
     bool buildGeometry = false;
     // loop through data from frame
     size_t offset = sizeof(glRemix::GLFrameUnifs);
@@ -497,8 +498,7 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
         {
             // if we encounter GL_BEGIN we know that a new geometry is to be created
             case glRemix::GLCommandType::GLCMD_BEGIN: {
-                std::cout << "  Command: " << "GL_BEGIN"
-                          << " (size: " << header->dataSize << ")" << std::endl;
+                std::cout << "GL_BEGIN: " << header->dataSize << std::endl;
 
                 const auto* type = reinterpret_cast<const glRemix::GLBeginCommand*>(ipcBuf.data() + offset);  // reach into data payload
                 offset += header->dataSize;  // move past data to next command for parsing in read geometry
@@ -512,6 +512,93 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
                 buildGeometry = true;
                 break;
             }
+			case glRemix::GLCommandType::GLCMD_MATERIALFV: // (incomplete add ambient + diffuse later)
+			{
+				std::cout << "GL_MATERIALFV: " << header->dataSize << std::endl;
+
+				const auto* mat = reinterpret_cast<const glRemix::GLMaterialfvCommand*>(ipcBuf.data() + offset);  // reach into data payload
+				color[0] = mat->params.x;
+				color[1] = mat->params.y;
+				color[2] = mat->params.z;
+				color[3] = mat->params.w;
+				break;
+			}
+			case glRemix::GLCommandType::GLCMD_MATRIX_MODE:
+			{
+				std::cout << "GL_MATRIX_MODE: " << header->dataSize << std::endl;
+
+				const auto* type = reinterpret_cast<const glRemix::GLMatrixModeCommand*>(ipcBuf.data() + offset);  // reach into data payload
+				matrixMode = static_cast<gl::GLMatrixMode>(type->mode);
+				break;
+			}
+			case glRemix::GLCommandType::GLCMD_PUSH_MATRIX:
+			{
+				std::cout << "GL_PUSH_MATRIX" << std::endl;
+
+				m_matrix_stack.push(matrixMode);
+				break;
+			}
+			case glRemix::GLCommandType::GLCMD_POP_MATRIX:
+			{
+				std::cout << "GL_POP_MATRIX" << std::endl;
+
+				m_matrix_stack.pop(matrixMode);
+				break;
+			}
+			case glRemix::GLCommandType::GLCMD_LOAD_IDENTITY:
+			{
+				std::cout << "GL_LOAD_IDENTITY: " << header->dataSize << std::endl;
+
+				m_matrix_stack.identity(matrixMode);
+				break;
+			}
+			case glRemix::GLCommandType::GLCMD_ROTATE:
+			{
+				std::cout << "GL_ROTATE: " << header->dataSize << std::endl;
+				const auto* angleAxis = reinterpret_cast<const glRemix::GLRotateCommand*>(ipcBuf.data()
+                                                                                    + offset);
+				float angle = angleAxis->angle;
+				float x = angleAxis->axis.x;
+				float y = angleAxis->axis.y;
+				float z = angleAxis->axis.z;
+
+				m_matrix_stack.rotate(matrixMode, angle, x, y, z);
+				break;
+			}
+			case glRemix::GLCommandType::GLCMD_TRANSLATE:
+			{
+				std::cout << "GL_TRANSLATE: " << header->dataSize << std::endl;
+				const auto* vec = reinterpret_cast<const glRemix::GLTranslateCommand*>(ipcBuf.data() + offset);
+				m_matrix_stack.translate(matrixMode, vec->t.x, vec->t.y, vec->t.z);
+				break;
+			}
+			case glRemix::GLCommandType::GLCMD_FRUSTUM:
+			{
+				std::cout << "GL_FRUSTUM: " << header->dataSize << std::endl;
+                const auto* frust = reinterpret_cast<const glRemix::GLFrustumCommand*>(ipcBuf.data() + offset);
+
+				// get current window dimensions
+                XMUINT2 win_dims{};
+                m_context.get_window_dimensions(&win_dims);
+
+				// recompute frustum based on dx12 window but using intercepted gl stream params
+                const double n = frust->zNear;
+                const double f = frust->zFar;
+
+                const float aspect = static_cast<float>(win_dims.x) / static_cast<float>(win_dims.y);
+
+                const double fovY = 2.0 * std::atan(frust->top / n);
+
+                const double t = n * std::tan(fovY * 0.5);
+                const double b = -t;
+                const double r = t * aspect;
+                const double l = -r;
+
+                m_matrix_stack.frustum(matrixMode, l, r, b, t, n, f);
+
+                break;
+            }
+
             default: std::cout << "    (Unhandled command)" << std::endl; break;
         }
 
@@ -622,10 +709,25 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
             case glRemix::GLCommandType::GLCMD_VERTEX3F: {
                 const auto* v = reinterpret_cast<const glRemix::GLVertex3fCommand*>(ipcBuf.data()
                                                                                     + offset);
-                Vertex vertex{{v->x, v->y, v->z}, {1.0f, 1.0f, 1.0f}};
+                Vertex vertex{{v->x, v->y, v->z}, {color[0], color[1], color[2]}};
                 vertices.push_back(vertex);
                 break;
             }
+			case glRemix::GLCommandType::GLCMD_COLOR3F: {
+				const auto* c = reinterpret_cast<const glRemix::GLColor3fCommand*>(ipcBuf.data() + offset);
+				color[0] = c->x;
+				color[1] = c->y;
+				color[2] = c->z;
+				break;
+			}
+			case glRemix::GLCommandType::GLCMD_COLOR4F: {
+				const auto* c = reinterpret_cast<const glRemix::GLColor4fCommand*>(ipcBuf.data() + offset);
+				color[0] = c->x;
+				color[1] = c->y;
+				color[2] = c->z;
+				color[3] = c->w;
+				break;
+			}
             case glRemix::GLCommandType::GLCMD_END: // read vertices until GL_END is encountered at which point we will have reached end of geomtry
 			{
                 endPrimitive = true;
@@ -720,9 +822,11 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
 
 	mesh.meshId = static_cast<uint64_t>(seed); // set hash to meshID
 
+	mesh.MVID = static_cast<uint32_t>(m_matrix_pool.size());
+	m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
+
 	m_meshes.push_back(mesh);
 }
-
 
 int glRemix::glRemixRenderer::build_mesh_blas(uint32_t vertex_count, uint32_t vertex_offset, uint32_t index_count, uint32_t index_offset, ComPtr<ID3D12GraphicsCommandList7> cmd_list)
 {
@@ -780,6 +884,23 @@ int glRemix::glRemixRenderer::build_mesh_blas(uint32_t vertex_count, uint32_t ve
 	return m_blas_buffers.size() - 1;
 }
 
+static D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const DirectX::XMFLOAT4X4& mv)
+{
+    D3D12_RAYTRACING_INSTANCE_DESC desc = {};
+    
+    // Rotation / upper 3x3
+    desc.Transform[0][0] = mv._11; desc.Transform[0][1] = mv._12; desc.Transform[0][2] = mv._13;
+    desc.Transform[1][0] = mv._21; desc.Transform[1][1] = mv._22; desc.Transform[1][2] = mv._23;
+    desc.Transform[2][0] = mv._31; desc.Transform[2][1] = mv._32; desc.Transform[2][2] = mv._33;
+
+
+    desc.Transform[0][3] = mv._41;
+    desc.Transform[1][3] = mv._42;
+    desc.Transform[2][3] = mv._43;
+
+    return desc;
+}
+
  // builds top level acceleration structure with blas buffer (can be called each frame likely)
 void glRemix::glRemixRenderer::build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd_list)
 {
@@ -792,23 +913,17 @@ void glRemix::glRemixRenderer::build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd
 	for (int i = 0; i < instance_count; i++)
 	{
 		MeshRecord mesh = m_meshes[i];
-		instance_descs[i] = 
-		{
-			.Transform
-			{
-				// Identity matrix (eventually change to mesh's associated matrix)
-				1.0f, 0.0f, 0.0f, 0.0f,
-				0.0f, 1.0f, 0.0f, 0.0f,
-				0.0f, 0.0f, 1.0f, 0.0f,
-			},
-			.InstanceID = (UINT)i,
-			.InstanceMask = 0xFF,
-			.InstanceContributionToHitGroupIndex = 0,
-			.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE,
-			.AccelerationStructure = m_blas_buffers[i].get_gpu_address(),
-		};
-	}
 
+		D3D12_RAYTRACING_INSTANCE_DESC desc = mv_to_instance_desc(m_matrix_pool[mesh.MVID]);
+		
+    	desc.InstanceID = static_cast<UINT>(i);
+    	desc.InstanceMask = 0xFF;
+    	desc.InstanceContributionToHitGroupIndex = 0;
+    	desc.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+    	desc.AccelerationStructure = m_blas_buffers[i].get_gpu_address();
+
+		instance_descs[i] = desc;
+	}
 	
 	dx::BufferDesc instance_buffer_desc
 	{
@@ -903,32 +1018,32 @@ void glRemix::glRemixRenderer::render()
 	// Build TLAS
 	build_tlas(cmd_list);
 
+	//m_matrix_stack.printStacks(); // debugging
+
 	// Dispatch rays to UAV render target
 	{
-		static float increment = 0.f;
-		increment += 0.01f;
+		XMMATRIX view = XMMatrixIdentity();
 
-		XMVECTOR eye_position = XMVectorSet(cosf(increment) * 5.f, sinf(increment) * 5.f, -12.0f, 1.0f);
-		XMVECTOR focus_position = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
-		XMVECTOR up_direction = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+		XMMATRIX proj = XMLoadFloat4x4(&m_matrix_stack.top(gl::GLMatrixMode::PROJECTION));
 		
-		XMMATRIX view_matrix = XMMatrixLookAtLH(eye_position, focus_position, up_direction);
+		/*
 		XMMATRIX projection_matrix = XMMatrixPerspectiveFovLH(
 			XM_PIDIV4,
 			static_cast<float>(win_dims.x) / static_cast<float>(win_dims.y),
 			0.1f,
 			100.0f
-		);
-		
-		XMMATRIX view_projection = XMMatrixMultiply(view_matrix, projection_matrix);
-		XMMATRIX inverse_view_projection = XMMatrixInverse(nullptr, view_projection);
+		);*/
+
+		XMMATRIX view_proj = XMMatrixMultiply(view, proj);
+
+		XMMATRIX inverse_view_projection = XMMatrixInverse(nullptr, view_proj);
 		
 		RayGenConstantBuffer raygen_cb
 		{
 			.width = static_cast<float>(win_dims.x),
 			.height = static_cast<float>(win_dims.y),
 		};
-		XMStoreFloat4x4(&raygen_cb.projection_matrix, XMMatrixTranspose(view_projection));
+		XMStoreFloat4x4(&raygen_cb.projection_matrix, XMMatrixTranspose(view_proj));
 		XMStoreFloat4x4(&raygen_cb.inv_projection_matrix, XMMatrixTranspose(inverse_view_projection));
 		
 		// Copy constant buffer to GPU

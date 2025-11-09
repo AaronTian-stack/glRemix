@@ -1,8 +1,10 @@
 #pragma once
 #include "application.h"
 #include "dx/d3d12_as.h"
+#include "gl/gl_matrix_stack.h"
 #include <DirectXMath.h>
 #include <ipc_protocol.h>
+#include <unordered_map>
 
 namespace glRemix
 {
@@ -68,6 +70,18 @@ namespace glRemix
 		// mesh resources
 		std::vector<MeshRecord> m_meshes;
 		std::vector<dx::D3D12Buffer> m_blas_buffers;
+
+		// matrix stack
+		gl::glMatrixStack m_matrix_stack;
+		std::vector<DirectX::XMFLOAT4X4> m_matrix_pool;
+		XMMATRIX inverse_view;
+
+		// display lists
+		std::unordered_map<int, std::vector<uint8_t>> m_display_lists;
+
+		// state trackers
+		gl::GLMatrixMode matrixMode = gl::GLMatrixMode::MODELVIEW; // "The initial matrix mode is MODELVIEW" - glspec pg. 29 (might need to be a global variable not sure how state is tracked)
+		std::array<float, 4> color = {1.0f, 1.0f, 1.0f, 1.0f}; // current color (may need to be tracked globally)
 
 	protected:
 		void create() override;
