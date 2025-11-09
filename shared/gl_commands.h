@@ -59,8 +59,12 @@ enum class GLCommandType : uint32_t {
     GLCMD_PERSPECTIVE,
 
     // Other
-    GLCMD_SWAP_BUFFERS,
-    GLCMD_SHUTDOWN
+    GLCMD_SHUTDOWN,
+
+    // Display Lists
+    GLCMD_CALL_LIST,
+    GLCMD_NEW_LIST,
+    GLCMD_END_LIST,
 };
 
 struct GLVec2f
@@ -104,7 +108,7 @@ struct GLCommandUnifs
 // Specific command structures
 struct GLBeginCommand
 {
-    uint32_t mode;  // GLCMD_TRIANGLES, GLCMD_QUADS, etc.
+    uint32_t mode;  // GL_TRIANGLES, GL_QUADS, etc.
 };
 
 using GLEndCommand = GLEmptyCommand;
@@ -264,6 +268,20 @@ struct GLPerspectiveCommand
 };
 
 // Other
-using GLSwapBuffersCommand = GLEmptyCommand;
 using GLShutdownCommand = GLEmptyCommand;
+
+// Display Lists
+struct GLCallListCommand
+{
+    uint32_t list;
+};
+
+struct GLNewListCommand
+{
+    uint32_t list;
+    uint32_t mode;  // enum GL_COMPILE or GL_COMPILE_AND_EXECUTE
+};
+
+using GLEndListCommand = GLEmptyCommand;
+
 }  // namespace glRemix
