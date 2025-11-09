@@ -76,9 +76,7 @@ namespace glRemix::hooks
         g_recorder.Record(glRemix::GLCommandType::GLCMD_END, &payload, sizeof(payload));
     }
 
-    // -----------------------------
-    // Basic Commands
-    // -----------------------------
+    /* Basic Commands */
     void APIENTRY gl_vertex2f_ovr(GLfloat x, GLfloat y)
     {
         glRemix::GLVertex2fCommand payload{x, y};
@@ -117,9 +115,7 @@ namespace glRemix::hooks
         g_recorder.Record(glRemix::GLCommandType::GLCMD_TEXCOORD2F, &payload, sizeof(payload));
     }
 
-    // -----------------------------
-    // Matrix Operations
-    // -----------------------------
+    /* Matrix Operations */
     void APIENTRY gl_matrix_mode_ovr(GLenum mode)
     {
         glRemix::GLMatrixModeCommand payload{mode};
@@ -176,9 +172,7 @@ namespace glRemix::hooks
         g_recorder.Record(glRemix::GLCommandType::GLCMD_SCALE, &payload, sizeof(payload));
     }
 
-    // -----------------------------
-    // Texture Operations
-    // -----------------------------
+    /* Texture Operations */
     void APIENTRY gl_bind_texture_ovr(GLenum target, GLuint texture)
     {
         glRemix::GLBindTextureCommand payload{target, texture};
@@ -225,9 +219,7 @@ namespace glRemix::hooks
         g_recorder.Record(glRemix::GLCommandType::GLCMD_TEX_PARAMETER, &payload, sizeof(payload));
     }
 
-    // -----------------------------
-    // Lighting
-    // -----------------------------
+    /* Lighting */
     void APIENTRY gl_enable_ovr(GLenum cap)
     {
         glRemix::GLEnableCommand payload{cap};
@@ -268,9 +260,7 @@ namespace glRemix::hooks
         g_recorder.Record(glRemix::GLCommandType::GLCMD_MATERIALFV, &payload, sizeof(payload));
     }
 
-    // -----------------------------
-    // Buffer Operations
-    // -----------------------------
+    /* Buffer Operations */
     void APIENTRY gl_clear_ovr(GLbitfield mask)
     {
         glRemix::GLClearCommand payload{mask};
@@ -295,9 +285,7 @@ namespace glRemix::hooks
         g_recorder.Record(glRemix::GLCommandType::GLCMD_FINISH, &payload, sizeof(payload));
     }
 
-    // -----------------------------
-    // Viewport & Projection
-    // -----------------------------
+    /* Viewport & Projection */
     void APIENTRY gl_viewport_ovr(GLint x, GLint y, GLsizei width, GLsizei height)
     {
         glRemix::GLViewportCommand payload{x, y, width, height};
@@ -318,15 +306,35 @@ namespace glRemix::hooks
         g_recorder.Record(glRemix::GLCommandType::GLCMD_FRUSTUM, &payload, sizeof(payload));
     }
 
-    // -----------------------------
-    // Other
-    // -----------------------------
+    /* Other */
 
     void APIENTRY gl_shutdown_ovr()
     {
         glRemix::GLShutdownCommand payload{};
         g_recorder.Record(glRemix::GLCommandType::GLCMD_SHUTDOWN, &payload, sizeof(payload));
     }
+
+    /* Display Lists */
+    
+    void APIENTRY gl_call_list_ovr(GLuint list)
+    {
+        glRemix::GLCallListCommand payload{list};
+        g_recorder.Record(glRemix::GLCommandType::GLCMD_CALL_LIST, &payload, sizeof(payload));
+    }
+
+    void APIENTRY gl_new_list_ovr(GLuint list, GLenum mode)
+    {
+        glRemix::GLNewListCommand payload{list, mode};
+        g_recorder.Record(glRemix::GLCommandType::GLCMD_NEW_LIST, &payload, sizeof(payload));
+    }
+
+    void APIENTRY gl_end_list_ovr()
+    {
+        glRemix::GLEndListCommand payload{};
+        g_recorder.Record(glRemix::GLCommandType::GLCMD_END_LIST, &payload, sizeof(payload));
+    }
+
+    /* WGL (Windows Graphics Library) overrides */
 
     BOOL WINAPI swap_buffers_ovr(HDC)
     {
@@ -433,54 +441,45 @@ namespace glRemix::hooks
 	{
 	    std::call_once(g_install_flag, []()
 	    {
-            gl::register_hook("glBegin", reinterpret_cast<PROC>(&gl_begin_ovr));
-            gl::register_hook("glEnd", reinterpret_cast<PROC>(&gl_end_ovr));
-            gl::register_hook("glVertex2f", reinterpret_cast<PROC>(&gl_vertex2f_ovr));
-            gl::register_hook("glVertex3f", reinterpret_cast<PROC>(&gl_vertex3f_ovr));
-            gl::register_hook("glColor3f", reinterpret_cast<PROC>(&gl_color3f_ovr));
-            gl::register_hook("glColor4f", reinterpret_cast<PROC>(&gl_color4f_ovr));
-            gl::register_hook("glNormal3f", reinterpret_cast<PROC>(&gl_normal3f_ovr));
-            gl::register_hook("glTexCoord2f", reinterpret_cast<PROC>(&gl_tex_coord2f_ovr));
-            gl::register_hook("glMatrixMode", reinterpret_cast<PROC>(&gl_matrix_mode_ovr));
-            gl::register_hook("glLoadIdentity", reinterpret_cast<PROC>(&gl_load_identity_ovr));
-            gl::register_hook("glLoadMatrixf", reinterpret_cast<PROC>(&gl_load_matrixf_ovr));
-            gl::register_hook("glMultMatrixf", reinterpret_cast<PROC>(&gl_mult_matrixf_ovr));
-            gl::register_hook("glPushMatrix", reinterpret_cast<PROC>(&gl_push_matrix_ovr));
-            gl::register_hook("glPopMatrix", reinterpret_cast<PROC>(&gl_pop_matrix_ovr));
-            gl::register_hook("glTranslatef", reinterpret_cast<PROC>(&gl_translatef_ovr));
-            gl::register_hook("glRotatef", reinterpret_cast<PROC>(&gl_rotatef_ovr));
-            gl::register_hook("glScalef", reinterpret_cast<PROC>(&gl_scalef_ovr));
-            gl::register_hook("glBindTexture", reinterpret_cast<PROC>(&gl_bind_texture_ovr));
-            gl::register_hook("glGenTextures", reinterpret_cast<PROC>(&gl_gen_textures_ovr));
-            gl::register_hook("glDeleteTextures", reinterpret_cast<PROC>(&gl_delete_textures_ovr));
-            gl::register_hook("glTexImage2D", reinterpret_cast<PROC>(&gl_tex_image_2d_ovr));
-            gl::register_hook("glTexParameterf", reinterpret_cast<PROC>(&gl_tex_parameterf_ovr));
-            gl::register_hook("glEnable", reinterpret_cast<PROC>(&gl_enable_ovr));
-            gl::register_hook("glDisable", reinterpret_cast<PROC>(&gl_disable_ovr));
-            gl::register_hook("glLightf", reinterpret_cast<PROC>(&gl_lightf_ovr));
-            gl::register_hook("glLightfv", reinterpret_cast<PROC>(&gl_lightfv_ovr));
-            gl::register_hook("glMaterialf", reinterpret_cast<PROC>(&gl_materialf_ovr));
-            gl::register_hook("glMaterialfv", reinterpret_cast<PROC>(&gl_materialfv_ovr));
-            gl::register_hook("glClear", reinterpret_cast<PROC>(&gl_clear_ovr));
-            gl::register_hook("glClearColor", reinterpret_cast<PROC>(&gl_clear_color_ovr));
-            gl::register_hook("glFlush", reinterpret_cast<PROC>(&gl_flush_ovr));
-            gl::register_hook("glFinish", reinterpret_cast<PROC>(&gl_finish_ovr));
-            gl::register_hook("glViewport", reinterpret_cast<PROC>(&gl_viewport_ovr));
-            gl::register_hook("glOrtho", reinterpret_cast<PROC>(&gl_ortho_ovr));
-            gl::register_hook("glFrustum", reinterpret_cast<PROC>(&gl_frustum_ovr));
+            //gl::register_hook("glBegin", reinterpret_cast<PROC>(&gl_begin_ovr));
+            //gl::register_hook("glEnd", reinterpret_cast<PROC>(&gl_end_ovr));
+            //gl::register_hook("glVertex2f", reinterpret_cast<PROC>(&gl_vertex2f_ovr));
+            //gl::register_hook("glVertex3f", reinterpret_cast<PROC>(&gl_vertex3f_ovr));
+            //gl::register_hook("glColor3f", reinterpret_cast<PROC>(&gl_color3f_ovr));
+            //gl::register_hook("glColor4f", reinterpret_cast<PROC>(&gl_color4f_ovr));
+            //gl::register_hook("glNormal3f", reinterpret_cast<PROC>(&gl_normal3f_ovr));
+            //gl::register_hook("glTexCoord2f", reinterpret_cast<PROC>(&gl_tex_coord2f_ovr));
+            //gl::register_hook("glMatrixMode", reinterpret_cast<PROC>(&gl_matrix_mode_ovr));
+            //gl::register_hook("glLoadIdentity", reinterpret_cast<PROC>(&gl_load_identity_ovr));
+            //gl::register_hook("glLoadMatrixf", reinterpret_cast<PROC>(&gl_load_matrixf_ovr));
+            //gl::register_hook("glMultMatrixf", reinterpret_cast<PROC>(&gl_mult_matrixf_ovr));
+            //gl::register_hook("glPushMatrix", reinterpret_cast<PROC>(&gl_push_matrix_ovr));
+            //gl::register_hook("glPopMatrix", reinterpret_cast<PROC>(&gl_pop_matrix_ovr));
+            //gl::register_hook("glTranslatef", reinterpret_cast<PROC>(&gl_translatef_ovr));
+            //gl::register_hook("glRotatef", reinterpret_cast<PROC>(&gl_rotatef_ovr));
+            //gl::register_hook("glScalef", reinterpret_cast<PROC>(&gl_scalef_ovr));
+            //gl::register_hook("glBindTexture", reinterpret_cast<PROC>(&gl_bind_texture_ovr));
+            //gl::register_hook("glGenTextures", reinterpret_cast<PROC>(&gl_gen_textures_ovr));
+            //gl::register_hook("glDeleteTextures", reinterpret_cast<PROC>(&gl_delete_textures_ovr));
+            //gl::register_hook("glTexImage2D", reinterpret_cast<PROC>(&gl_tex_image_2d_ovr));
+            //gl::register_hook("glTexParameterf", reinterpret_cast<PROC>(&gl_tex_parameterf_ovr));
+            //gl::register_hook("glEnable", reinterpret_cast<PROC>(&gl_enable_ovr));
+            //gl::register_hook("glDisable", reinterpret_cast<PROC>(&gl_disable_ovr));
+            //gl::register_hook("glLightf", reinterpret_cast<PROC>(&gl_lightf_ovr));
+            //gl::register_hook("glLightfv", reinterpret_cast<PROC>(&gl_lightfv_ovr));
+            //gl::register_hook("glMaterialf", reinterpret_cast<PROC>(&gl_materialf_ovr));
+            //gl::register_hook("glMaterialfv", reinterpret_cast<PROC>(&gl_materialfv_ovr));
+            //gl::register_hook("glClear", reinterpret_cast<PROC>(&gl_clear_ovr));
+            //gl::register_hook("glClearColor", reinterpret_cast<PROC>(&gl_clear_color_ovr));
+            //gl::register_hook("glFlush", reinterpret_cast<PROC>(&gl_flush_ovr));
+            //gl::register_hook("glFinish", reinterpret_cast<PROC>(&gl_finish_ovr));
+            //gl::register_hook("glViewport", reinterpret_cast<PROC>(&gl_viewport_ovr));
+            //gl::register_hook("glOrtho", reinterpret_cast<PROC>(&gl_ortho_ovr));
+            //gl::register_hook("glFrustum", reinterpret_cast<PROC>(&gl_frustum_ovr));
 
-            // TODO: Add more OpenGL overrides
-            // Just use the name and make sure the signature matches.
-            // You can find exports in the generated gl_wrappers.inl, but extensions are not going to be in there.
-
-			// There will need be a caching system in the renderer for display lists, since the app may use them instead of recording direct calls.
-			// A mapping to store recorded commands per display list ID should suffice.
-
-			// FOR SHIM TEAM:
-			// The shim should generate a monotonic integer for the ID in glGenLists (which will also be returned to the host app)
-			// such that the renderer can construct a mapping for glCallList calls.
-			// This same idea applies to any resource creation call that returns an ID (textures for example).
-			// ex: glxgears only records geometry once and then replays it every frame via display lists.
+            gl::register_hook("glCallList", reinterpret_cast<PROC>(&gl_call_list_ovr));
+            gl::register_hook("glNewList", reinterpret_cast<PROC>(&gl_new_list_ovr));
+            gl::register_hook("glEndList", reinterpret_cast<PROC>(&gl_end_list_ovr));
 
             // Override WGL for app to work. Return success and try to do nothing.
 	        gl::register_hook("wglChoosePixelFormat", reinterpret_cast<PROC>(&choose_pixel_format_ovr));
