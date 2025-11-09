@@ -536,7 +536,7 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
 				std::cout << "GL_LIGHTF: " << header->dataSize << std::endl;
 				const auto* light = reinterpret_cast<const glRemix::GLLightCommand*>(ipcBuf.data() + offset);  // reach into data payload
 
-				// TODO: when light f is encountered, edit the current m_light based on the param and value
+				// TODO: when light f is encountered, edit the corresponding index in m_lights based on the param and value
 
 				break;
 			}
@@ -545,7 +545,7 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
 				std::cout << "GL_LIGHTFV: " << header->dataSize << std::endl;
 				const auto* light = reinterpret_cast<const glRemix::GLLightfvCommand*>(ipcBuf.data() + offset);  // reach into data payload
 
-				// TODO: when light fv is encountered, edit the current m_light based on the param and value
+				// TODO: when light fv is encountered, edit the corresponding index in m_lights based on the param and value
 
 				break;
 			}

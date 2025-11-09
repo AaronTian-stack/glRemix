@@ -115,7 +115,6 @@ namespace glRemix
 		gl::GLMatrixMode matrixMode = gl::GLMatrixMode::MODELVIEW; // "The initial matrix mode is MODELVIEW" - glspec pg. 29 (might need to be a global variable not sure how state is tracked)
 		std::array<float, 4> color = {1.0f, 1.0f, 1.0f, 1.0f}; // current color (may need to be tracked globally)
 		Material m_material; // global states that can be modified
-		Light m_light;
 
 
 		// shader resources
