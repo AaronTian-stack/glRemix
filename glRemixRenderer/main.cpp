@@ -24,11 +24,6 @@ namespace
 	}
 }
 
-#include <thread>
-#include <chrono>
-#include <vector>
-#include <conio.h>
-
 int main()
 {
 	// Create test window

@@ -82,8 +82,7 @@ namespace glRemix
                                             std::vector<Vertex>& vertices,
                                             std::vector<uint32_t>& indices,
                                             glRemix::GLTopology topology,
-                                            uint32_t bytesRead,
-											ComPtr<ID3D12GraphicsCommandList7> cmd_list);
+                                            uint32_t bytesRead);
 
 		// acceleration structure builders
 		int build_mesh_blas(uint32_t vertex_count, uint32_t vertex_offset, uint32_t index_count, uint32_t index_offset, ComPtr<ID3D12GraphicsCommandList7> cmd_list);

@@ -4,6 +4,10 @@
 #include "helper.h"
 #include "imgui.h"
 
+#include <thread>
+#include <chrono>
+#include <vector>
+
 void glRemix::glRemixRenderer::create()
 {
 	for (UINT i = 0; i < m_frames_in_flight; i++)
@@ -488,89 +492,102 @@ void glRemix::glRemixRenderer::create()
 	THROW_IF_FALSE(m_context.wait_fences(wait_info)); // Block CPU until done
 }
 
-// Reads an incoming stream of OpenGL commands and launches corresponding renderer functions
 void glRemix::glRemixRenderer::read_gl_command_stream()
 {
-    if (!m_ipc.InitReader())
+    // keep attempting to initialize
+    while (!m_ipc.InitReader())
     {
         std::cout << "IPC Manager could not init a reader instance. Have you launched an "
                      "executable that utilizes glRemix?"
                   << std::endl;
-        return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(60));
     }
+
+    std::cout << "IPC reader instance successfully initialized" << std::endl;
 
     const uint32_t bufCapacity = m_ipc.GetCapacity();  // ask shared mem for capacity
     std::vector<uint8_t> ipcBuf(bufCapacity);          // decoupled local buffer here
 
+    // poll ipc here
     uint32_t bytesRead = 0;
-    if (!m_ipc.TryConsumeFrame(ipcBuf.data(), static_cast<uint32_t>(ipcBuf.size()), &bytesRead))
+    while (!m_ipc.TryConsumeFrame(ipcBuf.data(), static_cast<uint32_t>(ipcBuf.size()), &bytesRead))
     {
         std::cout << "No frame data available." << std::endl;
-        return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(60));  // rest before next poll
     }
 
+    std::cout << "Received " << bytesRead << " bytes" << std::endl;
+
     const auto* frameHeader = reinterpret_cast<const glRemix::GLFrameUnifs*>(ipcBuf.data());
+    std::cout << "Frame " << frameHeader->frameIndex << " (" << frameHeader->payloadSize
+              << " bytes payload)\n";
 
     if (frameHeader->payloadSize == 0)
     {
-        //std::cout << "Frame " << frameHeader->frameIndex << ": no new commands.\n";
-		return;
+        std::cout << "Frame " << frameHeader->frameIndex << ": no new commands.\n";
+        return;
     }
 
-	// for acceleration structure building
-	THROW_IF_FALSE(SUCCEEDED(m_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
-	ComPtr<ID3D12GraphicsCommandList7> cmd_list;
-	THROW_IF_FALSE(m_context.create_command_list(cmd_list.ReleaseAndGetAddressOf(), m_cmd_pools[get_frame_index()]));
+    // vertex and index buffers
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
 
+    bool buildGeometry = false;
     // loop through data from frame
-    // can comment out the logs here too
-	std::vector<Vertex> vertices;
-	std::vector<uint32_t> indices;
-    size_t offset = sizeof(glRemix::GLFrameUnifs); // offset skips header of ipc data payload
-    while (offset + sizeof(glRemix::GLCommandUnifs) <= bytesRead) // while header + additional gl header is not at byte limit
+    size_t offset = sizeof(glRemix::GLFrameUnifs);
+    while (offset + sizeof(glRemix::GLCommandUnifs) <= bytesRead)
     {
-        const auto* header = reinterpret_cast<const glRemix::GLCommandUnifs*>(ipcBuf.data() // get most recent header
+        const auto* header = reinterpret_cast<const glRemix::GLCommandUnifs*>(ipcBuf.data()
                                                                               + offset);
-        offset += sizeof(glRemix::GLCommandUnifs); // move into data payload
+        offset += sizeof(glRemix::GLCommandUnifs);
 
         std::cout << "  Command: " << static_cast<int>(header->type)
                   << " (size: " << header->dataSize << ")" << std::endl;
 
         switch (header->type)
         {
-			// if we encounter GL_BEGIN we know that a new geometry is to be created
-			case glRemix::GLCommandType::GLCMD_BEGIN: 
-			{
-				const auto* type = reinterpret_cast<const glRemix::GLBeginCommand*>(ipcBuf.data() + offset); // reach into data payload
-				offset += header->dataSize; // move past data to next command
-				read_geometry(ipcBuf, offset, vertices, indices, static_cast<glRemix::GLTopology>(type->mode), bytesRead, cmd_list); // store geometry data in vertex buffers depending on topology type
-				break;
-			}
-			case glRemix::GLCommandType::GLCMD_VERTEX3F: {
-                    const auto* v = reinterpret_cast<const glRemix::GLVertex3fCommand*>(
-                        ipcBuf.data() + offset);
-                     std::cout << "    glVertex3f(" << v->x << ", " << v->y << ", " << v->z << ")"
-                               << std::endl;
-                    break;
-					}
-            default:
-			{
-				 std::cout << "    (Unhandled base command)" << std::endl; 
-				 return;
-				 break;
-			}
+            // if we encounter GL_BEGIN we know that a new geometry is to be created
+            case glRemix::GLCommandType::GLCMD_BEGIN: {
+                std::cout << "  Command: " << "GL_BEGIN"
+                          << " (size: " << header->dataSize << ")" << std::endl;
+
+                const auto* type = reinterpret_cast<const glRemix::GLBeginCommand*>(ipcBuf.data() + offset);  // reach into data payload
+                offset += header->dataSize;  // move past data to next command for parsing in read geometry
+                read_geometry(
+                    ipcBuf,
+                    offset,
+                    vertices,
+                    indices,
+                    static_cast<glRemix::GLTopology>(type->mode),
+                    bytesRead);  // store geometry data in vertex buffers depending on topology type
+                buildGeometry = true;
+                break;
+            }
+            default: std::cout << "    (Unhandled command)" << std::endl; break;
         }
+
+        offset += header->dataSize;
     }
 
-	// set vertex and index buffers
-	dx::BufferDesc vertex_buffer_desc{
+    if (!buildGeometry)
+    {
+        return;
+    }
+
+    // for acceleration structure building
+    THROW_IF_FALSE(SUCCEEDED(m_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
+    ComPtr<ID3D12GraphicsCommandList7> cmd_list;
+    THROW_IF_FALSE(m_context.create_command_list(cmd_list.ReleaseAndGetAddressOf(),
+                                                 m_cmd_pools[get_frame_index()]));
+
+    // set vertex and index buffers
+    dx::BufferDesc vertex_buffer_desc{
         .size = sizeof(Vertex) * vertices.size(),
         .stride = sizeof(Vertex),
         .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
     };
     void* cpu_ptr;
-    THROW_IF_FALSE(
-        m_context.create_buffer(vertex_buffer_desc, &m_vertex_buffer, "vertex buffer"));
+    THROW_IF_FALSE(m_context.create_buffer(vertex_buffer_desc, &m_vertex_buffer, "vertex buffer"));
 
     THROW_IF_FALSE(m_context.map_buffer(&m_vertex_buffer, &cpu_ptr));
     memcpy(cpu_ptr, vertices.data(), vertex_buffer_desc.size);
@@ -581,46 +598,52 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
         .stride = sizeof(UINT),
         .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
     };
-    THROW_IF_FALSE(
-        m_context.create_buffer(index_buffer_desc, &m_index_buffer, "index buffer"));
+    THROW_IF_FALSE(m_context.create_buffer(index_buffer_desc, &m_index_buffer, "index buffer"));
 
     THROW_IF_FALSE(m_context.map_buffer(&m_index_buffer, &cpu_ptr));
     memcpy(cpu_ptr, indices.data(), index_buffer_desc.size);
     m_context.unmap_buffer(&m_index_buffer);
 
-	constexpr UINT64 scratch_size = 16 * 1024 * 1024;
+    constexpr UINT64 scratch_size = 16 * 1024 * 1024;
 
-	// build blasses per mesh
-	const UINT instance_count = (UINT)m_meshes.size();
-	for (int i = 0; i < instance_count; i++)
-	{
-		MeshRecord mesh = m_meshes[i];
-		m_meshes[i].blasID = build_mesh_blas(mesh.vertexCount, mesh.vertexOffset, mesh.indexCount, mesh.indexOffset, cmd_list);
-	}
+    // build blasses per mesh
+    const UINT instance_count = (UINT)m_meshes.size();
+    for (int i = 0; i < instance_count; i++)
+    {
+        MeshRecord mesh = m_meshes[i];
+        m_meshes[i].blasID = build_mesh_blas(mesh.vertexCount,
+                                             mesh.vertexOffset,
+                                             mesh.indexCount,
+                                             mesh.indexOffset,
+                                             cmd_list);
+    }
 
-	build_tlas(cmd_list); // builds top level acceleration structure with blas buffer (can be called each frame likely)
+    build_tlas(cmd_list);  // builds top level acceleration structure with blas buffer (can be
+                           // called each frame likely)
 
-	THROW_IF_FALSE(SUCCEEDED(cmd_list->Close()));
-	const std::array<ID3D12CommandList*, 1> lists = { cmd_list.Get() };
-	m_gfx_queue.queue->ExecuteCommandLists(1, lists.data());
+    THROW_IF_FALSE(SUCCEEDED(cmd_list->Close()));
+    const std::array<ID3D12CommandList*, 1> lists = {cmd_list.Get()};
+    m_gfx_queue.queue->ExecuteCommandLists(1, lists.data());
 
-	// Signal fence and wait for GPU to finish
-	auto current_fence_value = ++m_fence_frame_ready_val[get_frame_index()];
-	m_gfx_queue.queue->Signal(m_fence_frame_ready.fence.Get(), current_fence_value);
+    // Signal fence and wait for GPU to finish
+    auto current_fence_value = ++m_fence_frame_ready_val[get_frame_index()];
+    m_gfx_queue.queue->Signal(m_fence_frame_ready.fence.Get(), current_fence_value);
 
-	dx::WaitInfo wait_info
-	{
-		.wait_all = true,
-		.count = 1,
-		.fences = &m_fence_frame_ready,
-		.values = &current_fence_value,
-		.timeout = INFINITE,
-	};
+    dx::WaitInfo wait_info{
+        .wait_all = true,
+        .count = 1,
+        .fences = &m_fence_frame_ready,
+        .values = &current_fence_value,
+        .timeout = INFINITE,
+    };
 
-	m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer.allocation->GetResource(), &m_rt_descriptors, 0);
-	THROW_IF_FALSE(m_context.wait_fences(wait_info)); // Block CPU until done
+    m_context
+        .create_shader_resource_view_acceleration_structure(m_tlas.buffer.allocation->GetResource(),
+                                                            &m_rt_descriptors,
+                                                            0);
+    THROW_IF_FALSE(m_context.wait_fences(wait_info));  // Block CPU until done
 
-	return;
+    return;
 }
 
 // adds to vertex and index buffers depending on topology type
@@ -629,8 +652,7 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
                                             std::vector<Vertex>& vertices,
                                             std::vector<uint32_t>& indices,
                                             glRemix::GLTopology topology,
-                                            uint32_t bytesRead,
-											ComPtr<ID3D12GraphicsCommandList7> cmd_list)
+                                            uint32_t bytesRead)
 {
     bool endPrimitive = false;
     int verticesSize = vertices.size();
@@ -667,12 +689,14 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
             default: std::cout << "    (Unhandled primitive command)" << std::endl; break;
         }
 
-        offset += header->dataSize;  // move past data to next command
-
         if (endPrimitive)
         {
             break;
         }
+		else
+		{
+			offset += header->dataSize;  // move past data to next command
+		}
     }
 
 	// determine indices based on specified topology
@@ -724,6 +748,7 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
 
 	m_meshes.push_back(mesh);
 }
+
 
 int glRemix::glRemixRenderer::build_mesh_blas(uint32_t vertex_count, uint32_t vertex_offset, uint32_t index_count, uint32_t index_offset, ComPtr<ID3D12GraphicsCommandList7> cmd_list)
 {

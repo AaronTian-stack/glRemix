@@ -7,6 +7,13 @@
 
 namespace glRemix
 {
+
+enum class GLTopology : uint32_t 
+{ 
+    GL_QUADS = 0x0007, 
+    GL_QUAD_STRIP = 0x0008 
+};
+
 enum class GLCommandType : uint32_t {
     // Basic OpenGL 1.x commands
     GLCMD_BEGIN = 1,
@@ -62,8 +69,6 @@ enum class GLCommandType : uint32_t {
     GLCMD_SWAP_BUFFERS,
     GLCMD_SHUTDOWN
 };
-
-enum class GLTopology : uint32_t { GL_QUADS = 0x0007, GL_QUAD_STRIP = 0x0008 };
 
 struct GLVec2f
 {
