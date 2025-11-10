@@ -88,8 +88,9 @@ void glRemix::glRemixRenderer::create()
 		std::array<D3D12_DESCRIPTOR_RANGE, 3> descriptor_ranges{};
 		
 		// Acceleration structure (SRV) at t0
+		// t0: TLAS; t1: meshes; t2: materials; t3: lights
 		descriptor_ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-		descriptor_ranges[0].NumDescriptors = 1;
+		descriptor_ranges[0].NumDescriptors = 4;
 		descriptor_ranges[0].BaseShaderRegister = 0;
 		descriptor_ranges[0].RegisterSpace = 0;
 		descriptor_ranges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -127,17 +128,18 @@ void glRemix::glRemixRenderer::create()
 	}
 
 	// Create ray tracing descriptor heap for TLAS SRV, Output UAV, and constant buffer
+	// Added SRV for meshes, materials, and lights
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC descriptor_heap_desc
 		{
 			.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-			.NumDescriptors = 3, // TLAS SRV, Output UAV, Raygen CB
+			.NumDescriptors = 6, // TLAS SRV, meshes SRV, materials SRV, lights SRV, Output UAV, Raygen CB
 			.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
 		};
 		THROW_IF_FALSE(m_context.create_descriptor_heap(descriptor_heap_desc, &m_rt_descriptor_heap, "ray tracing descriptor heap"));
 
 		// Allocate descriptor table for all ray tracing descriptors (views will be created after resources are ready)
-		THROW_IF_FALSE(m_rt_descriptor_heap.allocate(3, &m_rt_descriptors));
+		THROW_IF_FALSE(m_rt_descriptor_heap.allocate(6, &m_rt_descriptors));
 	}
 
 	// Compile ray tracing pipeline
@@ -401,6 +403,48 @@ void glRemix::glRemixRenderer::create()
                             tlas_read_resources.size(),
                             nullptr,
                             0);
+
+
+	// Create buffers for MeshRecords, materials, and lights
+    dx::BufferDesc meshes_buffer_desc
+	{
+        .size = sizeof(MeshRecord) * m_meshes.size(),
+        .stride = sizeof(MeshRecord),
+        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+    };
+    THROW_IF_FALSE(m_context.create_buffer(meshes_buffer_desc, &m_meshes_buffer, "meshes buffer"));
+
+	void* mesh_cpu_ptr = nullptr;
+    THROW_IF_FALSE(m_context.map_buffer(&m_meshes_buffer, &mesh_cpu_ptr));
+    memcpy(mesh_cpu_ptr, m_meshes.data(), meshes_buffer_desc.size);
+    m_context.unmap_buffer(&m_meshes_buffer);
+
+    dx::BufferDesc materials_buffer_desc
+	{
+        .size = sizeof(Material) * m_materials.size(),
+        .stride = sizeof(Material),
+        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+    };
+    THROW_IF_FALSE(m_context.create_buffer(materials_buffer_desc, &m_materials_buffer, "materials buffer"));
+
+	void* material_cpu_ptr = nullptr;
+    THROW_IF_FALSE(m_context.map_buffer(&m_materials_buffer, &material_cpu_ptr));
+    memcpy(material_cpu_ptr, m_materials.data(), materials_buffer_desc.size);
+    m_context.unmap_buffer(&m_materials_buffer);
+
+    dx::BufferDesc lights_buffer_desc
+	{
+        .size = sizeof(Light) * m_lights.size(),
+        .stride = sizeof(Light),
+        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+    };
+    THROW_IF_FALSE(m_context.create_buffer(lights_buffer_desc, &m_lights_buffer, "lights buffer"));
+
+	void* light_cpu_ptr = nullptr;
+    THROW_IF_FALSE(m_context.map_buffer(&m_lights_buffer, &light_cpu_ptr));
+    memcpy(light_cpu_ptr, m_lights.data(), lights_buffer_desc.size);
+    m_context.unmap_buffer(&m_lights_buffer);
+
 
 	// TODO: Whenever buffers are moved to CPU -> GPU copy method instead of GPU upload heaps record the copy here as well
 

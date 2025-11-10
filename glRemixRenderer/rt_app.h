@@ -47,7 +47,7 @@ namespace glRemix
 
 		struct MeshRecord
 		{
-			uint32_t meshId; // will eventually be hashed
+			uint32_t meshId; // hashed
 			uint32_t vertexOffset; // offset into vertex atlas
 			uint32_t vertexCount;
 			uint32_t indexOffset; // offset into index atlas
@@ -88,6 +88,10 @@ namespace glRemix
 		dx::D3D12Buffer m_scratch_space{};
 		dx::D3D12Buffer m_blas_buffer{};
 		dx::D3D12TLAS m_tlas{};
+
+		dx::D3D12Buffer m_meshes_buffer{};
+        dx::D3D12Buffer m_materials_buffer{};
+        dx::D3D12Buffer m_lights_buffer{};
 
 		// Shader table buffer for ray tracing pipeline (contains raygen, miss, and hit group)
 		dx::D3D12Buffer m_shader_table{};
