@@ -556,6 +556,27 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
                 buildGeometry = true;
                 break;
             }
+			case glRemix::GLCommandType::GLCMD_NEW_LIST: 
+			{
+				std::cout << "GL_NEW_LIST: " << header->dataSize << std::endl;
+
+				const auto* list = reinterpret_cast<const glRemix::GLNewListCommand*>(ipcBuf.data() + offset);  // reach into data payload
+                break;
+			}
+			case glRemix::GLCommandType::GLCMD_CALL_LIST:
+			{
+				std::cout << "GL_CALL_LIST: " << header->dataSize << std::endl;
+
+				const auto* list = reinterpret_cast<const glRemix::GLCallListCommand*>(ipcBuf.data() + offset);  // reach into data payload
+                break;
+			}
+			case glRemix::GLCommandType::GLCMD_END_LIST:
+			{
+				std::cout << "GL_END_LIST: " << header->dataSize << std::endl;
+
+				const auto* list = reinterpret_cast<const glRemix::GLEndListCommand*>(ipcBuf.data() + offset);  // reach into data payload
+                break;
+			}
 			case glRemix::GLCommandType::GLCMD_MATERIALF:
 			{
 				std::cout << "GL_MATERIALF: " << header->dataSize << std::endl;
