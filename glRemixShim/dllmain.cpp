@@ -14,7 +14,11 @@ BOOL APIENTRY DllMain(HMODULE h_module, DWORD ul_reason_for_call, LPVOID lp_rese
     case DLL_THREAD_ATTACH:
     case DLL_THREAD_DETACH:
     case DLL_PROCESS_DETACH:
-	default:
+        if (glRemix::gl::g_renderer_process)
+        {
+            TerminateProcess(glRemix::gl::g_renderer_process, 0);
+            CloseHandle(glRemix::gl::g_renderer_process);
+        }
         break;
     }
     return TRUE;

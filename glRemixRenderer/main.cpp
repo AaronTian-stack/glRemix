@@ -26,8 +26,7 @@ namespace
 
 int main()
 {
-	// Create test window
-	// TODO: Delete this after shim/IPC is integrated
+#ifdef GLREMIX_DEBUG_STANDALONE_WINDOW
 	WNDCLASS wc{};
 	wc.lpfnWndProc = window_proc;
 	wc.hInstance = GetModuleHandle(nullptr);
@@ -46,10 +45,14 @@ int main()
 
 	// Run the renderer
 	glRemix::glRemixRenderer renderer;
-	// TODO: Make sure to disable the debug layer on release, but we may want it in release builds for testing
 	renderer.run(hwnd, true);
 
 	DestroyWindow(hwnd);
+#else
+	glRemix::glRemixRenderer renderer;
+	// TODO: Make sure to disable the debug layer on release, but we may want it in release builds for testing
+	renderer.run_with_hwnd(true);
+#endif
 
 	return 0;
 }

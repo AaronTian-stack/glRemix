@@ -36,6 +36,7 @@ namespace glRemix
 
 		Application() = default;
 		void run(HWND hwnd, bool enable_debug_layer);
+		void run_with_hwnd(bool enable_debug_layer);
         
 		Application(const Application&) = delete;
 		Application& operator=(const Application&) = delete;

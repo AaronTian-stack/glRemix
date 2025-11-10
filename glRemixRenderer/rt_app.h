@@ -109,7 +109,7 @@ namespace glRemix
 
 		// matrix stack
 		gl::glMatrixStack m_matrix_stack;
-		std::vector<DirectX::XMFLOAT4X4> m_matrix_pool;
+		std::vector<XMFLOAT4X4> m_matrix_pool;
 		XMMATRIX inverse_view;
 
 		// display lists
@@ -130,6 +130,7 @@ namespace glRemix
 		void render() override;
 		void destroy() override;
 
+		HWND wait_for_hwnd_command();
 		void read_gl_command_stream();
 		void read_geometry(std::vector<uint8_t>& ipcBuf,
                                             size_t& offset,

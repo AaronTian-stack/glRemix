@@ -12,8 +12,62 @@
 #include <vector>
 #include <iostream>
 
+#include <filesystem>
+
+HWND glRemix::glRemixRenderer::wait_for_hwnd_command()
+{
+	// Initialize IPC and wait for GLCMD_CREATE command with HWND
+	while (!m_ipc.InitReader())
+	{
+		std::cout << "IPC Manager could not init a reader instance. Have you launched an "
+		             "executable that utilizes glRemix?"
+		          << std::endl;
+		std::this_thread::sleep_for(std::chrono::milliseconds(60));
+	}
+
+	const uint32_t buf_capacity = m_ipc.GetCapacity();
+	std::vector<uint8_t> ipc_buf(buf_capacity);
+
+	// Wait for first frame with GLCMD_CREATE
+	uint32_t bytes_read = 0;
+	while (!m_ipc.TryConsumeFrame(ipc_buf.data(), static_cast<uint32_t>(ipc_buf.size()), &bytes_read))
+	{
+		std::cout << "Waiting for GLCMD_CREATE command..." << std::endl;
+		std::this_thread::sleep_for(std::chrono::milliseconds(60));
+	}
+
+	size_t offset = sizeof(glRemix::GLFrameUnifs);
+
+	// Look for GLCMD_CREATE command
+	while (offset + sizeof(glRemix::GLCommandUnifs) <= bytes_read)
+	{
+		const auto* cmd_header = reinterpret_cast<const glRemix::GLCommandUnifs*>(ipc_buf.data() + offset);
+		offset += sizeof(glRemix::GLCommandUnifs);
+
+		if (cmd_header->type == glRemix::GLCommandType::GLCMD_CREATE)
+		{
+			// The shim records &hwnd, so we read it as a pointer to HWND, then dereference
+			HWND hwnd;
+			std::memcpy(&hwnd, ipc_buf.data() + offset, sizeof(HWND));
+			std::cout << "Received HWND from GLCMD_CREATE: " << hwnd << std::endl;
+			return hwnd;
+		}
+
+		offset += cmd_header->dataSize;
+	}
+
+	throw std::runtime_error("GLCMD_CREATE command not found in first frame");
+}
+
 void glRemix::glRemixRenderer::create()
 {
+	// Wait for and read HWND from command stream before initializing swapchain
+	HWND hwnd = wait_for_hwnd_command();
+
+	// Now create the swapchain with the received HWND
+	THROW_IF_FALSE(m_context.create_swapchain(hwnd, &m_gfx_queue, &m_frame_index));
+	THROW_IF_FALSE(m_context.create_swapchain_descriptors(&m_swapchain_descriptors, &m_rtv_heap));
+
 	for (UINT i = 0; i < m_frames_in_flight; i++)
 	{
 		THROW_IF_FALSE(m_context.create_command_allocator(&m_cmd_pools[i], &m_gfx_queue, "frame command allocator"));
@@ -56,11 +110,19 @@ void glRemix::glRemixRenderer::create()
 		THROW_IF_FALSE(m_context.create_root_signature(root_sig_desc, m_root_signature.ReleaseAndGetAddressOf(), "triangle root signature"));
 	}
 
+	// Get executable directory for shader paths
+	wchar_t exe_path[MAX_PATH];
+	GetModuleFileNameW(NULL, exe_path, MAX_PATH);
+	std::filesystem::path exe_dir = std::filesystem::path(exe_path).parent_path();
+	std::filesystem::path shader_dir = exe_dir / "shaders";
+
 	// Compile dummy raster pipeline for testing
 	ComPtr<IDxcBlobEncoding> vertex_shader;
-	THROW_IF_FALSE(m_context.load_blob_from_file(L"./shaders/triangle_vs_6_6_VSMain.dxil", vertex_shader.ReleaseAndGetAddressOf()));
+	std::wstring vs_path = (shader_dir / "triangle_vs_6_6_VSMain.dxil").wstring();
+	THROW_IF_FALSE(m_context.load_blob_from_file(vs_path.c_str(), vertex_shader.ReleaseAndGetAddressOf()));
 	ComPtr<IDxcBlobEncoding> pixel_shader;
-	THROW_IF_FALSE(m_context.load_blob_from_file(L"./shaders/triangle_ps_6_6_PSMain.dxil", pixel_shader.ReleaseAndGetAddressOf()));
+	std::wstring ps_path = (shader_dir / "triangle_ps_6_6_PSMain.dxil").wstring();
+	THROW_IF_FALSE(m_context.load_blob_from_file(ps_path.c_str(), pixel_shader.ReleaseAndGetAddressOf()));
 
 	dx::GraphicsPipelineDesc pipeline_desc
 	{
@@ -144,7 +206,8 @@ void glRemix::glRemixRenderer::create()
 
 	// Compile ray tracing pipeline
 	ComPtr<IDxcBlobEncoding> raytracing_shaders;
-	THROW_IF_FALSE(m_context.load_blob_from_file(L"./shaders/raytracing_lib_6_6.dxil", raytracing_shaders.ReleaseAndGetAddressOf()));
+	std::wstring rt_path = (shader_dir / "raytracing_lib_6_6.dxil").wstring();
+	THROW_IF_FALSE(m_context.load_blob_from_file(rt_path.c_str(), raytracing_shaders.ReleaseAndGetAddressOf()));
 	dx::RayTracingPipelineDesc rt_desc = dx::make_ray_tracing_pipeline_desc(
 		L"RayGenMain",
 		L"MissMain",
@@ -406,32 +469,7 @@ void glRemix::glRemixRenderer::create()
 
 
 	// Create buffers for MeshRecords, materials, and lights
-    dx::BufferDesc meshes_buffer_desc
-	{
-        .size = sizeof(MeshRecord) * m_meshes.size(),
-        .stride = sizeof(MeshRecord),
-        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-    };
-    THROW_IF_FALSE(m_context.create_buffer(meshes_buffer_desc, &m_meshes_buffer, "meshes buffer"));
-
-	void* mesh_cpu_ptr = nullptr;
-    THROW_IF_FALSE(m_context.map_buffer(&m_meshes_buffer, &mesh_cpu_ptr));
-    memcpy(mesh_cpu_ptr, m_meshes.data(), meshes_buffer_desc.size);
-    m_context.unmap_buffer(&m_meshes_buffer);
-
-    dx::BufferDesc materials_buffer_desc
-	{
-        .size = sizeof(Material) * m_materials.size(),
-        .stride = sizeof(Material),
-        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-    };
-    THROW_IF_FALSE(m_context.create_buffer(materials_buffer_desc, &m_materials_buffer, "materials buffer"));
-
-	void* material_cpu_ptr = nullptr;
-    THROW_IF_FALSE(m_context.map_buffer(&m_materials_buffer, &material_cpu_ptr));
-    memcpy(material_cpu_ptr, m_materials.data(), materials_buffer_desc.size);
-    m_context.unmap_buffer(&m_materials_buffer);
-
+	// Note: These will be created dynamically when geometry is received via IPC
     dx::BufferDesc lights_buffer_desc
 	{
         .size = sizeof(Light) * m_lights.size(),
@@ -1110,12 +1148,17 @@ void glRemix::glRemixRenderer::render()
 	cmd_list->RSSetViewports(1, &viewport);
 	cmd_list->RSSetScissorRects(1, &scissor_rect);
 
-	// Build TLAS
-	build_tlas(cmd_list);
+	// Only build TLAS if we have geometry
+	const bool has_geometry = !m_meshes.empty();
+	if (has_geometry)
+	{
+		build_tlas(cmd_list);
+	}
 
 	//m_matrix_stack.printStacks(); // debugging
 
-	// Dispatch rays to UAV render target
+	// Dispatch rays to UAV render target 
+	if (has_geometry) // TODO: Modify the shader to account for no geometry case instead
 	{
 		XMMATRIX view = XMMatrixIdentity();
 
@@ -1192,6 +1235,14 @@ void glRemix::glRemixRenderer::render()
 		};
 
 		cmd_list->DispatchRays(&dispatch_desc);
+	}
+	else
+	{
+		// Still need to ensure UAV texture is in correct state for copy
+		// See TODO above
+		THROW_IF_FALSE(m_context.mark_use(&m_uav_render_target, dx::Usage::UAV_RT));
+		std::array rt_textures = { &m_uav_render_target };
+		m_context.emit_barriers(cmd_list.Get(), nullptr, 0, rt_textures.data(), rt_textures.size());
 	}
 
 	// Copy the ray traced UAV texture into the current swapchain backbuffer, then render ImGui on top
