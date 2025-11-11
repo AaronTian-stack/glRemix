@@ -89,6 +89,10 @@ namespace glRemix
 		dx::D3D12Buffer m_blas_buffer{};
 		dx::D3D12TLAS m_tlas{};
 
+		dx::D3D12Buffer m_meshes_buffer{};
+        dx::D3D12Buffer m_materials_buffer{};
+        dx::D3D12Buffer m_lights_buffer{};
+
 		// Shader table buffer for ray tracing pipeline (contains raygen, miss, and hit group)
 		dx::D3D12Buffer m_shader_table{};
 		UINT64 m_raygen_shader_table_offset{};
