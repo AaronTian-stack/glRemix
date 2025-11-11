@@ -651,7 +651,7 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
         THROW_IF_FALSE(m_context.map_buffer(&t_vertex_buffer, &cpu_ptr));
         memcpy(cpu_ptr, t_vertices.data(), vertex_buffer_desc.size);
         m_context.unmap_buffer(&t_vertex_buffer);
-		m_vertex_buffers.push_back(t_vertex_buffer);
+		m_vertex_buffers.push_back(std::move(t_vertex_buffer));
 
 		// create index buffer
         dx::BufferDesc index_buffer_desc{
@@ -664,22 +664,22 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
         THROW_IF_FALSE(m_context.map_buffer(&t_index_buffer, &cpu_ptr));
         memcpy(cpu_ptr, t_indices.data(), index_buffer_desc.size);
         m_context.unmap_buffer(&t_index_buffer);
-		m_index_buffers.push_back(t_index_buffer);
+		m_index_buffers.push_back(std::move(t_index_buffer));
         
 		// create blas buffer
-		mesh.blasID = build_mesh_blas(t_vertex_buffer, t_index_buffer, cmd_list);
+		mesh.blasID = build_mesh_blas(m_vertex_buffers[mesh.vertexID], m_index_buffers[mesh.indexID], cmd_list);
 
 		m_mesh_map[hash] = mesh;
 	}
 
 	// we assign materials here
-	mesh.matID = static_cast<uint32_t>(m_materials.size());
+	mesh.matID = static_cast<UINT32>(m_materials.size());
 	m_materials.push_back(m_material); // store the current state of the material in the materials buffer
 
-	mesh.MVID = static_cast<uint32_t>(m_matrix_pool.size());
+	mesh.MVID = static_cast<UINT32>(m_matrix_pool.size());
 	m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
 
-	m_meshes.push_back(mesh);
+	m_meshes.push_back(std::move(mesh));
 }
 
 int glRemix::glRemixRenderer::build_mesh_blas(dx::D3D12Buffer& vertex_buffer, dx::D3D12Buffer& index_buffer, ID3D12GraphicsCommandList7* cmd_list)
