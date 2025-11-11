@@ -261,7 +261,7 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
                                                  m_cmd_pools[get_frame_index()]));
 
     // loop through data from frame
-	read_ipc_buffer(ipcBuf, static_cast<size_t>(sizeof(GLFrameUnifs)), bytesRead, cmd_list);
+	read_ipc_buffer(ipcBuf, sizeof(GLFrameUnifs), bytesRead, cmd_list.Get());
 
 	THROW_IF_FALSE(SUCCEEDED(cmd_list->Close()));
     const std::array<ID3D12CommandList*, 1> lists = {cmd_list.Get()};
@@ -282,7 +282,7 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
 	THROW_IF_FALSE(m_context.wait_fences(wait_info)); // Block CPU until done
 }
 
-void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, size_t start_offset, uint32_t bytesRead, ComPtr<ID3D12GraphicsCommandList7> cmd_list, bool callList)
+void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipcBuf, size_t start_offset, UINT32 bytesRead, ID3D12GraphicsCommandList7* cmd_list, bool callList)
 {
 	// display list logic
 	uint32_t list_index = 0;
@@ -329,10 +329,9 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, siz
 			{
 				const auto* list = reinterpret_cast<const glRemix::GLCallListCommand*>(ipcBuf.data() + offset);  // reach into data payload
 
-                auto it = m_display_lists.find(list->list);
-                if (it != m_display_lists.end())
+                if (m_display_lists.contains(list->list))
                 {
-                    auto& listBuf = it->second;
+					auto& listBuf = m_display_lists[list->list];
                     const uint32_t listEnd = static_cast<uint32_t>(listBuf.size());
 
                     read_ipc_buffer(listBuf, 0, listEnd, cmd_list, true);
@@ -485,10 +484,10 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, siz
 
 // adds to vertex and index buffers depending on topology type
 void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
-                                            size_t& offset,
-                                            glRemix::GLTopology topology,
-                                            uint32_t bytesRead,
-											ComPtr<ID3D12GraphicsCommandList7> cmd_list)
+                                             size_t& offset,
+                                             GLTopology topology,
+                                             uint32_t bytes_read,
+                                             ID3D12GraphicsCommandList7* cmd_list)
 {
     bool endPrimitive = false;
 
@@ -496,7 +495,7 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
 	std::vector<Vertex> t_vertices;
 	std::vector<uint32_t> t_indices;
 
-    while (offset + sizeof(glRemix::GLCommandUnifs) <= bytesRead)
+    while (offset + sizeof(glRemix::GLCommandUnifs) <= bytes_read)
     {
         const auto* header = reinterpret_cast<const glRemix::GLCommandUnifs*>(
             ipcBuf.data()  // get most recent header
@@ -683,7 +682,7 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
 	m_meshes.push_back(mesh);
 }
 
-int glRemix::glRemixRenderer::build_mesh_blas(dx::D3D12Buffer& vertex_buffer, dx::D3D12Buffer& index_buffer, ComPtr<ID3D12GraphicsCommandList7> cmd_list)
+int glRemix::glRemixRenderer::build_mesh_blas(dx::D3D12Buffer& vertex_buffer, dx::D3D12Buffer& index_buffer, ID3D12GraphicsCommandList7* cmd_list)
 {
 	dx::D3D12Buffer t_blas_buffer;
 
@@ -725,20 +724,20 @@ int glRemix::glRemixRenderer::build_mesh_blas(dx::D3D12Buffer& vertex_buffer, dx
 	m_context.mark_use(&m_scratch_space, dx::Usage::UAV_COMPUTE);
 	m_context.mark_use(&t_blas_buffer, dx::Usage::AS_WRITE);
 	std::array build_resources = { &m_scratch_space, &t_blas_buffer };
-	m_context.emit_barriers(cmd_list.Get(), build_resources.data(), build_resources.size(), nullptr, 0);
+	m_context.emit_barriers(cmd_list, build_resources.data(), build_resources.size(), nullptr, 0);
 
 	cmd_list->BuildRaytracingAccelerationStructure(&blas_build_desc, 0, nullptr);
 
 	// Transition BLAS to read state
 	m_context.mark_use(&t_blas_buffer, dx::Usage::AS_READ);
 	std::array read_resources = { &t_blas_buffer };
-	m_context.emit_barriers(cmd_list.Get(), read_resources.data(), read_resources.size(), nullptr, 0);
+	m_context.emit_barriers(cmd_list, read_resources.data(), read_resources.size(), nullptr, 0);
 
 	m_blas_buffers.push_back(t_blas_buffer);
 	return m_blas_buffers.size() - 1;
 }
 
-static D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const DirectX::XMFLOAT4X4& mv)
+D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const XMFLOAT4X4& mv)
 {
     D3D12_RAYTRACING_INSTANCE_DESC desc = {};
     
@@ -1120,7 +1119,7 @@ void glRemix::glRemixRenderer::create_uav_rt()
     XMUINT2 win_dims{};
     THROW_IF_FALSE(m_context.get_window_dimensions(&win_dims));
 
-    dx::TextureDesc uav_rt_desc
+    const dx::TextureDesc uav_rt_desc
     {
         .width = win_dims.x,
         .height = win_dims.y,

@@ -6,8 +6,8 @@
 #include "gl/gl_matrix_stack.h"
 #include <DirectXMath.h>
 #include <ipc_protocol.h>
-#include <unordered_map>
 #include "structs.h"
+#include "tsl/robin_map.h"
 
 namespace glRemix
 {
@@ -46,7 +46,7 @@ namespace glRemix
 		IPCProtocol m_ipc;
 
 		// mesh resources
-		std::unordered_map<uint64_t, MeshRecord> m_mesh_map;
+		tsl::robin_map<UINT64, MeshRecord> m_mesh_map;
 		std::vector<MeshRecord> m_meshes;
 
 		std::vector<dx::D3D12Buffer> m_blas_buffers;
@@ -59,7 +59,7 @@ namespace glRemix
 		XMMATRIX inverse_view;
 
 		// display lists
-		std::unordered_map<int, std::vector<uint8_t>> m_display_lists;
+        tsl::robin_map<int, std::vector<UINT8>> m_display_lists;
 
 		// state trackers
 		gl::GLMatrixMode matrixMode = gl::GLMatrixMode::MODELVIEW; // "The initial matrix mode is MODELVIEW" - glspec pg. 29
@@ -69,7 +69,7 @@ namespace glRemix
 		Material m_material; // global states that can be modified
 		
 		// shader resources
-		std::vector<Light> m_lights = std::vector<Light>(8);
+		std::array<Light, 8> m_lights{};
 		std::vector<Material> m_materials;
 
 		DebugWindow m_debug_window;
@@ -82,16 +82,16 @@ namespace glRemix
 		void create_uav_rt();
 
 		void read_gl_command_stream();
-        void read_ipc_buffer(std::vector<uint8_t>& ipcBuf, size_t start_offset, uint32_t bytesRead, ComPtr<ID3D12GraphicsCommandList7> cmd_list, bool callList = false);
-        void read_geometry(std::vector<uint8_t>& ipcBuf,
-                                            size_t& offset,
-                                            glRemix::GLTopology topology,
-                                            uint32_t bytesRead,
-											ComPtr<ID3D12GraphicsCommandList7> cmd_list);
+        void read_ipc_buffer(std::vector<UINT8>& ipcBuf, size_t start_offset, uint32_t bytesRead, ID3D12GraphicsCommandList7* cmd_list, bool callList = false);
+        void read_geometry(std::vector<UINT8>& ipcBuf,
+                           size_t& offset,
+                           GLTopology topology,
+                           UINT32 bytes_read,
+                           ID3D12GraphicsCommandList7* cmd_list);
 
 
 		// acceleration structure builders
-		int build_mesh_blas(dx::D3D12Buffer& vertex_buffer, dx::D3D12Buffer& index_buffer, ComPtr<ID3D12GraphicsCommandList7> cmd_list);
+		int build_mesh_blas(dx::D3D12Buffer& vertex_buffer, dx::D3D12Buffer& index_buffer, ID3D12GraphicsCommandList7* cmd_list);
 		void build_tlas(ID3D12GraphicsCommandList7* cmd_list);
 
 	public:
