@@ -26,6 +26,7 @@ set(RENDERER_SOURCES
 
     "application.cpp"
     "rt_app.cpp"
+    "debug_window.cpp"
 )
 
 set(RENDERER_HEADERS
@@ -48,6 +49,7 @@ set(RENDERER_HEADERS
 
     "application.h"
     "rt_app.h"
+    "debug_window.h"
 )
 
 set(D3D12MA_SOURCES

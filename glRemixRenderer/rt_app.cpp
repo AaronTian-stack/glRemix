@@ -10,7 +10,6 @@
 #include <thread>
 #include <chrono>
 #include <vector>
-#include <iostream>
 
 #include <filesystem>
 
@@ -854,9 +853,9 @@ void glRemix::glRemixRenderer::render()
 	// Read GL stream and set resources accordingly
 	read_gl_command_stream();
 
-	// Start ImGui frame
 	m_context.start_imgui_frame();
-	ImGui::ShowDemoWindow();
+
+	m_debug_window.render();
 
 	// Be careful not to call the ID3D12Interface reset instead
 	THROW_IF_FALSE(SUCCEEDED(m_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
@@ -1083,7 +1082,14 @@ void glRemix::glRemixRenderer::render()
 	// End of all work for queue, signal fence
 	THROW_IF_FALSE(SUCCEEDED(m_gfx_queue.queue->Signal(m_fence_frame_ready.fence.Get(), current_fence_value)));
 
-	// PRESENT
+	// This must be called after EndFrame/Render but can be called after command list submission
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+    {
+	    ImGui::UpdatePlatformWindows();
+	    ImGui::RenderPlatformWindowsDefault();
+    }
+
 	m_context.present();
 
 	increment_frame_index();

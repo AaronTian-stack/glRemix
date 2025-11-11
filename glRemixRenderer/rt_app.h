@@ -1,5 +1,6 @@
 #pragma once
 #include "application.h"
+#include "debug_window.h"
 #include "dx/d3d12_as.h"
 #include "gl/gl_matrix_stack.h"
 #include <DirectXMath.h>
@@ -125,6 +126,8 @@ namespace glRemix
 		// shader resources
 		std::vector<Light> m_lights = std::vector<Light>(8);
 		std::vector<Material> m_materials;
+
+		DebugWindow m_debug_window;
 
 	protected:
 		void create() override;

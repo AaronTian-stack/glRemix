@@ -42,6 +42,8 @@ namespace glRemix::dx
 		ComPtr<IDxcUtils> m_dxc_utils = nullptr;
 
 		HWND m_window = nullptr;
+        WNDPROC m_original_wndproc = nullptr;
+
         XMUINT2 m_swapchain_dims{};
 		ComPtr<IDXGISwapChain3> m_swapchain;
 		std::array<ComPtr<ID3D12Resource>, 2> m_swapchain_buffers; // 2 is upper bound

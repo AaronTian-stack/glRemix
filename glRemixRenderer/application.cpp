@@ -27,7 +27,21 @@ void Application::run_with_hwnd(const bool enable_debug_layer)
 	bool quit = false;
 	while (!quit)
 	{
-		// TODO: Get quit signal from IPC and get it out of the app class
+		// Process window messages for ImGui input
+		MSG msg;
+		while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+		{
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+			
+			if (msg.message == WM_QUIT)
+			{
+				quit = true;
+			}
+		}
+		
+		// TODO: Get quit signal from IPC and get it out of the app class?
+		// Right now this process just gets killed externally
 		render();
 	}
 
