@@ -1,6 +1,5 @@
 #include "rt_app.h"
 
-#include "constants.h"
 #include "helper.h"
 #include "imgui.h"
 #include "dx/d3d12_barrier.h"
@@ -10,7 +9,8 @@
 #include <thread>
 #include <chrono>
 #include <vector>
-#include <iostream>
+
+#include <filesystem>
 
 void glRemix::glRemixRenderer::create()
 {
@@ -18,23 +18,6 @@ void glRemix::glRemixRenderer::create()
 	{
 		THROW_IF_FALSE(m_context.create_command_allocator(&m_cmd_pools[i], &m_gfx_queue, "frame command allocator"));
 	}
-
-	//{
- //       dx::Resource texture{};
- //       initialize_tracked_resource(texture, nullptr, true, D3D12_BARRIER_LAYOUT_COMMON, nullptr, 0);
-
- //       std::vector<dx::BarrierLogEvent> log;
- //       std::array batch{&texture};
-
- //       mark_use(texture, dx::Usage::SRV_PIXEL);
- //       emit_barriers(nullptr, batch.data(), batch.size(), &log);
-
- //       mark_use(texture, dx::Usage::UAV_COMPUTE);
- //       emit_barriers(nullptr, batch.data(), batch.size(), &log);
-
- //       mark_use(texture, dx::Usage::SRV_PIXEL);
- //       emit_barriers(nullptr, batch.data(), batch.size(), &log);
-	//}
 
 	// Create raster root signature
 	{
@@ -56,11 +39,19 @@ void glRemix::glRemixRenderer::create()
 		THROW_IF_FALSE(m_context.create_root_signature(root_sig_desc, m_root_signature.ReleaseAndGetAddressOf(), "triangle root signature"));
 	}
 
+	// Get executable directory for shader paths
+	wchar_t exe_path[MAX_PATH];
+	GetModuleFileNameW(NULL, exe_path, MAX_PATH);
+	std::filesystem::path exe_dir = std::filesystem::path(exe_path).parent_path();
+	std::filesystem::path shader_dir = exe_dir / "shaders";
+
 	// Compile dummy raster pipeline for testing
 	ComPtr<IDxcBlobEncoding> vertex_shader;
-	THROW_IF_FALSE(m_context.load_blob_from_file(L"./shaders/triangle_vs_6_6_VSMain.dxil", vertex_shader.ReleaseAndGetAddressOf()));
+	std::wstring vs_path = (shader_dir / "triangle_vs_6_6_VSMain.dxil").wstring();
+	THROW_IF_FALSE(m_context.load_blob_from_file(vs_path.c_str(), vertex_shader.ReleaseAndGetAddressOf()));
 	ComPtr<IDxcBlobEncoding> pixel_shader;
-	THROW_IF_FALSE(m_context.load_blob_from_file(L"./shaders/triangle_ps_6_6_PSMain.dxil", pixel_shader.ReleaseAndGetAddressOf()));
+	std::wstring ps_path = (shader_dir / "triangle_ps_6_6_PSMain.dxil").wstring();
+	THROW_IF_FALSE(m_context.load_blob_from_file(ps_path.c_str(), pixel_shader.ReleaseAndGetAddressOf()));
 
 	dx::GraphicsPipelineDesc pipeline_desc
 	{
@@ -144,7 +135,8 @@ void glRemix::glRemixRenderer::create()
 
 	// Compile ray tracing pipeline
 	ComPtr<IDxcBlobEncoding> raytracing_shaders;
-	THROW_IF_FALSE(m_context.load_blob_from_file(L"./shaders/raytracing_lib_6_6.dxil", raytracing_shaders.ReleaseAndGetAddressOf()));
+	std::wstring rt_path = (shader_dir / "raytracing_lib_6_6.dxil").wstring();
+	THROW_IF_FALSE(m_context.load_blob_from_file(rt_path.c_str(), raytracing_shaders.ReleaseAndGetAddressOf()));
 	dx::RayTracingPipelineDesc rt_desc = dx::make_ray_tracing_pipeline_desc(
 		L"RayGenMain",
 		L"MissMain",
@@ -202,41 +194,10 @@ void glRemix::glRemixRenderer::create()
 		m_context.unmap_buffer(&m_shader_table);
 	}
 
-    dx::D3D12Buffer t_vertex_buffer{};
-	dx::D3D12Buffer t_index_buffer{};
-    std::array<Vertex, 3> triangle_vertices{{{{0.0f, 0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}},
-                                             {{0.5f, -0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-                                             {{-0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}}}};
-    std::array<UINT, 3> triangle_indices{0, 1, 2};
-    dx::BufferDesc vertex_buffer_desc{
-        .size = sizeof(Vertex) * triangle_vertices.size(),
-        .stride = sizeof(Vertex),
-        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-    };
-    void* cpu_ptr;
-    THROW_IF_FALSE(
-        m_context.create_buffer(vertex_buffer_desc, &t_vertex_buffer, "triangle vertex buffer"));
-
-    THROW_IF_FALSE(m_context.map_buffer(&t_vertex_buffer, &cpu_ptr));
-    memcpy(cpu_ptr, triangle_vertices.data(), vertex_buffer_desc.size);
-    m_context.unmap_buffer(&t_vertex_buffer);
-
-    dx::BufferDesc index_buffer_desc{
-        .size = sizeof(UINT) * triangle_indices.size(),
-        .stride = sizeof(UINT),
-        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-    };
-    THROW_IF_FALSE(
-        m_context.create_buffer(index_buffer_desc, &t_index_buffer, "triangle index buffer"));
-
-    THROW_IF_FALSE(m_context.map_buffer(&t_index_buffer, &cpu_ptr));
-    memcpy(cpu_ptr, triangle_indices.data(), index_buffer_desc.size);
-    m_context.unmap_buffer(&t_index_buffer);
-
     dx::BufferDesc raygen_cb_desc
 	{
-		.size = align_u32(sizeof(RayGenConstantBuffer), 256),
-		.stride = align_u32(sizeof(RayGenConstantBuffer), 256),
+		.size = align_u32(sizeof(RayGenConstantBuffer), CB_ALIGNMENT),
+        .stride = align_u32(sizeof(RayGenConstantBuffer), CB_ALIGNMENT),
 		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
 	};
 	for (UINT i = 0; i < m_frames_in_flight; i++)
@@ -244,51 +205,7 @@ void glRemix::glRemixRenderer::create()
 		THROW_IF_FALSE(m_context.create_buffer(raygen_cb_desc, &m_raygen_constant_buffers[i], "raygen constant buffer"));
 	}
 
-	// Create UAV render target
-	XMUINT2 win_dims{};
-	THROW_IF_FALSE(m_context.get_window_dimensions(&win_dims));
-
-	dx::TextureDesc uav_rt_desc
-    {
-        .width = win_dims.x,
-        .height = win_dims.y,
-        .depth_or_array_size = 1,
-        .mip_levels = 1,
-        .format = DXGI_FORMAT_R8G8B8A8_UNORM,
-        .dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-        .is_render_target = false,
-    };
-
-    THROW_IF_FALSE(
-        m_context.create_texture(uav_rt_desc, 
-			D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS, 
-			&m_uav_render_target, 
-			nullptr, 
-			"UAV and RT texture"));
-
-	// Build BLAS here for now, but renderer will construct them dynamically for new geometry in render loop
-	D3D12_RAYTRACING_GEOMETRY_DESC tri_desc
-	{
-		.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-		.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE, // Try to use this liberally as its faster
-		.Triangles = m_context.get_buffer_rt_description(&t_vertex_buffer, &t_index_buffer),
-	};
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS blas_desc
-	{
-		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-		// Lots of options here, probably want to use different ones, especially the update one
-		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
-		.NumDescs = 1,
-		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-		.pGeometryDescs = &tri_desc,
-	};
-
-	const auto blas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(blas_desc);
-	// TODO: Reuse scratch space for all BLAS
-	// The same could be done for TLAS(s) as well
-
-	constexpr UINT64 scratch_size = 16 * 1024 * 1024;
-	assert(blas_prebuild_info.ScratchDataSizeInBytes < scratch_size);
+	constexpr UINT64 scratch_size = 16u * MEGABYTE;
 	dx::BufferDesc scratch_buffer_desc
 	{
 		.size = scratch_size,
@@ -297,194 +214,10 @@ void glRemix::glRemixRenderer::create()
 		.uav = true, // Scratch space must be in UAV layout
 	};
 	THROW_IF_FALSE(m_context.create_buffer(scratch_buffer_desc, &m_scratch_space, "BLAS scratch space"));
-
-	dx::BufferDesc blas_buffer_desc
-	{
-		.size = blas_prebuild_info.ResultDataMaxSizeInBytes,
-		.stride = 0,
-		.visibility = dx::GPU,
-		.acceleration_structure = true,
-	};
-	THROW_IF_FALSE(m_context.create_buffer(blas_buffer_desc, &m_blas_buffer, "BLAS buffer"));
 	
-	const auto blas_build_desc = m_context.get_raytracing_acceleration_structure(blas_desc, &m_blas_buffer, nullptr, &m_scratch_space);
-
-	// Record transitions, copies
-	THROW_IF_FALSE(SUCCEEDED(m_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
-	ComPtr<ID3D12GraphicsCommandList7> cmd_list;
-	THROW_IF_FALSE(m_context.create_command_list(cmd_list.ReleaseAndGetAddressOf(), m_cmd_pools[get_frame_index()]));
-
-	// Mark resources as needing UAV access for build
-	m_context.mark_use(&m_scratch_space, dx::Usage::UAV_COMPUTE);
-	m_context.mark_use(&m_blas_buffer, dx::Usage::AS_WRITE);
-
-	// Emit barriers for BLAS build
-	std::array build_resources = { &m_scratch_space, &m_blas_buffer };
-    m_context.emit_barriers(cmd_list.Get(), build_resources.data(), build_resources.size(), nullptr, 0);
-
-	cmd_list->BuildRaytracingAccelerationStructure(&blas_build_desc, 0, nullptr);
-
-	// Transition BLAS to read state for use in TLAS
-	m_context.mark_use(&m_blas_buffer, dx::Usage::AS_READ);
-	std::array blas_read_resources = { &m_blas_buffer };
-    m_context.emit_barriers(cmd_list.Get(),
-                            blas_read_resources.data(),
-                            blas_read_resources.size(),
-                            nullptr,
-                            0);
-
-	// Instance of the BLAS for TLAS
-	D3D12_RAYTRACING_INSTANCE_DESC instance_desc
-	{
-		.Transform
-		{
-			// Identity matrix
-			1.0f, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f,
-		},
-		.InstanceID = 0,
-		.InstanceMask = 0xFF,
-		.InstanceContributionToHitGroupIndex = 0,
-		.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE,
-		.AccelerationStructure = m_blas_buffer.get_gpu_address(),
-	};
-
-	dx::BufferDesc instance_buffer_desc
-	{
-		.size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
-		.stride = sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
-		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-	};
-	THROW_IF_FALSE(m_context.create_buffer(instance_buffer_desc, &m_tlas.instance, "TLAS instance buffer"));
-
-	THROW_IF_FALSE(m_context.map_buffer(&m_tlas.instance, &cpu_ptr));
-	memcpy(cpu_ptr, &instance_desc, instance_buffer_desc.size);
-	m_context.unmap_buffer(&m_tlas.instance);
-
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tlas_desc
-	{
-		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
-		// Lots of options here, probably want to use different ones, especially the update one
-		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
-		.NumDescs = 1,
-		.InstanceDescs = m_tlas.instance.get_gpu_address(),
-	};
-
-	const auto tlas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(tlas_desc);
-	assert(tlas_prebuild_info.ScratchDataSizeInBytes < scratch_size);
-	dx::BufferDesc tlas_buffer_desc
-	{
-		.size = tlas_prebuild_info.ResultDataMaxSizeInBytes,
-		.stride = 0,
-		.visibility = dx::GPU,
-		.acceleration_structure = true,
-	};
-	THROW_IF_FALSE(m_context.create_buffer(tlas_buffer_desc, &m_tlas.buffer, "TLAS buffer"));
-
-	// Mark TLAS for build (write access)
-	m_context.mark_use(&m_tlas.buffer, dx::Usage::AS_WRITE);
-	std::array tlas_write_resources = { &m_tlas.buffer };
-    m_context.emit_barriers(cmd_list.Get(),
-                            tlas_write_resources.data(),
-                            tlas_write_resources.size(),
-                            nullptr,
-                            0);
-
-	const auto tlas_build_desc = m_context.get_raytracing_acceleration_structure(tlas_desc, &m_tlas.buffer, nullptr, &m_scratch_space);
-
-	cmd_list->BuildRaytracingAccelerationStructure(&tlas_build_desc, 0, nullptr);
-
-	// Transition TLAS to read state for raytracing
-	m_context.mark_use(&m_tlas.buffer, dx::Usage::AS_READ);
-	std::array tlas_read_resources = { &m_tlas.buffer };
-    m_context.emit_barriers(cmd_list.Get(),
-                            tlas_read_resources.data(),
-                            tlas_read_resources.size(),
-                            nullptr,
-                            0);
-
-
-	/*
-	// Create buffers for MeshRecords, materials, and lights
-    dx::BufferDesc meshes_buffer_desc
-	{
-        .size = sizeof(MeshRecord) * m_meshes.size(),
-        .stride = sizeof(MeshRecord),
-        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-    };
-    THROW_IF_FALSE(m_context.create_buffer(meshes_buffer_desc, &m_meshes_buffer, "meshes buffer"));
-
-	void* mesh_cpu_ptr = nullptr;
-    THROW_IF_FALSE(m_context.map_buffer(&m_meshes_buffer, &mesh_cpu_ptr));
-    memcpy(mesh_cpu_ptr, m_meshes.data(), meshes_buffer_desc.size);
-    m_context.unmap_buffer(&m_meshes_buffer);
-
-    dx::BufferDesc materials_buffer_desc
-	{
-        .size = sizeof(Material) * m_materials.size(),
-        .stride = sizeof(Material),
-        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-    };
-    THROW_IF_FALSE(m_context.create_buffer(materials_buffer_desc, &m_materials_buffer, "materials buffer"));
-
-	void* material_cpu_ptr = nullptr;
-    THROW_IF_FALSE(m_context.map_buffer(&m_materials_buffer, &material_cpu_ptr));
-    memcpy(material_cpu_ptr, m_materials.data(), materials_buffer_desc.size);
-    m_context.unmap_buffer(&m_materials_buffer);
-
-    dx::BufferDesc lights_buffer_desc
-	{
-        .size = sizeof(Light) * m_lights.size(),
-        .stride = sizeof(Light),
-        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-    };
-    THROW_IF_FALSE(m_context.create_buffer(lights_buffer_desc, &m_lights_buffer, "lights buffer"));
-
-	void* light_cpu_ptr = nullptr;
-    THROW_IF_FALSE(m_context.map_buffer(&m_lights_buffer, &light_cpu_ptr));
-    memcpy(light_cpu_ptr, m_lights.data(), lights_buffer_desc.size);
-    m_context.unmap_buffer(&m_lights_buffer);*/
-
-
-	// TODO: Whenever buffers are moved to CPU -> GPU copy method instead of GPU upload heaps record the copy here as well
-
-	THROW_IF_FALSE(SUCCEEDED(cmd_list->Close()));
-	const std::array<ID3D12CommandList*, 1> lists = { cmd_list.Get() };
-	m_gfx_queue.queue->ExecuteCommandLists(1, lists.data());
-
-	// Signal fence and wait for GPU to finish
-	auto current_fence_value = ++m_fence_frame_ready_val[get_frame_index()];
-	m_gfx_queue.queue->Signal(m_fence_frame_ready.fence.Get(), current_fence_value);
-
-	dx::WaitInfo wait_info
-	{
-		.wait_all = true,
-		.count = 1,
-		.fences = &m_fence_frame_ready,
-		.values = &current_fence_value,
-		.timeout = INFINITE,
-	};
-
-	// Create descriptor views after all resources are ready
-	{
-		XMUINT2 win_dims_for_desc{};
-		m_context.get_window_dimensions(&win_dims_for_desc);
-
-		// TODO: Use CPU descriptors and copy to GPU visible heap
-
-		m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer, &m_rt_descriptors, 0);
-
-		m_context.create_unordered_access_view_texture(&m_uav_render_target, uav_rt_desc.format, &m_rt_descriptors, 1);
-
-		// Will be updated each frame
-		m_context.create_constant_buffer_view(&m_raygen_constant_buffers[0], &m_rt_descriptors, 2);
-	}
-
-	// Init ImGui
-	THROW_IF_FALSE(m_context.init_imgui());
-
-	THROW_IF_FALSE(m_context.wait_fences(wait_info)); // Block CPU until done
+	// TODO: Use CPU descriptors and copy to GPU visible heap
+	// Will be updated each frame
+	m_context.create_constant_buffer_view(&m_raygen_constant_buffers[0], &m_rt_descriptors, 2);
 }
 
 void glRemix::glRemixRenderer::read_gl_command_stream()
@@ -492,9 +225,6 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     // stall until initialized
     while (!m_ipc.InitReader())
     {
-        std::cout << "IPC Manager could not init a reader instance. Have you launched an "
-                     "executable that utilizes glRemix?"
-                  << std::endl;
         std::this_thread::sleep_for(std::chrono::milliseconds(60));
     }
 
@@ -505,22 +235,18 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     uint32_t bytesRead = 0;
     while (!m_ipc.TryConsumeFrame(ipcBuf.data(), static_cast<uint32_t>(ipcBuf.size()), &bytesRead))
     {
-        std::cout << "No frame data available." << std::endl;
+        OutputDebugStringA("No frame data available.\n");
         std::this_thread::sleep_for(std::chrono::milliseconds(60));  // rest before next poll
     }
 
     const auto* frameHeader = reinterpret_cast<const glRemix::GLFrameUnifs*>(ipcBuf.data());
-	
-	/*
-	Optional framedata debug:
-    std::cout << "Frame " << frameHeader->frameIndex << " (" << frameHeader->payloadSize
-              << " bytes payload)\n";
-	*/
 
 	// if no data was captured return
     if (frameHeader->payloadSize == 0)
     {
-        std::cout << "Frame " << frameHeader->frameIndex << ": no new commands.\n";
+        char buffer[256];
+        sprintf(buffer, "Frame %u: no new commands.\n", frameHeader->frameIndex);
+        OutputDebugStringA(buffer);
         return;
     }
 
@@ -561,11 +287,9 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, siz
 	// display list logic
 	uint32_t list_index = 0;
 	size_t display_list_begin = 0;
-	size_t display_list_end = 0;
 
-	size_t offset = start_offset; // add additional start index
-	bool end_list = false;
-	bool advance = true;
+    size_t offset = start_offset; // add additional start index
+
     while (offset + sizeof(glRemix::GLCommandUnifs) <= bytesRead)
     {
         const auto* header = reinterpret_cast<const glRemix::GLCommandUnifs*>(ipcBuf.data()
@@ -576,11 +300,22 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, siz
 
         switch (header->type)
         {
+            case glRemix::GLCommandType::GLCMD_CREATE:
+            {
+                HWND hwnd;
+                std::memcpy(&hwnd, ipcBuf.data() + offset, sizeof(HWND));
+                THROW_IF_FALSE(m_context.create_swapchain(hwnd, &m_gfx_queue, &m_frame_index));
+                THROW_IF_FALSE(m_context.create_swapchain_descriptors(&m_swapchain_descriptors, &m_rtv_heap));
+                THROW_IF_FALSE(m_context.init_imgui());
+                create_uav_rt();
+				// TODO: Descriptor should be on CPU heap
+                m_context.create_unordered_access_view_texture(&m_uav_render_target,
+                                                               m_uav_render_target.desc.format,
+                                                               &m_rt_descriptors,
+                                                               1);
+            }
 			case glRemix::GLCommandType::GLCMD_NEW_LIST: 
 			{
-				// when we encounter a new list record the beginning offset of following command
-				std::cout << "GL_NEW_LIST: " << header->dataSize << std::endl;
-
 				const auto* list = reinterpret_cast<const glRemix::GLNewListCommand*>(ipcBuf.data() + offset);  // reach into data payload
 
 				list_index = list->list;
@@ -592,8 +327,6 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, siz
 			}
 			case glRemix::GLCommandType::GLCMD_CALL_LIST:
 			{
-				std::cout << "GL_CALL_LIST: " << header->dataSize << std::endl;
-
 				const auto* list = reinterpret_cast<const glRemix::GLCallListCommand*>(ipcBuf.data() + offset);  // reach into data payload
 
                 auto it = m_display_lists.find(list->list);
@@ -604,38 +337,33 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, siz
 
                     read_ipc_buffer(listBuf, 0, listEnd, cmd_list, true);
                 } 
-				else
+                else
                 {
-                    std::cout << "CALL_LIST missing id " << list->list << "\n";
+                    char buffer[256];
+                    sprintf(buffer, "CALL_LIST missing id %u\n", list->list);
+                    OutputDebugStringA(buffer);
                 }
-
                 break;
 			}
 			case glRemix::GLCommandType::GLCMD_END_LIST:
 			{
-				std::cout << "GL_END_LIST: " << header->dataSize << std::endl;
-
 				if (callList)
 				{
 					return; // return immediately if we are within a calllist (we should return to the invocation of read_ipc_buffer)
 				}
-				else
-				{
-					display_list_end = offset; // record GL_END_LIST to mark end of display list
+                size_t display_list_end = offset; // record GL_END_LIST to mark end of display list
 
-					// record new list in respective index
-					std::vector<uint8_t> new_list(ipcBuf.begin() + display_list_begin, ipcBuf.begin() + display_list_end);
-					m_display_lists[list_index] = std::move(new_list);;
+                // record new list in respective index
+                std::vector new_list(ipcBuf.begin() + display_list_begin, ipcBuf.begin() + display_list_end);
+                m_display_lists[list_index] = std::move(new_list);;
 
-					listMode = gl::GLListMode::COMPILE_AND_EXECUTE; // reset execution state
-				}
+                listMode = gl::GLListMode::COMPILE_AND_EXECUTE; // reset execution state
 
                 break;
 			}
             // if we encounter GL_BEGIN we know that a new geometry is to be created
-            case glRemix::GLCommandType::GLCMD_BEGIN: {
-                std::cout << "GL_BEGIN: " << header->dataSize << std::endl;
-
+            case glRemix::GLCommandType::GLCMD_BEGIN:
+            {
                 const auto* type = reinterpret_cast<const glRemix::GLBeginCommand*>(ipcBuf.data() + offset);  // reach into data payload
 				offset += header->dataSize; // we enter read geometry assuming first command inbetween glbegin and end
 				advance = false;
@@ -648,7 +376,6 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, siz
             }
 			case glRemix::GLCommandType::GLCMD_MATERIALF:
 			{
-				std::cout << "GL_MATERIALF: " << header->dataSize << std::endl;
 				const auto* mat = reinterpret_cast<const glRemix::GLMaterialCommand*>(ipcBuf.data() + offset);  // reach into data payload
 
 				// TODO: when material f is encountered, edit the current m_material based on the param and value
@@ -657,8 +384,6 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, siz
 			}
 			case glRemix::GLCommandType::GLCMD_MATERIALFV: 
 			{
-				std::cout << "GL_MATERIALFV: " << header->dataSize << std::endl;
-
 				const auto* mat = reinterpret_cast<const glRemix::GLMaterialfvCommand*>(ipcBuf.data() + offset);  // reach into data payload
 
 				// TODO: when material fv is encountered, edit the current m_material based on the param and value
@@ -667,7 +392,6 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, siz
 			}
 			case glRemix::GLCommandType::GLCMD_LIGHTF: 
 			{
-				std::cout << "GL_LIGHTF: " << header->dataSize << std::endl;
 				const auto* light = reinterpret_cast<const glRemix::GLLightCommand*>(ipcBuf.data() + offset);  // reach into data payload
 
 				// TODO: when light f is encountered, edit the corresponding index in m_lights based on the param and value
@@ -676,7 +400,6 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, siz
 			}
 			case glRemix::GLCommandType::GLCMD_LIGHTFV:
 			{
-				std::cout << "GL_LIGHTFV: " << header->dataSize << std::endl;
 				const auto* light = reinterpret_cast<const glRemix::GLLightfvCommand*>(ipcBuf.data() + offset);  // reach into data payload
 
 				// TODO: when light fv is encountered, edit the corresponding index in m_lights based on the param and value
@@ -685,36 +408,27 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, siz
 			}
 			case glRemix::GLCommandType::GLCMD_MATRIX_MODE:
 			{
-				std::cout << "GL_MATRIX_MODE: " << header->dataSize << std::endl;
-
 				const auto* type = reinterpret_cast<const glRemix::GLMatrixModeCommand*>(ipcBuf.data() + offset);  // reach into data payload
 				matrixMode = static_cast<gl::GLMatrixMode>(type->mode);
 				break;
 			}
 			case glRemix::GLCommandType::GLCMD_PUSH_MATRIX:
 			{
-				std::cout << "GL_PUSH_MATRIX" << std::endl;
-
 				m_matrix_stack.push(matrixMode);
 				break;
 			}
 			case glRemix::GLCommandType::GLCMD_POP_MATRIX:
 			{
-				std::cout << "GL_POP_MATRIX" << std::endl;
-
 				m_matrix_stack.pop(matrixMode);
 				break;
 			}
 			case glRemix::GLCommandType::GLCMD_LOAD_IDENTITY:
 			{
-				std::cout << "GL_LOAD_IDENTITY: " << header->dataSize << std::endl;
-
 				m_matrix_stack.identity(matrixMode);
 				break;
 			}
 			case glRemix::GLCommandType::GLCMD_ROTATE:
 			{
-				std::cout << "GL_ROTATE: " << header->dataSize << std::endl;
 				const auto* angleAxis = reinterpret_cast<const glRemix::GLRotateCommand*>(ipcBuf.data()
                                                                                     + offset);
 				float angle = angleAxis->angle;
@@ -727,16 +441,13 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, siz
 			}
 			case glRemix::GLCommandType::GLCMD_TRANSLATE:
 			{
-				std::cout << "GL_TRANSLATE: " << header->dataSize << std::endl;
 				const auto* vec = reinterpret_cast<const glRemix::GLTranslateCommand*>(ipcBuf.data() + offset);
 				m_matrix_stack.translate(matrixMode, vec->t.x, vec->t.y, vec->t.z);
 				break;
 			}
 			case glRemix::GLCommandType::GLCMD_FRUSTUM:
 			{
-				std::cout << "GL_FRUSTUM: " << header->dataSize << std::endl;
                 const auto* frust = reinterpret_cast<const glRemix::GLFrustumCommand*>(ipcBuf.data() + offset);
-
 				
 				// get current window dimensions
                 XMUINT2 win_dims{};
@@ -760,7 +471,9 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, siz
                 break;
             }
 
-            default: printf("Unhandled Command: %d (size: %u)\n", static_cast<int>(header->type), header->dataSize); break;
+            default:
+                printf("Unhandled Command: %d (size: %u)\n", static_cast<int>(header->type), header->dataSize);
+                break;
         }
 
 		if (advance)
@@ -768,8 +481,6 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, siz
 			offset += header->dataSize;
 		}
     }
-
-
 }
 
 // adds to vertex and index buffers depending on topology type
@@ -797,7 +508,6 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
         {
             case glRemix::GLCommandType::GLCMD_VERTEX3F: 
 			{
-				//std::cout << "GL_VERTEX3F: " << header->dataSize << std::endl;
                 const auto* v = reinterpret_cast<const glRemix::GLVertex3fCommand*>(ipcBuf.data()
                                                                                     + offset);
                 Vertex vertex{{v->x, v->y, v->z}, {color[0], color[1], color[2]}};
@@ -806,7 +516,6 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
             }
 			case glRemix::GLCommandType::GLCMD_COLOR3F: 
 			{
-				//std::cout << "GL_COLOR3F: " << header->dataSize << std::endl;
 				const auto* c = reinterpret_cast<const glRemix::GLColor3fCommand*>(ipcBuf.data() + offset);
 				color[0] = c->x;
 				color[1] = c->y;
@@ -815,7 +524,6 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
 			}
 			case glRemix::GLCommandType::GLCMD_COLOR4F: 
 			{
-				//std::cout << "GL_COLOR4F: " << header->dataSize << std::endl;
 				const auto* c = reinterpret_cast<const glRemix::GLColor4fCommand*>(ipcBuf.data() + offset);
 				color[0] = c->x;
 				color[1] = c->y;
@@ -823,13 +531,14 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
 				color[3] = c->w;
 				break;
 			}
-            case glRemix::GLCommandType::GLCMD_END: // read vertices until GL_END is encountered at which point we will have reached end of geomtry
+            case glRemix::GLCommandType::GLCMD_END: // read vertices until GL_END is encountered at which point we will have reached end of geometry
 			{
-				//std::cout << "GL_END: " << header->dataSize << std::endl;
                 endPrimitive = true;
                 break;
             }
-            default: printf("    (Unhandled primitive command)\n"); break;
+            default:
+                printf("    (Unhandled primitive command)\n");
+                break;
         }
 
 		offset += header->dataSize;  // move past data to next command
@@ -916,12 +625,10 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
 	auto it = m_mesh_map.find(hash);
     if (it != m_mesh_map.end()) // if mesh exists retrieve it from the map
 	{
-		std::cout << "hash found " << hash << std::endl;
 		mesh = m_mesh_map[hash];
 	}
 	else // otherwise create a new mesh record
 	{
-		std::cout << "hash not found" << hash << std::endl;
 		mesh.vertexCount = t_vertices.size();
 		mesh.indexCount = t_indices.size();
 		mesh.meshId = hash; // set hash to meshID
@@ -1133,16 +840,21 @@ void glRemix::glRemixRenderer::build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd
 	m_context.mark_use(&m_tlas.buffer, dx::Usage::AS_READ);
 	std::array read_resources = { &m_tlas.buffer };
 	m_context.emit_barriers(cmd_list.Get(), read_resources.data(), read_resources.size(), nullptr, 0);
+
+	// TODO: This should not be here and the descriptor should live on a CPU heap and be copied
+	m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer,
+                                                                 &m_rt_descriptors,
+                                                                 0);
 }
 
 void glRemix::glRemixRenderer::render()
 {
-	// read GL stream and set resoureces accordingly
+	// Read GL stream and set resources accordingly
 	read_gl_command_stream();
 
-	// Start ImGui frame
 	m_context.start_imgui_frame();
-	ImGui::ShowDemoWindow();
+
+	m_debug_window.render();
 
 	// Be careful not to call the ID3D12Interface reset instead
 	THROW_IF_FALSE(SUCCEEDED(m_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
@@ -1179,22 +891,11 @@ void glRemix::glRemixRenderer::render()
 	// Build TLAS
 	build_tlas(cmd_list);
 	m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer, &m_rt_descriptors, 0);
-
-	m_matrix_stack.printStacks(); // debugging
-	std::cout << "The size of myMap is: " << m_mesh_map.size() << std::endl;
 	// Dispatch rays to UAV render target
 	{
 		XMMATRIX view = XMMatrixIdentity();
 
 		XMMATRIX proj = XMLoadFloat4x4(&m_matrix_stack.top(gl::GLMatrixMode::PROJECTION));
-		
-		/*
-		XMMATRIX projection_matrix = XMMatrixPerspectiveFovLH(
-			XM_PIDIV4,
-			static_cast<float>(win_dims.x) / static_cast<float>(win_dims.y),
-			0.1f,
-			100.0f
-		);*/
 
 		XMMATRIX view_proj = XMMatrixMultiply(view, proj);
 
@@ -1332,20 +1033,8 @@ void glRemix::glRemixRenderer::render()
 	cmd_list->OMSetRenderTargets(1, &swapchain_rtv, FALSE, nullptr);
 
 	// This is where rasterization could go
-	if (m_vertex_buffer.desc.size > 0 && m_index_buffer.desc.size > 0)
-	{
-        cmd_list->SetGraphicsRootSignature(m_root_signature.Get());
-        cmd_list->SetPipelineState(m_raster_pipeline.Get());
-
-        cmd_list->SetGraphicsRootConstantBufferView(0, m_raygen_constant_buffers[get_frame_index()].get_gpu_address());
-
-        const auto vb = &m_vertex_buffer;
-        m_context.bind_vertex_buffers(cmd_list.Get(), 0, 1, &vb, nullptr, nullptr, nullptr);
-        m_context.bind_index_buffer(cmd_list.Get(), m_index_buffer, DXGI_FORMAT_R32_UINT);
-        const UINT index_count = static_cast<UINT>(m_index_buffer.desc.size
-                                                   / m_index_buffer.desc.stride);
-        //cmd_list->DrawIndexedInstanced(index_count, 1, 0, 0, 0); 
-	}
+	// ex m_context.bind_vertex_buffers m_context.bind_index_buffer cmd_list->DrawIndexedInstanced
+    // After setting the root signature and pipeline state and binding any resources
 
     // Render ImGui
 	m_context.render_imgui_draw_data(cmd_list.Get());
@@ -1392,7 +1081,14 @@ void glRemix::glRemixRenderer::render()
 	// End of all work for queue, signal fence
 	THROW_IF_FALSE(SUCCEEDED(m_gfx_queue.queue->Signal(m_fence_frame_ready.fence.Get(), current_fence_value)));
 
-	// PRESENT
+	// This must be called after EndFrame/Render but can be called after command list submission
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+    {
+	    ImGui::UpdatePlatformWindows();
+	    ImGui::RenderPlatformWindowsDefault();
+    }
+
 	m_context.present();
 
 	increment_frame_index();
@@ -1417,6 +1113,31 @@ void glRemix::glRemixRenderer::destroy()
 {
 	m_context.destroy_imgui();
 	m_rt_descriptor_heap.deallocate(&m_rt_descriptors);
+}
+
+void glRemix::glRemixRenderer::create_uav_rt()
+{
+    XMUINT2 win_dims{};
+    THROW_IF_FALSE(m_context.get_window_dimensions(&win_dims));
+
+    dx::TextureDesc uav_rt_desc
+    {
+        .width = win_dims.x,
+        .height = win_dims.y,
+        .depth_or_array_size = 1,
+        .mip_levels = 1,
+        .format = DXGI_FORMAT_R8G8B8A8_UNORM,
+        .dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+        .is_render_target = false,
+    };
+
+    THROW_IF_FALSE(m_context.create_texture(
+		uav_rt_desc,
+        D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS,
+        &m_uav_render_target,
+        nullptr,
+        "UAV and RT texture")
+	);
 }
 
 glRemix::glRemixRenderer::~glRemixRenderer()

@@ -2,7 +2,7 @@
 
 using namespace glRemix;
 
-void Application::run(const HWND hwnd, const bool enable_debug_layer)
+void Application::run_with_hwnd(const bool enable_debug_layer)
 {
 	// Setup and create default resources
 	THROW_IF_FALSE(m_context.create(enable_debug_layer));
@@ -18,9 +18,7 @@ void Application::run(const HWND hwnd, const bool enable_debug_layer)
 	};
 	THROW_IF_FALSE(m_context.create_descriptor_heap(desc, &m_rtv_heap, "default rtv heap"));
 
-	THROW_IF_FALSE(m_context.create_swapchain(hwnd, &m_gfx_queue, &m_frame_index));
-
-	THROW_IF_FALSE(m_context.create_swapchain_descriptors(&m_swapchain_descriptors, &m_rtv_heap));
+	// Swapchain creation is deferred until we receive HWND from command stream
 
 	THROW_IF_FALSE(m_context.create_fence(&m_fence_frame_ready, m_fence_frame_ready_val[get_frame_index()]));
 
@@ -29,21 +27,22 @@ void Application::run(const HWND hwnd, const bool enable_debug_layer)
 	bool quit = false;
 	while (!quit)
 	{
-		// TODO: Delete this if statement after shim/IPC is integrated
-		MSG msg{};
-		if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
+		// Process window messages for ImGui input
+		MSG msg;
+		while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
 		{
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+			
 			if (msg.message == WM_QUIT)
 			{
 				quit = true;
 			}
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
 		}
-		else
-		{
-			render();
-		}
+		
+		// TODO: Get quit signal from IPC and get it out of the app class?
+		// Right now this process just gets killed externally
+		render();
 	}
 
 	THROW_IF_FALSE(m_context.wait_idle(&m_gfx_queue));

@@ -1,4 +1,4 @@
-// dear imgui, v1.92.4
+// dear imgui, v1.92.5 WIP
 // (drawing and font code)
 
 /*
@@ -227,6 +227,8 @@ void ImGui::StyleColorsDark(ImGuiStyle* dst)
     colors[ImGuiCol_TabDimmed]              = ImLerp(colors[ImGuiCol_Tab],          colors[ImGuiCol_TitleBg], 0.80f);
     colors[ImGuiCol_TabDimmedSelected]      = ImLerp(colors[ImGuiCol_TabSelected],  colors[ImGuiCol_TitleBg], 0.40f);
     colors[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(0.50f, 0.50f, 0.50f, 0.00f);
+    colors[ImGuiCol_DockingPreview]         = colors[ImGuiCol_HeaderActive] * ImVec4(1.0f, 1.0f, 1.0f, 0.7f);
+    colors[ImGuiCol_DockingEmptyBg]         = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
     colors[ImGuiCol_PlotLines]              = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
     colors[ImGuiCol_PlotLinesHovered]       = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
     colors[ImGuiCol_PlotHistogram]          = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
@@ -240,6 +242,7 @@ void ImGui::StyleColorsDark(ImGuiStyle* dst)
     colors[ImGuiCol_TextSelectedBg]         = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
     colors[ImGuiCol_TreeLines]              = colors[ImGuiCol_Border];
     colors[ImGuiCol_DragDropTarget]         = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+    colors[ImGuiCol_DragDropTargetBg]       = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
     colors[ImGuiCol_UnsavedMarker]          = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
     colors[ImGuiCol_NavCursor]              = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
     colors[ImGuiCol_NavWindowingHighlight]  = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
@@ -293,6 +296,8 @@ void ImGui::StyleColorsClassic(ImGuiStyle* dst)
     colors[ImGuiCol_TabDimmed]              = ImLerp(colors[ImGuiCol_Tab],          colors[ImGuiCol_TitleBg], 0.80f);
     colors[ImGuiCol_TabDimmedSelected]      = ImLerp(colors[ImGuiCol_TabSelected],  colors[ImGuiCol_TitleBg], 0.40f);
     colors[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(0.53f, 0.53f, 0.87f, 0.00f);
+    colors[ImGuiCol_DockingPreview]         = colors[ImGuiCol_Header] * ImVec4(1.0f, 1.0f, 1.0f, 0.7f);
+    colors[ImGuiCol_DockingEmptyBg]         = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
     colors[ImGuiCol_PlotLines]              = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
     colors[ImGuiCol_PlotLinesHovered]       = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
     colors[ImGuiCol_PlotHistogram]          = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
@@ -306,6 +311,7 @@ void ImGui::StyleColorsClassic(ImGuiStyle* dst)
     colors[ImGuiCol_TextSelectedBg]         = ImVec4(0.00f, 0.00f, 1.00f, 0.35f);
     colors[ImGuiCol_TreeLines]              = colors[ImGuiCol_Border];
     colors[ImGuiCol_DragDropTarget]         = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+    colors[ImGuiCol_DragDropTargetBg]       = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
     colors[ImGuiCol_UnsavedMarker]          = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
     colors[ImGuiCol_NavCursor]              = colors[ImGuiCol_HeaderHovered];
     colors[ImGuiCol_NavWindowingHighlight]  = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
@@ -360,6 +366,8 @@ void ImGui::StyleColorsLight(ImGuiStyle* dst)
     colors[ImGuiCol_TabDimmed]              = ImLerp(colors[ImGuiCol_Tab],          colors[ImGuiCol_TitleBg], 0.80f);
     colors[ImGuiCol_TabDimmedSelected]      = ImLerp(colors[ImGuiCol_TabSelected],  colors[ImGuiCol_TitleBg], 0.40f);
     colors[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(0.26f, 0.59f, 1.00f, 0.00f);
+    colors[ImGuiCol_DockingPreview]         = colors[ImGuiCol_Header] * ImVec4(1.0f, 1.0f, 1.0f, 0.7f);
+    colors[ImGuiCol_DockingEmptyBg]         = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
     colors[ImGuiCol_PlotLines]              = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
     colors[ImGuiCol_PlotLinesHovered]       = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
     colors[ImGuiCol_PlotHistogram]          = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
@@ -373,6 +381,7 @@ void ImGui::StyleColorsLight(ImGuiStyle* dst)
     colors[ImGuiCol_TextSelectedBg]         = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
     colors[ImGuiCol_TreeLines]              = colors[ImGuiCol_Border];
     colors[ImGuiCol_DragDropTarget]         = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
+    colors[ImGuiCol_DragDropTargetBg]       = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
     colors[ImGuiCol_UnsavedMarker]          = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
     colors[ImGuiCol_NavCursor]              = colors[ImGuiCol_HeaderHovered];
     colors[ImGuiCol_NavWindowingHighlight]  = ImVec4(0.70f, 0.70f, 0.70f, 0.70f);
@@ -824,7 +833,7 @@ void ImDrawList::AddPolyline(const ImVec2* points, const int points_count, ImU32
         const bool use_texture = (Flags & ImDrawListFlags_AntiAliasedLinesUseTex) && (integer_thickness < IM_DRAWLIST_TEX_LINES_WIDTH_MAX) && (fractional_thickness <= 0.00001f) && (AA_SIZE == 1.0f);
 
         // We should never hit this, because NewFrame() doesn't set ImDrawListFlags_AntiAliasedLinesUseTex unless ImFontAtlasFlags_NoBakedLines is off
-        IM_ASSERT_PARANOID(!use_texture || !(_Data->Font->ContainerAtlas->Flags & ImFontAtlasFlags_NoBakedLines));
+        IM_ASSERT_PARANOID(!use_texture || !(_Data->Font->OwnerAtlas->Flags & ImFontAtlasFlags_NoBakedLines));
 
         const int idx_count = use_texture ? (count * 6) : (thick_line ? count * 18 : count * 12);
         const int vtx_count = use_texture ? (points_count * 2) : (thick_line ? points_count * 4 : points_count * 3);
@@ -3242,7 +3251,7 @@ void ImFontAtlas::RemoveFont(ImFont* font)
 
     ImFontAtlasBuildUpdatePointers(this);
 
-    font->ContainerAtlas = NULL;
+    font->OwnerAtlas = NULL;
     IM_DELETE(font);
 
     // Notify external systems
@@ -3620,7 +3629,7 @@ void ImFontAtlasFontSourceAddToFont(ImFontAtlas* atlas, ImFont* font, ImFontConf
     {
         font->ClearOutputData();
         //font->FontSize = src->SizePixels;
-        font->ContainerAtlas = atlas;
+        font->OwnerAtlas = atlas;
         IM_ASSERT(font->Sources[0] == src);
     }
     atlas->TexIsBuilt = false; // For legacy backends
@@ -3643,7 +3652,7 @@ void ImFontAtlasFontDestroySourceData(ImFontAtlas* atlas, ImFontConfig* src)
 // FIXME-NEWATLAS: This borrows too much from FontLoader's FontLoadGlyph() handlers and suggest that we should add further helpers.
 static ImFontGlyph* ImFontAtlasBuildSetupFontBakedEllipsis(ImFontAtlas* atlas, ImFontBaked* baked)
 {
-    ImFont* font = baked->ContainerFont;
+    ImFont* font = baked->OwnerFont;
     IM_ASSERT(font->EllipsisChar != 0);
 
     const ImFontGlyph* dot_glyph = baked->FindGlyphNoFallback((ImWchar)'.');
@@ -3689,7 +3698,7 @@ static void ImFontAtlasBuildSetupFontBakedFallback(ImFontBaked* baked)
 {
     IM_ASSERT(baked->FallbackGlyphIndex == -1);
     IM_ASSERT(baked->FallbackAdvanceX == 0.0f);
-    ImFont* font = baked->ContainerFont;
+    ImFont* font = baked->OwnerFont;
     ImFontGlyph* fallback_glyph = NULL;
     if (font->FallbackChar != 0)
         fallback_glyph = baked->FindGlyphNoFallback(font->FallbackChar);
@@ -3699,7 +3708,7 @@ static void ImFontAtlasBuildSetupFontBakedFallback(ImFontBaked* baked)
         ImFontGlyph glyph;
         glyph.Codepoint = 0;
         glyph.AdvanceX = space_glyph ? space_glyph->AdvanceX : IM_ROUND(baked->Size * 0.40f);
-        fallback_glyph = ImFontAtlasBakedAddFontGlyph(font->ContainerAtlas, baked, NULL, &glyph);
+        fallback_glyph = ImFontAtlasBakedAddFontGlyph(font->OwnerAtlas, baked, NULL, &glyph);
     }
     baked->FallbackGlyphIndex = baked->Glyphs.index_from_ptr(fallback_glyph); // Storing index avoid need to update pointer on growth and simplify inner loop code
     baked->FallbackAdvanceX = fallback_glyph->AdvanceX;
@@ -3780,7 +3789,7 @@ ImFontBaked* ImFontAtlasBakedAdd(ImFontAtlas* atlas, ImFont* font, float font_si
     baked->Size = font_size;
     baked->RasterizerDensity = font_rasterizer_density;
     baked->BakedId = baked_id;
-    baked->ContainerFont = font;
+    baked->OwnerFont = font;
     baked->LastUsedFrame = atlas->Builder->FrameCount;
 
     // Initialize backend data
@@ -3815,7 +3824,7 @@ ImFontBaked* ImFontAtlasBakedGetClosestMatch(ImFontAtlas* atlas, ImFont* font, f
         for (int baked_n = 0; baked_n < builder->BakedPool.Size; baked_n++)
         {
             ImFontBaked* baked = &builder->BakedPool[baked_n];
-            if (baked->ContainerFont != font || baked->WantDestroy)
+            if (baked->OwnerFont != font || baked->WantDestroy)
                 continue;
             if (step_n == 0 && baked->RasterizerDensity != font_rasterizer_density) // First try with same density
                 continue;
@@ -3871,7 +3880,7 @@ void ImFontAtlasFontDiscardBakes(ImFontAtlas* atlas, ImFont* font, int unused_fr
             ImFontBaked* baked = &builder->BakedPool[baked_n];
             if (baked->LastUsedFrame + unused_frames > atlas->Builder->FrameCount)
                 continue;
-            if (baked->ContainerFont != font || baked->WantDestroy)
+            if (baked->OwnerFont != font || baked->WantDestroy)
                 continue;
             ImFontAtlasBakedDiscard(atlas, font, baked);
         }
@@ -3886,9 +3895,9 @@ void ImFontAtlasBuildDiscardBakes(ImFontAtlas* atlas, int unused_frames)
         ImFontBaked* baked = &builder->BakedPool[baked_n];
         if (baked->LastUsedFrame + unused_frames > atlas->Builder->FrameCount)
             continue;
-        if (baked->WantDestroy || (baked->ContainerFont->Flags & ImFontFlags_LockBakedSizes))
+        if (baked->WantDestroy || (baked->OwnerFont->Flags & ImFontFlags_LockBakedSizes))
             continue;
-        ImFontAtlasBakedDiscard(atlas, baked->ContainerFont, baked);
+        ImFontAtlasBakedDiscard(atlas, baked->OwnerFont, baked);
     }
 }
 
@@ -3909,6 +3918,11 @@ void ImFontAtlasRemoveDrawListSharedData(ImFontAtlas* atlas, ImDrawListSharedDat
 void ImFontAtlasUpdateDrawListsTextures(ImFontAtlas* atlas, ImTextureRef old_tex, ImTextureRef new_tex)
 {
     for (ImDrawListSharedData* shared_data : atlas->DrawListSharedDatas)
+    {
+        // If Context 2 uses font owned by Context 1 which already called EndFrame()/Render(), we don't want to mess with draw commands for Context 1
+        if (shared_data->Context && !shared_data->Context->WithinFrameScope)
+            continue;
+
         for (ImDrawList* draw_list : shared_data->DrawLists)
         {
             // Replace in command-buffer
@@ -3922,6 +3936,7 @@ void ImFontAtlasUpdateDrawListsTextures(ImFontAtlas* atlas, ImTextureRef old_tex
                 if (stacked_tex == old_tex)
                     stacked_tex = new_tex;
         }
+    }
 }
 
 // Update texture coordinates in all draw list shared context
@@ -4421,8 +4436,8 @@ static void ImFontAtlas_FontHookRemapCodepoint(ImFontAtlas* atlas, ImFont* font,
 
 static ImFontGlyph* ImFontBaked_BuildLoadGlyph(ImFontBaked* baked, ImWchar codepoint, float* only_load_advance_x)
 {
-    ImFont* font = baked->ContainerFont;
-    ImFontAtlas* atlas = font->ContainerAtlas;
+    ImFont* font = baked->OwnerFont;
+    ImFontAtlas* atlas = font->OwnerAtlas;
     if (atlas->Locked || (font->Flags & ImFontFlags_NoLoadGlyphs))
     {
         // Lazily load fallback glyph
@@ -4696,7 +4711,7 @@ static bool ImGui_ImplStbTrueType_FontBakedLoadGlyph(ImFontAtlas* atlas, ImFontC
         stbtt_MakeGlyphBitmapSubpixelPrefilter(&bd_font_data->FontInfo, bitmap_pixels, w, h, w,
             scale_for_raster_x, scale_for_raster_y, 0, 0, oversample_h, oversample_v, &sub_x, &sub_y, glyph_index);
 
-        const float ref_size = baked->ContainerFont->Sources[0]->SizePixels;
+        const float ref_size = baked->OwnerFont->Sources[0]->SizePixels;
         const float offsets_scale = (ref_size != 0.0f) ? (baked->Size / ref_size) : 1.0f;
         float font_off_x = (src->GlyphOffset.x * offsets_scale);
         float font_off_y = (src->GlyphOffset.y * offsets_scale);
@@ -5023,7 +5038,9 @@ const ImWchar*  ImFontAtlas::GetGlyphRangesVietnamese()
 
 void ImFontGlyphRangesBuilder::AddText(const char* text, const char* text_end)
 {
-    while (text_end ? (text < text_end) : *text)
+    if (text_end == NULL)
+        text_end = text + strlen(text);
+    while (text < text_end)
     {
         unsigned int c = 0;
         int c_len = ImTextCharFromUtf8(&c, text, text_end);
@@ -5091,7 +5108,7 @@ ImFont::~ImFont()
 
 void ImFont::ClearOutputData()
 {
-    if (ImFontAtlas* atlas = ContainerAtlas)
+    if (ImFontAtlas* atlas = OwnerAtlas)
         ImFontAtlasFontDiscardBakes(atlas, this, 0);
     FallbackChar = EllipsisChar = 0;
     memset(Used8kPagesMap, 0, sizeof(Used8kPagesMap));
@@ -5136,7 +5153,7 @@ ImFontGlyph* ImFontAtlasBakedAddFontGlyph(ImFontAtlas* atlas, ImFontBaked* baked
     if (src != NULL)
     {
         // Clamp & recenter if needed
-        const float ref_size = baked->ContainerFont->Sources[0]->SizePixels;
+        const float ref_size = baked->OwnerFont->Sources[0]->SizePixels;
         const float offsets_scale = (ref_size != 0.0f) ? (baked->Size / ref_size) : 1.0f;
         float advance_x = ImClamp(glyph->AdvanceX, src->GlyphMinAdvanceX * offsets_scale, src->GlyphMaxAdvanceX * offsets_scale);
         if (advance_x != glyph->AdvanceX)
@@ -5162,7 +5179,7 @@ ImFontGlyph* ImFontAtlasBakedAddFontGlyph(ImFontAtlas* atlas, ImFontBaked* baked
     baked->IndexAdvanceX[codepoint] = glyph->AdvanceX;
     baked->IndexLookup[codepoint] = (ImU16)glyph_idx;
     const int page_n = codepoint / 8192;
-    baked->ContainerFont->Used8kPagesMap[page_n >> 3] |= 1 << (page_n & 7);
+    baked->OwnerFont->Used8kPagesMap[page_n >> 3] |= 1 << (page_n & 7);
 
     return glyph;
 }
@@ -5174,7 +5191,7 @@ void ImFontAtlasBakedAddFontGlyphAdvancedX(ImFontAtlas* atlas, ImFontBaked* bake
     if (src != NULL)
     {
         // Clamp & recenter if needed
-        const float ref_size = baked->ContainerFont->Sources[0]->SizePixels;
+        const float ref_size = baked->OwnerFont->Sources[0]->SizePixels;
         const float offsets_scale = (ref_size != 0.0f) ? (baked->Size / ref_size) : 1.0f;
         advance_x = ImClamp(advance_x, src->GlyphMinAdvanceX * offsets_scale, src->GlyphMaxAdvanceX * offsets_scale);
 
@@ -5196,7 +5213,7 @@ void ImFontAtlasBakedSetFontGlyphBitmap(ImFontAtlas* atlas, ImFontBaked* baked, 
     ImTextureData* tex = atlas->TexData;
     IM_ASSERT(r->x + r->w <= tex->Width && r->y + r->h <= tex->Height);
     ImFontAtlasTextureBlockConvert(src_pixels, src_fmt, src_pitch, (unsigned char*)tex->GetPixelsAt(r->x, r->y), tex->Format, tex->GetPitch(), r->w, r->h);
-    ImFontAtlasPostProcessData pp_data = { atlas, baked->ContainerFont, src, baked, glyph, tex->GetPixelsAt(r->x, r->y), tex->Format, tex->GetPitch(), r->w, r->h };
+    ImFontAtlasPostProcessData pp_data = { atlas, baked->OwnerFont, src, baked, glyph, tex->GetPixelsAt(r->x, r->y), tex->Format, tex->GetPitch(), r->w, r->h };
     ImFontAtlasTextureBlockPostProcess(&pp_data);
     ImFontAtlasTextureBlockQueueUpload(atlas, tex, r->x, r->y, r->w, r->h);
 }
@@ -5254,7 +5271,7 @@ bool ImFontBaked::IsGlyphLoaded(ImWchar c)
 // This is not fast query
 bool ImFont::IsGlyphInFont(ImWchar c)
 {
-    ImFontAtlas* atlas = ContainerAtlas;
+    ImFontAtlas* atlas = OwnerAtlas;
     ImFontAtlas_FontHookRemapCodepoint(atlas, this, &c);
     for (ImFontConfig* src : Sources)
     {
@@ -5303,7 +5320,7 @@ ImFontBaked* ImFont::GetFontBaked(float size, float density)
     if (baked && baked->Size == size && baked->RasterizerDensity == density)
         return baked;
 
-    ImFontAtlas* atlas = ContainerAtlas;
+    ImFontAtlas* atlas = OwnerAtlas;
     ImFontAtlasBuilder* builder = atlas->Builder;
     baked = ImFontAtlasBakedGetOrAdd(atlas, this, size, density);
     if (baked == NULL)
@@ -5324,7 +5341,7 @@ ImFontBaked* ImFontAtlasBakedGetOrAdd(ImFontAtlas* atlas, ImFont* font, float fo
     ImFontBaked* baked = *p_baked_in_map;
     if (baked != NULL)
     {
-        IM_ASSERT(baked->Size == font_size && baked->ContainerFont == font && baked->BakedId == baked_id);
+        IM_ASSERT(baked->Size == font_size && baked->OwnerFont == font && baked->BakedId == baked_id);
         return baked;
     }
 
@@ -5819,6 +5836,7 @@ begin:
 // - RenderArrow()
 // - RenderBullet()
 // - RenderCheckMark()
+// - RenderArrowDockMenu()
 // - RenderArrowPointingAt()
 // - RenderRectFilledRangeH()
 // - RenderRectFilledWithHole()
@@ -5892,6 +5910,14 @@ void ImGui::RenderArrowPointingAt(ImDrawList* draw_list, ImVec2 pos, ImVec2 half
     case ImGuiDir_Down:  draw_list->AddTriangleFilled(ImVec2(pos.x - half_sz.x, pos.y - half_sz.y), ImVec2(pos.x + half_sz.x, pos.y - half_sz.y), pos, col); return;
     case ImGuiDir_None: case ImGuiDir_COUNT: break; // Fix warnings
     }
+}
+
+// This is less wide than RenderArrow() and we use in dock nodes instead of the regular RenderArrow() to denote a change of functionality,
+// and because the saved space means that the left-most tab label can stay at exactly the same position as the label of a loose window.
+void ImGui::RenderArrowDockMenu(ImDrawList* draw_list, ImVec2 p_min, float sz, ImU32 col)
+{
+    draw_list->AddRectFilled(p_min + ImVec2(sz * 0.20f, sz * 0.15f), p_min + ImVec2(sz * 0.80f, sz * 0.30f), col);
+    RenderArrowPointingAt(draw_list, p_min + ImVec2(sz * 0.50f, sz * 0.85f), ImVec2(sz * 0.30f, sz * 0.40f), ImGuiDir_Down, col);
 }
 
 static inline float ImAcos01(float x)
@@ -5977,6 +6003,17 @@ void ImGui::RenderRectFilledWithHole(ImDrawList* draw_list, const ImRect& outer,
     if (fill_R && fill_U) draw_list->AddRectFilled(ImVec2(inner.Max.x, outer.Min.y), ImVec2(outer.Max.x, inner.Min.y), col, rounding, ImDrawFlags_RoundCornersTopRight);
     if (fill_L && fill_D) draw_list->AddRectFilled(ImVec2(outer.Min.x, inner.Max.y), ImVec2(inner.Min.x, outer.Max.y), col, rounding, ImDrawFlags_RoundCornersBottomLeft);
     if (fill_R && fill_D) draw_list->AddRectFilled(ImVec2(inner.Max.x, inner.Max.y), ImVec2(outer.Max.x, outer.Max.y), col, rounding, ImDrawFlags_RoundCornersBottomRight);
+}
+
+ImDrawFlags ImGui::CalcRoundingFlagsForRectInRect(const ImRect& r_in, const ImRect& r_outer, float threshold)
+{
+    bool round_l = r_in.Min.x <= r_outer.Min.x + threshold;
+    bool round_r = r_in.Max.x >= r_outer.Max.x - threshold;
+    bool round_t = r_in.Min.y <= r_outer.Min.y + threshold;
+    bool round_b = r_in.Max.y >= r_outer.Max.y - threshold;
+    return ImDrawFlags_RoundCornersNone
+        | ((round_t && round_l) ? ImDrawFlags_RoundCornersTopLeft : 0) | ((round_t && round_r) ? ImDrawFlags_RoundCornersTopRight : 0)
+        | ((round_b && round_l) ? ImDrawFlags_RoundCornersBottomLeft : 0) | ((round_b && round_r) ? ImDrawFlags_RoundCornersBottomRight : 0);
 }
 
 // Helper for ColorPicker4()

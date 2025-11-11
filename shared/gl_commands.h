@@ -64,7 +64,8 @@ enum class GLMaterial : uint32_t
     GL_COLOR_INDEXES       = 0x1603
 };
 
-enum class GLCommandType : uint32_t {
+enum class GLCommandType : uint32_t
+{
     // Basic OpenGL 1.x commands
     GLCMD_BEGIN = 1,
     GLCMD_END,
@@ -116,6 +117,7 @@ enum class GLCommandType : uint32_t {
     GLCMD_PERSPECTIVE,
 
     // Other
+    GLCMD_CREATE,
     GLCMD_SHUTDOWN,
 
     // Display Lists
