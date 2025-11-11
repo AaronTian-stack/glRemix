@@ -708,8 +708,7 @@ int glRemix::glRemixRenderer::build_mesh_blas(dx::D3D12Buffer& vertex_buffer, dx
 	// TODO: Reuse scratch space for all BLAS
 	// The same could be done for TLAS(s) as well
 
-	constexpr UINT64 scratch_size = 16 * 1024 * 1024;
-	assert(blas_prebuild_info.ScratchDataSizeInBytes < scratch_size);
+	assert(blas_prebuild_info.ScratchDataSizeInBytes < m_scratch_space.desc.size);
 
 	dx::BufferDesc blas_buffer_desc
 	{
@@ -763,7 +762,7 @@ static D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const DirectX::XMFLOAT
 }
 
  // builds top level acceleration structure with blas buffer (can be called each frame likely)
-void glRemix::glRemixRenderer::build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd_list)
+void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
 {
 	// create an instance descriptor for all geometry
 	const UINT instance_count = (UINT)m_meshes.size(); // this frame's meshes
@@ -814,9 +813,10 @@ void glRemix::glRemixRenderer::build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd
 		.InstanceDescs = m_tlas.instance.get_gpu_address(),
 	};
 
-	constexpr UINT64 scratch_size = 16 * 1024 * 1024;
 	const auto tlas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(tlas_desc);
-	assert(tlas_prebuild_info.ScratchDataSizeInBytes < scratch_size);
+
+    assert(tlas_prebuild_info.ScratchDataSizeInBytes < m_scratch_space.desc.size);
+
 	dx::BufferDesc tlas_buffer_desc
 	{
 		.size = tlas_prebuild_info.ResultDataMaxSizeInBytes,
@@ -830,7 +830,7 @@ void glRemix::glRemixRenderer::build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd
 	m_context.mark_use(&m_scratch_space, dx::Usage::UAV_COMPUTE);
 	m_context.mark_use(&m_tlas.buffer, dx::Usage::AS_WRITE);
 	std::array write_resources = { &m_scratch_space, &m_tlas.buffer };
-	m_context.emit_barriers(cmd_list.Get(), write_resources.data(), write_resources.size(), nullptr, 0);
+	m_context.emit_barriers(cmd_list, write_resources.data(), write_resources.size(), nullptr, 0);
 
 	const auto tlas_build_desc = m_context.get_raytracing_acceleration_structure(tlas_desc, &m_tlas.buffer, nullptr, &m_scratch_space);
 
@@ -839,7 +839,7 @@ void glRemix::glRemixRenderer::build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd
 	// Transition TLAS to read state
 	m_context.mark_use(&m_tlas.buffer, dx::Usage::AS_READ);
 	std::array read_resources = { &m_tlas.buffer };
-	m_context.emit_barriers(cmd_list.Get(), read_resources.data(), read_resources.size(), nullptr, 0);
+	m_context.emit_barriers(cmd_list, read_resources.data(), read_resources.size(), nullptr, 0);
 
 	// TODO: This should not be here and the descriptor should live on a CPU heap and be copied
 	m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer,
@@ -889,7 +889,7 @@ void glRemix::glRemixRenderer::render()
 	cmd_list->RSSetScissorRects(1, &scissor_rect);
 
 	// Build TLAS
-	build_tlas(cmd_list);
+	build_tlas(cmd_list.Get());
 	m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer, &m_rt_descriptors, 0);
 	// Dispatch rays to UAV render target
 	{

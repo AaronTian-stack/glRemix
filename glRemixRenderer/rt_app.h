@@ -92,7 +92,7 @@ namespace glRemix
 
 		// acceleration structure builders
 		int build_mesh_blas(dx::D3D12Buffer& vertex_buffer, dx::D3D12Buffer& index_buffer, ComPtr<ID3D12GraphicsCommandList7> cmd_list);
-		void build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd_list);
+		void build_tlas(ID3D12GraphicsCommandList7* cmd_list);
 
 	public:
 		glRemixRenderer() = default;
