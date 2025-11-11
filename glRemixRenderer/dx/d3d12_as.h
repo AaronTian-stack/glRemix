@@ -14,6 +14,7 @@ namespace glRemix::dx
 	{
 		D3D12Buffer buffer;
 		D3D12Buffer instance; // This should use a GPU upload heap for dynamic updates
+		UINT last_instance_count = 0; // Track instance count for update
 	};
 
 	// TODO: SBT

@@ -214,7 +214,17 @@ void glRemix::glRemixRenderer::create()
 		.uav = true, // Scratch space must be in UAV layout
 	};
 	THROW_IF_FALSE(m_context.create_buffer(scratch_buffer_desc, &m_scratch_space, "BLAS scratch space"));
-	
+
+	// Start out with 64 instances/meshes
+	dx::BufferDesc instance_buffer_desc
+    {
+        .size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * 64,
+        .stride = sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
+        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+    };
+    THROW_IF_FALSE(
+        m_context.create_buffer(instance_buffer_desc, &m_tlas.instance, "TLAS instance buffer"));
+
 	// TODO: Use CPU descriptors and copy to GPU visible heap
 	// Will be updated each frame
 	m_context.create_constant_buffer_view(&m_raygen_constant_buffers[0], &m_rt_descriptors, 2);
@@ -764,12 +774,22 @@ D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const XMFLOAT4X4& mv)
 void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
 {
 	// create an instance descriptor for all geometry
-	const UINT instance_count = (UINT)m_meshes.size(); // this frame's meshes
+	// TODO: Check if this truncates size_t -> UINT
+	const UINT instance_count = static_cast<UINT>(m_meshes.size()); // this frame's meshes
 
-	if (instance_count == 0) return;
+	if (instance_count == 0)
+    {
+        return;
+    }
 
-	std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instance_descs(instance_count);
-	for (int i = 0; i < instance_count; i++)
+	// TODO: Use some sort of static allocator or reuse previous buffer
+	// Use static vector as hack for now
+	static std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instance_descs(instance_count);
+    if (instance_count > instance_descs.size())
+    {
+        instance_descs.resize(instance_count);
+    }
+	for (UINT i = 0; i < instance_count; i++)
 	{
 		MeshRecord mesh = m_meshes[i];
 
@@ -781,7 +801,7 @@ void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
 
 		D3D12_RAYTRACING_INSTANCE_DESC desc = mv_to_instance_desc(m_matrix_pool[mesh.MVID]);
 		
-    	desc.InstanceID = static_cast<UINT>(i);
+    	desc.InstanceID = i;
     	desc.InstanceMask = 0xFF;
     	desc.InstanceContributionToHitGroupIndex = 0;
     	desc.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
@@ -789,41 +809,50 @@ void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
 
 		instance_descs[i] = desc;
 	}
-	
-	dx::BufferDesc instance_buffer_desc
-	{
-		.size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instance_count,
-		.stride = sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
-		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-	};
-	THROW_IF_FALSE(m_context.create_buffer(instance_buffer_desc, &m_tlas.instance, "TLAS instance buffer"));
+
+	assert(m_tlas.instance.desc.size >= sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instance_count);
+    // TODO: Recreate instance buffer if too small
 	
 	void* cpu_ptr;
 	THROW_IF_FALSE(m_context.map_buffer(&m_tlas.instance, &cpu_ptr));
-	memcpy(cpu_ptr, instance_descs.data(), instance_buffer_desc.size);
+	memcpy(cpu_ptr, instance_descs.data(), sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instance_count);
 	m_context.unmap_buffer(&m_tlas.instance);
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS tlas_desc
 	{
 		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
-		// Lots of options here, probably want to use different ones, especially the update one
-		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
+		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE,
 		.NumDescs = instance_count,
 		.InstanceDescs = m_tlas.instance.get_gpu_address(),
 	};
+
+	bool should_update = m_tlas.buffer.desc.size > 0 && m_tlas.last_instance_count == instance_count;
 
 	const auto tlas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(tlas_desc);
 
     assert(tlas_prebuild_info.ScratchDataSizeInBytes < m_scratch_space.desc.size);
 
-	dx::BufferDesc tlas_buffer_desc
+	// Only recreate buffer on first time or if too small
+	// TODO: A warning should be issued when this happens
+    if (tlas_prebuild_info.ResultDataMaxSizeInBytes > m_tlas.buffer.desc.size)
+    {
+        const dx::BufferDesc tlas_buffer_desc
+        {
+            .size = tlas_prebuild_info.ResultDataMaxSizeInBytes,
+            .stride = 0,
+            .visibility = dx::GPU,
+            .acceleration_structure = true,
+        };
+        THROW_IF_FALSE(m_context.create_buffer(tlas_buffer_desc, &m_tlas.buffer, "TLAS buffer"));
+		should_update = false; // Can't update a newly created buffer
+    }
+
+	if (should_update)
 	{
-		.size = tlas_prebuild_info.ResultDataMaxSizeInBytes,
-		.stride = 0,
-		.visibility = dx::GPU,
-		.acceleration_structure = true,
-	};
-	THROW_IF_FALSE(m_context.create_buffer(tlas_buffer_desc, &m_tlas.buffer, "TLAS buffer"));
+        tlas_desc.Flags |= D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
+	}
+
+	m_tlas.last_instance_count = instance_count; // Track for next frame
 
 	// Mark TLAS for build
 	m_context.mark_use(&m_scratch_space, dx::Usage::UAV_COMPUTE);
@@ -831,7 +860,12 @@ void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
 	std::array write_resources = { &m_scratch_space, &m_tlas.buffer };
 	m_context.emit_barriers(cmd_list, write_resources.data(), write_resources.size(), nullptr, 0);
 
-	const auto tlas_build_desc = m_context.get_raytracing_acceleration_structure(tlas_desc, &m_tlas.buffer, nullptr, &m_scratch_space);
+	const auto tlas_build_desc = m_context.get_raytracing_acceleration_structure(
+		tlas_desc, 
+		&m_tlas.buffer, 
+		should_update ? &m_tlas.buffer : nullptr, // For in place update 
+		&m_scratch_space
+	);
 
 	cmd_list->BuildRaytracingAccelerationStructure(&tlas_build_desc, 0, nullptr);
 
