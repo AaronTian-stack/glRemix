@@ -48,12 +48,12 @@ namespace glRemix
 		struct MeshRecord
 		{
 			uint32_t meshId; // will eventually be hashed
-			uint32_t vertexOffset; // offset into vertex atlas
 			uint32_t vertexCount;
-			uint32_t indexOffset; // offset into index atlas
 			uint32_t indexCount; // number of indices belonging to this mesh
 
 			// pointers
+			uint32_t vertexID; // index into vertex buffer
+			uint32_t indexID; // index into index buffer
 			uint32_t blasID;
 			uint32_t MVID; // index into model view array
 			uint32_t matID;
@@ -100,8 +100,12 @@ namespace glRemix
 		IPCProtocol m_ipc;
 
 		// mesh resources
+		std::unordered_map<uint64_t, MeshRecord> m_mesh_map;
 		std::vector<MeshRecord> m_meshes;
+
 		std::vector<dx::D3D12Buffer> m_blas_buffers;
+		std::vector<dx::D3D12Buffer> m_vertex_buffers;
+		std::vector<dx::D3D12Buffer> m_index_buffers;
 
 		// matrix stack
 		gl::glMatrixStack m_matrix_stack;
@@ -112,11 +116,12 @@ namespace glRemix
 		std::unordered_map<int, std::vector<uint8_t>> m_display_lists;
 
 		// state trackers
-		gl::GLMatrixMode matrixMode = gl::GLMatrixMode::MODELVIEW; // "The initial matrix mode is MODELVIEW" - glspec pg. 29 (might need to be a global variable not sure how state is tracked)
+		gl::GLMatrixMode matrixMode = gl::GLMatrixMode::MODELVIEW; // "The initial matrix mode is MODELVIEW" - glspec pg. 29
+		gl::GLListMode listMode = gl::GLListMode::COMPILE_AND_EXECUTE;
+
 		std::array<float, 4> color = {1.0f, 1.0f, 1.0f, 1.0f}; // current color (may need to be tracked globally)
 		Material m_material; // global states that can be modified
-
-
+		
 		// shader resources
 		std::vector<Light> m_lights = std::vector<Light>(8);
 		std::vector<Material> m_materials;
@@ -127,16 +132,16 @@ namespace glRemix
 		void destroy() override;
 
 		void read_gl_command_stream();
-		void read_geometry(std::vector<uint8_t>& ipcBuf,
+        void read_ipc_buffer(std::vector<uint8_t>& ipcBuf, size_t start_offset, uint32_t bytesRead, ComPtr<ID3D12GraphicsCommandList7> cmd_list, bool callList = false);
+        void read_geometry(std::vector<uint8_t>& ipcBuf,
                                             size_t& offset,
-                                            std::vector<Vertex>& vertices,
-                                            std::vector<uint32_t>& indices,
                                             glRemix::GLTopology topology,
-                                            uint32_t bytesRead);
+                                            uint32_t bytesRead,
+											ComPtr<ID3D12GraphicsCommandList7> cmd_list);
 
 
 		// acceleration structure builders
-		int build_mesh_blas(uint32_t vertex_count, uint32_t vertex_offset, uint32_t index_count, uint32_t index_offset, ComPtr<ID3D12GraphicsCommandList7> cmd_list);
+		int build_mesh_blas(dx::D3D12Buffer& vertex_buffer, dx::D3D12Buffer& index_buffer, ComPtr<ID3D12GraphicsCommandList7> cmd_list);
 		void build_tlas(ComPtr<ID3D12GraphicsCommandList7> cmd_list);
 
 	public:
