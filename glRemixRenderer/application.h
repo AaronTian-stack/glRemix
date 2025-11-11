@@ -35,7 +35,6 @@ namespace glRemix
 		void increment_frame_index() { m_frame_index = (m_frame_index + 1) % m_frames_in_flight; }
 
 		Application() = default;
-		void run(HWND hwnd, bool enable_debug_layer);
 		void run_with_hwnd(bool enable_debug_layer);
         
 		Application(const Application&) = delete;
