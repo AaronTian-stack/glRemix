@@ -14,60 +14,8 @@
 
 #include <filesystem>
 
-HWND glRemix::glRemixRenderer::wait_for_hwnd_command()
-{
-	// Initialize IPC and wait for GLCMD_CREATE command with HWND
-	while (!m_ipc.InitReader())
-	{
-		std::cout << "IPC Manager could not init a reader instance. Have you launched an "
-		             "executable that utilizes glRemix?"
-		          << std::endl;
-		std::this_thread::sleep_for(std::chrono::milliseconds(60));
-	}
-
-	const uint32_t buf_capacity = m_ipc.GetCapacity();
-	std::vector<uint8_t> ipc_buf(buf_capacity);
-
-	// Wait for first frame with GLCMD_CREATE
-	uint32_t bytes_read = 0;
-	while (!m_ipc.TryConsumeFrame(ipc_buf.data(), static_cast<uint32_t>(ipc_buf.size()), &bytes_read))
-	{
-		std::cout << "Waiting for GLCMD_CREATE command..." << std::endl;
-		std::this_thread::sleep_for(std::chrono::milliseconds(60));
-	}
-
-	size_t offset = sizeof(glRemix::GLFrameUnifs);
-
-	// Look for GLCMD_CREATE command
-	while (offset + sizeof(glRemix::GLCommandUnifs) <= bytes_read)
-	{
-		const auto* cmd_header = reinterpret_cast<const glRemix::GLCommandUnifs*>(ipc_buf.data() + offset);
-		offset += sizeof(glRemix::GLCommandUnifs);
-
-		if (cmd_header->type == glRemix::GLCommandType::GLCMD_CREATE)
-		{
-			// The shim records &hwnd, so we read it as a pointer to HWND, then dereference
-			HWND hwnd;
-			std::memcpy(&hwnd, ipc_buf.data() + offset, sizeof(HWND));
-			std::cout << "Received HWND from GLCMD_CREATE: " << hwnd << std::endl;
-			return hwnd;
-		}
-
-		offset += cmd_header->dataSize;
-	}
-
-	throw std::runtime_error("GLCMD_CREATE command not found in first frame");
-}
-
 void glRemix::glRemixRenderer::create()
 {
-	// Wait for and read HWND from command stream before initializing swapchain
-	HWND hwnd = wait_for_hwnd_command();
-
-	// Now create the swapchain with the received HWND
-	THROW_IF_FALSE(m_context.create_swapchain(hwnd, &m_gfx_queue, &m_frame_index));
-	THROW_IF_FALSE(m_context.create_swapchain_descriptors(&m_swapchain_descriptors, &m_rtv_heap));
-
 	for (UINT i = 0; i < m_frames_in_flight; i++)
 	{
 		THROW_IF_FALSE(m_context.create_command_allocator(&m_cmd_pools[i], &m_gfx_queue, "frame command allocator"));
@@ -307,28 +255,6 @@ void glRemix::glRemixRenderer::create()
 		THROW_IF_FALSE(m_context.create_buffer(raygen_cb_desc, &m_raygen_constant_buffers[i], "raygen constant buffer"));
 	}
 
-	// Create UAV render target
-	XMUINT2 win_dims{};
-	THROW_IF_FALSE(m_context.get_window_dimensions(&win_dims));
-
-	dx::TextureDesc uav_rt_desc
-    {
-        .width = win_dims.x,
-        .height = win_dims.y,
-        .depth_or_array_size = 1,
-        .mip_levels = 1,
-        .format = DXGI_FORMAT_R8G8B8A8_UNORM,
-        .dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-        .is_render_target = false,
-    };
-
-    THROW_IF_FALSE(
-        m_context.create_texture(uav_rt_desc, 
-			D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS, 
-			&m_uav_render_target, 
-			nullptr, 
-			"UAV and RT texture"));
-
 	// Build BLAS here for now, but renderer will construct them dynamically for new geometry in render loop
 	D3D12_RAYTRACING_GEOMETRY_DESC tri_desc
 	{
@@ -468,23 +394,6 @@ void glRemix::glRemixRenderer::create()
                             0);
 
 
-	/*
-	// Create buffers for MeshRecords, materials, and lights
-	// Note: These will be created dynamically when geometry is received via IPC
-    dx::BufferDesc lights_buffer_desc
-	{
-        .size = sizeof(Light) * m_lights.size(),
-        .stride = sizeof(Light),
-        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-    };
-    THROW_IF_FALSE(m_context.create_buffer(lights_buffer_desc, &m_lights_buffer, "lights buffer"));
-
-	void* light_cpu_ptr = nullptr;
-    THROW_IF_FALSE(m_context.map_buffer(&m_lights_buffer, &light_cpu_ptr));
-    memcpy(light_cpu_ptr, m_lights.data(), lights_buffer_desc.size);
-    m_context.unmap_buffer(&m_lights_buffer);*/
-
-
 	// TODO: Whenever buffers are moved to CPU -> GPU copy method instead of GPU upload heaps record the copy here as well
 
 	THROW_IF_FALSE(SUCCEEDED(cmd_list->Close()));
@@ -506,21 +415,15 @@ void glRemix::glRemixRenderer::create()
 
 	// Create descriptor views after all resources are ready
 	{
-		XMUINT2 win_dims_for_desc{};
-		m_context.get_window_dimensions(&win_dims_for_desc);
-
 		// TODO: Use CPU descriptors and copy to GPU visible heap
 
 		m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer, &m_rt_descriptors, 0);
 
-		m_context.create_unordered_access_view_texture(&m_uav_render_target, uav_rt_desc.format, &m_rt_descriptors, 1);
+		//m_context.create_unordered_access_view_texture(&m_uav_render_target, uav_rt_desc.format, &m_rt_descriptors, 1);
 
 		// Will be updated each frame
 		m_context.create_constant_buffer_view(&m_raygen_constant_buffers[0], &m_rt_descriptors, 2);
 	}
-
-	// Init ImGui
-	THROW_IF_FALSE(m_context.init_imgui());
 
 	THROW_IF_FALSE(m_context.wait_fences(wait_info)); // Block CPU until done
 }
@@ -614,6 +517,20 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<uint8_t>& ipcBuf, siz
 
         switch (header->type)
         {
+            case glRemix::GLCommandType::GLCMD_CREATE:
+            {
+                HWND hwnd;
+                std::memcpy(&hwnd, ipcBuf.data() + offset, sizeof(HWND));
+                THROW_IF_FALSE(m_context.create_swapchain(hwnd, &m_gfx_queue, &m_frame_index));
+                THROW_IF_FALSE(m_context.create_swapchain_descriptors(&m_swapchain_descriptors, &m_rtv_heap));
+                THROW_IF_FALSE(m_context.init_imgui());
+                create_uav_rt();
+				// TODO: Descriptor should be on CPU heap
+                m_context.create_unordered_access_view_texture(&m_uav_render_target,
+                                                               m_uav_render_target.desc.format,
+                                                               &m_rt_descriptors,
+                                                               1);
+            }
 			case glRemix::GLCommandType::GLCMD_NEW_LIST: 
 			{
 				// when we encounter a new list record the beginning offset of following command
@@ -1455,6 +1372,31 @@ void glRemix::glRemixRenderer::destroy()
 {
 	m_context.destroy_imgui();
 	m_rt_descriptor_heap.deallocate(&m_rt_descriptors);
+}
+
+void glRemix::glRemixRenderer::create_uav_rt()
+{
+    XMUINT2 win_dims{};
+    THROW_IF_FALSE(m_context.get_window_dimensions(&win_dims));
+
+    dx::TextureDesc uav_rt_desc
+    {
+        .width = win_dims.x,
+        .height = win_dims.y,
+        .depth_or_array_size = 1,
+        .mip_levels = 1,
+        .format = DXGI_FORMAT_R8G8B8A8_UNORM,
+        .dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+        .is_render_target = false,
+    };
+
+    THROW_IF_FALSE(m_context.create_texture(
+		uav_rt_desc,
+        D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS,
+        &m_uav_render_target,
+        nullptr,
+        "UAV and RT texture")
+	);
 }
 
 glRemix::glRemixRenderer::~glRemixRenderer()

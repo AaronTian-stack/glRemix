@@ -135,7 +135,8 @@ namespace glRemix
 		void render() override;
 		void destroy() override;
 
-		HWND wait_for_hwnd_command();
+		void create_uav_rt();
+
 		void read_gl_command_stream();
         void read_ipc_buffer(std::vector<uint8_t>& ipcBuf, size_t start_offset, uint32_t bytesRead, ComPtr<ID3D12GraphicsCommandList7> cmd_list, bool callList = false);
         void read_geometry(std::vector<uint8_t>& ipcBuf,
