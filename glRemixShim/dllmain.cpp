@@ -13,6 +13,7 @@ BOOL APIENTRY DllMain(HMODULE h_module, DWORD ul_reason_for_call, LPVOID lp_rese
         break;
     case DLL_THREAD_ATTACH:
     case DLL_THREAD_DETACH:
+        break;
     case DLL_PROCESS_DETACH:
         if (glRemix::gl::g_renderer_process)
         {
