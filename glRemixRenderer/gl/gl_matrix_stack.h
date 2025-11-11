@@ -6,6 +6,12 @@
 namespace glRemix::gl
 {
 
+enum class GLListMode : uint32_t
+{
+    COMPILE = 0x1300,
+    COMPILE_AND_EXECUTE = 0x1301,
+};
+
 enum class GLMatrixMode : uint32_t
 {
     MODELVIEW = 0x1700,

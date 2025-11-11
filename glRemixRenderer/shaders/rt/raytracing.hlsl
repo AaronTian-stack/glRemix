@@ -53,9 +53,10 @@ struct Light
 
 RaytracingAccelerationStructure Scene : register(t0, space0);
 
+/*
 StructuredBuffer<MeshRecord> meshes : register(t1);
 StructuredBuffer<Material> materials : register(t2);
-StructuredBuffer<Light> lights : register(t3);
+StructuredBuffer<Light> lights : register(t3);*/
 
 RWTexture2D<float4> RenderTarget : register(u0);
 ConstantBuffer<RayGenConstantBuffer> g_rayGenCB : register(b0);
@@ -77,8 +78,8 @@ void RayGenMain()
 
     // Transform from NDC to world space using inverse view-projection
     // Near plane point in clip space
-    float4 near_point = float4(ndc, 1.0f, 1.0f);
-    float4 far_point = float4(ndc, -1.0f, 1.0f); // look down -Z match gl convention
+    float4 near_point = float4(ndc, 0.0f, 1.0f);
+    float4 far_point = float4(ndc, 1.0f, 1.0f); // look down -Z match gl convention
     
     // Transform to world space
     float4 near_world = mul(near_point, g_rayGenCB.inv_view_proj);
@@ -110,6 +111,7 @@ void RayGenMain()
 [shader("closesthit")]
 void ClosestHitMain(inout RayPayload payload, in MyAttributes attr)
 {
+    /*
     // check indexing logic
     uint instanceID = InstanceID();
     MeshRecord mesh = meshes[instanceID];
@@ -127,11 +129,11 @@ void ClosestHitMain(inout RayPayload payload, in MyAttributes attr)
     float3 color = ambient + diffuse;
     payload.color = float4(color, 1.0f);
 
-    // TODO recursively fire more rays
+    // TODO recursively fire more rays*/
 
 
-    //float3 barycentrics = float3(1 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
-    //payload.color = float4(barycentrics, 1);
+    float3 barycentrics = float3(1 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
+    payload.color = float4(barycentrics, 1);
 }
 
 [shader("miss")]

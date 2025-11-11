@@ -126,19 +126,18 @@ void glMatrixStack::mulSet(GLMatrixMode mode, XMMATRIX R)
     std::stack<XMFLOAT4X4>* stack = nullptr;
     switch (mode)
     {
-        case GLMatrixMode::MODELVIEW: stack = &model_view; break;
-        case GLMatrixMode::PROJECTION: stack = &projection; break;
-        case GLMatrixMode::TEXTURE: stack = &texture; break;
+        case GLMatrixMode::MODELVIEW:  stack = &model_view;  break;
+        case GLMatrixMode::PROJECTION: stack = &projection;  break;
+        case GLMatrixMode::TEXTURE:    stack = &texture;     break;
         default: return;
     }
 
     if (!stack || stack->empty())
-    {
         return;
-    }
 
     XMMATRIX M = XMLoadFloat4x4(&stack->top());
-    XMMATRIX out = XMMatrixMultiply(M, R);
+
+    XMMATRIX out = XMMatrixMultiply(R, M);
 
     XMStoreFloat4x4(&stack->top(), out);
 }
@@ -154,6 +153,7 @@ void glMatrixStack::rotate(GLMatrixMode mode, float angle, float x, float y, flo
     float radians = XMConvertToRadians(angle);
 
     XMMATRIX R = XMMatrixRotationAxis(axis, radians);
+
     mulSet(mode, R);
 }
 
@@ -174,14 +174,9 @@ void glMatrixStack::frustum(
     const float N = static_cast<float>(n);
     const float F = static_cast<float>(f);
 
-    XMMATRIX Fm = XMMatrixSet(
-        2.0f * N / (R - L),   0.0f,                 0.0f,                      0.0f,
-        0.0f,                 2.0f * N / (T - B),   0.0f,                      0.0f,
-        (R + L) / (R - L),    (T + B) / (T - B),   -(F + N) / (F - N),       -1.0f,
-        0.0f,                 0.0f,                -2.0f * F * N / (F - N),   0.0f
-    );
+    XMMATRIX P = XMMatrixPerspectiveOffCenterRH(L, R, B, T, N, F);
 
-    mulSet(mode, Fm);
+    mulSet(mode, P);
 }
 
 void glMatrixStack::printStacks() const
