@@ -44,7 +44,7 @@ set(RENDERER_HEADERS
 
     "${gl_dir}/gl_matrix_stack.h"
 
-    "constants.h"
+    "structs.h"
     "helper.h"
 
     "application.h"

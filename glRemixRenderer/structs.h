@@ -5,6 +5,7 @@ using namespace DirectX;
 
 namespace glRemix
 {
+    constexpr UINT64 MEGABYTE = 1024u * 1024u;
     constexpr UINT CB_ALIGNMENT = 256;
 
     struct RayGenConstantBuffer
@@ -52,20 +53,20 @@ namespace glRemix
 
     struct MeshRecord
     {
-        uint32_t meshId;        // hashed
-        uint32_t vertexOffset;  // offset into vertex atlas
+        uint32_t meshId;      // will eventually be hashed
         uint32_t vertexCount;
-        uint32_t indexOffset;   // offset into index atlas
-        uint32_t indexCount;    // number of indices belonging to this mesh
+        uint32_t indexCount;  // number of indices belonging to this mesh
 
         // pointers
+        uint32_t vertexID;  // index into vertex buffer
+        uint32_t indexID;   // index into index buffer
         uint32_t blasID;
-        uint32_t MVID;  // index into model view array
+        uint32_t MVID;      // index into model view array
         uint32_t matID;
         uint32_t texID;
     };
 
-	struct MVP
+    struct alignas(16) MVP
     {
         XMFLOAT4X4 model;
         XMFLOAT4X4 view;

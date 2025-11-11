@@ -1,6 +1,5 @@
 #include "rt_app.h"
 
-#include "constants.h"
 #include "helper.h"
 #include "imgui.h"
 #include "dx/d3d12_barrier.h"
@@ -197,8 +196,8 @@ void glRemix::glRemixRenderer::create()
 
     dx::BufferDesc raygen_cb_desc
 	{
-		.size = align_u32(sizeof(RayGenConstantBuffer), 256),
-		.stride = align_u32(sizeof(RayGenConstantBuffer), 256),
+		.size = align_u32(sizeof(RayGenConstantBuffer), CB_ALIGNMENT),
+        .stride = align_u32(sizeof(RayGenConstantBuffer), CB_ALIGNMENT),
 		.visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
 	};
 	for (UINT i = 0; i < m_frames_in_flight; i++)
@@ -206,7 +205,7 @@ void glRemix::glRemixRenderer::create()
 		THROW_IF_FALSE(m_context.create_buffer(raygen_cb_desc, &m_raygen_constant_buffers[i], "raygen constant buffer"));
 	}
 
-	constexpr UINT64 scratch_size = static_cast<UINT64>(16 * 1024) * 1024;
+	constexpr UINT64 scratch_size = 16u * MEGABYTE;
 	dx::BufferDesc scratch_buffer_desc
 	{
 		.size = scratch_size,
