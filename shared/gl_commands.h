@@ -245,7 +245,7 @@ struct GLTexImage2DCommand
 
     // these two members are a bit repetitive but here for ease of parsing
     UINT32 pixelDataSize;    // number of bytes of pixel data following this struct
-    UINT32 pixelDataOfset;  // byte offset from start of command (sizeof(GLTexImage2DCommand))
+    UINT32 pixelDataOffset;  // byte offset from start of command (sizeof(GLTexImage2DCommand))
 };
 
 struct GLTexParameterCommand

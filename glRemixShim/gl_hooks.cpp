@@ -192,11 +192,11 @@ void APIENTRY gl_tex_image_2d_ovr(GLenum target, GLint level, GLint internalForm
                                   GLsizei height, GLint border, GLenum format, GLenum type,
                                   const void* pixels)
 {
-    const size_t pixels_bytes = ComputePixelDataSize(width, height, format, type);
-    const size_t cmd_bytes = sizeof(GLTexImage2DCommand);
-    const size_t total_bytes = cmd_bytes + pixels_bytes;
+    const SIZE_T pixels_bytes = ComputePixelDataSize(width, height, format, type);
+    const SIZE_T cmd_bytes = sizeof(GLTexImage2DCommand);
+    const SIZE_T total_bytes = cmd_bytes + pixels_bytes;
 
-    std::unique_ptr<uint8_t[]> payload(new uint8_t[total_bytes]);
+    std::unique_ptr<UINT8[]> payload(new UINT8[total_bytes]);
     auto* cmd = reinterpret_cast<GLTexImage2DCommand*>(payload.get());
 
     cmd->target = static_cast<UINT32>(target);
@@ -207,8 +207,8 @@ void APIENTRY gl_tex_image_2d_ovr(GLenum target, GLint level, GLint internalForm
     cmd->border = static_cast<UINT32>(border);
     cmd->format = static_cast<UINT32>(format);
     cmd->type = static_cast<UINT32>(type);
-    cmd->dataSize = static_cast<UINT32>(pixels_bytes);
-    cmd->dataOffset = static_cast<UINT32>(cmd_bytes);
+    cmd->pixelDataSize = static_cast<UINT32>(pixels_bytes);
+    cmd->pixelDataOffset = static_cast<UINT32>(cmd_bytes);
 
     if (pixels && pixels_bytes > 0)
     {

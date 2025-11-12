@@ -18,8 +18,8 @@ void FrameRecorder::record(const GLCommandType type, const void* payload, const 
         GLCommandObject cmd;
         cmd.cmd_unifs.type = type;
         cmd.cmd_unifs.dataSize = size;
-        cmd.data.assign(static_cast<const UINT8*>(payload),
-                        static_cast<const UINT8*>(payload) + size);
+        cmd.data.resize(size);
+        std::memcpy(cmd.data.data(), payload, size);
 
         m_frame_unifs.payload_size += sizeof(cmd.cmd_unifs) + size;
 
@@ -63,6 +63,14 @@ void FrameRecorder::end_frame()
     m_commands.clear();
     m_frame_unifs.payload_size = 0;
     m_frame_unifs.frame_index++;
+}
+
+UINT8* FrameRecorder::get_scratch_buffer(size_t requiredSize)
+{
+    static thread_local std::vector<UINT8> scratch;
+    if (scratch.size() < requiredSize)
+        scratch.resize(requiredSize);
+    return scratch.data();
 }
 
 }  // namespace glRemix
