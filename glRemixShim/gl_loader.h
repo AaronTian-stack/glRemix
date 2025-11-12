@@ -10,8 +10,6 @@ extern FrameRecorder g_recorder;
 
 namespace gl
 {
-extern std::atomic<uint32_t> g_list_id_counter;
-
 void initialize();
 
 // Add function pointer to hooks map using name as key

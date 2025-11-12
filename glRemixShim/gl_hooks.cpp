@@ -29,6 +29,8 @@ namespace glRemix::hooks
     // WGL/OpenGL might be called from multiple threads
     std::mutex g_mutex;
 
+    static GLuint g_list_id_counter;  // monotonic id used in `glGenLists` and passed back to host app
+
     // wglSetPixelFormat will only be called once per context
     // Or if there are multiple contexts they can share the same format since they're fake anyway...
     // TODO: Make the above assumption?
@@ -336,9 +338,10 @@ namespace glRemix::hooks
 
     GLuint APIENTRY gl_gen_lists_ovr(GLsizei range)
     {
-        // assign a block of sequential IDs
-        GLuint base = glRemix::gl::g_list_id_counter.fetch_add(range);
-
+        // fetchandadd
+        GLuint base = g_list_id_counter;
+        g_list_id_counter += range;
+        
         return base;
     }
 
