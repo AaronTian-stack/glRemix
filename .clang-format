@@ -81,7 +81,7 @@ AlwaysBreakBeforeMultilineStrings: false
 AttributeMacros:
   - __capability
 BinPackArguments: false
-BinPackParameters: OnePerLine
+BinPackParameters: false
 BitFieldColonSpacing: Both
 BracedInitializerIndentWidth: 4
 BraceWrapping:

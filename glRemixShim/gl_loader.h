@@ -10,6 +10,8 @@ extern FrameRecorder g_recorder;
 
 namespace gl
 {
+extern HANDLE g_renderer_process;
+
 void initialize();
 
 // Add function pointer to hooks map using name as key

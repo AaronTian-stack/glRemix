@@ -103,6 +103,8 @@ bool glRemix::SharedMemory::Write(const void* src, uint32_t bytes, uint32_t offs
     }
 
     std::memcpy(m_payload + offset, src, bytes);
+    ss << "Wrote " << bytes << " bytes." << "\n";
+    OutputDebugStringA(ss.str().c_str());
     m_header->size = bytes;
 
     // mark as FILLED so the reader knows data is ready
