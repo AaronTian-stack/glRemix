@@ -33,6 +33,8 @@ public:
     void start_frame();
 
     void end_frame();
+
+    UINT8* get_scratch_buffer(size_t requiredSize);
 };
 
 extern FrameRecorder g_recorder;
