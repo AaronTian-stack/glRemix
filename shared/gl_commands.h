@@ -235,14 +235,16 @@ struct GLDeleteTexturesCommand
 struct GLTexImage2DCommand
 {
     UINT32 target;
-    int32_t level;
-    int32_t internalFormat;
+    UINT32 level;
+    UINT32 internalFormat; // must be same as format.
     UINT32 width;
     UINT32 height;
-    int32_t border;
+    UINT32 border; // the width of the border. must be either 0 or 1.
     UINT32 format;
     UINT32 type;
-    UINT64 dataPtr;  // optional pointer for serialization
+
+    UINT32 dataSize;    // number of bytes of pixel data following this struct
+    UINT32 dataOffset;  // byte offset from start of command (sizeof(GLTexImage2DCommand))
 };
 
 struct GLTexParameterCommand
