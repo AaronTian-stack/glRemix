@@ -22,6 +22,8 @@ tsl::robin_map<std::string, PROC> g_hooks;
 
 std::once_flag g_initialize_flag;
 
+std::atomic<uint32_t> g_list_id_counter{1};  // monotonic id used in `glGenLists` and passed back to host app
+
 void initialize()
 {
     std::call_once(g_initialize_flag, [] {

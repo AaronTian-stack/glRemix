@@ -334,6 +334,14 @@ namespace glRemix::hooks
         g_recorder.Record(glRemix::GLCommandType::GLCMD_END_LIST, &payload, sizeof(payload));
     }
 
+    GLuint APIENTRY gl_gen_lists_ovr(GLsizei range)
+    {
+        // assign a block of sequential IDs
+        GLuint base = glRemix::gl::g_list_id_counter.fetch_add(range);
+
+        return base;
+    }
+
     /* WGL (Windows Graphics Library) overrides */
 
     BOOL WINAPI swap_buffers_ovr(HDC)
@@ -480,6 +488,7 @@ namespace glRemix::hooks
             gl::register_hook("glCallList", reinterpret_cast<PROC>(&gl_call_list_ovr));
             gl::register_hook("glNewList", reinterpret_cast<PROC>(&gl_new_list_ovr));
             gl::register_hook("glEndList", reinterpret_cast<PROC>(&gl_end_list_ovr));
+            gl::register_hook("glGenLists", reinterpret_cast<PROC>(&gl_gen_lists_ovr));
 
             // Override WGL for app to work. Return success and try to do nothing.
 	        gl::register_hook("wglChoosePixelFormat", reinterpret_cast<PROC>(&choose_pixel_format_ovr));
