@@ -66,9 +66,38 @@ typedef BuiltInTriangleIntersectionAttributes MyAttributes;
 struct RayPayload
 {
     float4 color;
-    // float3 normal;
-    //bool hit;
+    float3 normal;
+    bool hit;
+    float3 hit_pos;
 };
+
+
+// helper functions
+float rand(inout uint seed)
+{
+    seed = 1664525u * seed + 1013904223u;
+    return float(seed & 0x00FFFFFFu) / 16777216.0f;
+}
+
+float3 cosine_sample_hemisphere(float2 xi)
+{
+    float r = sqrt(xi.x);
+    float theta = 2.0f * 3.14159265f * xi.y;
+    float x = r * cos(theta);
+    float y = r * sin(theta);
+    float z = sqrt(max(0.0, 1.0 - xi.x));
+    return float3(x, y, z);
+}
+
+float3 transform_to_world(float3 localDir, float3 N)
+{
+    float3 up = abs(N.z) < 0.999f ? float3(0, 0, 1) : float3(1, 0, 0);
+    float3 tangent = normalize(cross(up, N));
+    float3 bitangent = cross(N, tangent);
+    return normalize(localDir.x * tangent + localDir.y * bitangent + localDir.z * N);
+}
+
+
 
 [shader("raygeneration")]
 void RayGenMain()
@@ -92,20 +121,50 @@ void RayGenMain()
     
     float3 origin = near_world.xyz;
     float3 ray_dir = normalize(far_world.xyz - near_world.xyz);
+    
+    float3 total_color = float3(0, 0, 0);
+    float3 throughput = 1.0;
+    uint max_bounces = 3;
+    uint seed = uint(DispatchRaysIndex().x * 1973 + DispatchRaysIndex().y * 9277 + 891);
+    RayPayload payload;
+    
+    for (uint bounce = 0; bounce < max_bounces; ++bounce)
+    {
+        payload.color = float4(0, 0, 0, 0);
+        payload.normal = float3(0, 0, 0);
+        payload.hit = false;
+        
+        RayDesc ray;
+        ray.Origin = origin;
+        ray.Direction = ray_dir;
+        ray.TMin = 0.001;
+        ray.TMax = 10000.0;
+                
+        // Note winding order if you don't see anything
+        TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
+        
+        if (!payload.hit)
+        {
+            // same as miss shader
+            total_color += throughput * payload.color.rgb;
+            break;
+        }
+        
+        // hit - accumulate color
+        total_color += throughput * payload.color.rgb;
+        // throughput *= 0.6f;
+        
+        float2 xi = float2(rand(seed), rand(seed));
+        float3 localDir = cosine_sample_hemisphere(xi);
+        float3 N = normalize(payload.normal);
+        float3 newDir = transform_to_world(localDir, N);
+        
+        ray_dir = newDir;
+        origin = payload.hit_pos + ray_dir * 0.001f;
+    }
 
 
-    RayDesc ray;
-    ray.Origin = origin;
-    ray.Direction = ray_dir;
-
-    ray.TMin = 0.001;
-    ray.TMax = 10000.0;
-    RayPayload payload = { float4(0, 0, 0, 0) };
-    // Note winding order if you don't see anything
-    TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
-
-
-    RenderTarget[DispatchRaysIndex().xy] = payload.color;
+    RenderTarget[DispatchRaysIndex().xy] = float4(total_color, 1.0);
     //RenderTarget[DispatchRaysIndex().xy] = float4(uv, 0.0, 1.0);
     //RenderTarget[DispatchRaysIndex().xy] = float4(ray_dir * 0.5 + 0.5, 1.0);
 }
@@ -141,15 +200,15 @@ void ClosestHitMain(inout RayPayload payload, in MyAttributes attr)
     if (instanceID >= 0 && instanceID < 4)
         albedo = float3(1, 0, 0);
     else if (instanceID == 4 || instanceID == 5)
-        albedo = float3(0.5, 0, 0);
+        albedo = float3(1, 0, 0);
 
     else if (instanceID >= 6 && instanceID < 10)
         albedo = float3(0, 1, 0);
     else if (instanceID == 10 || instanceID == 11)
-        albedo = float3(0, 0.5, 0);
+        albedo = float3(0, 1, 0);
     
     else if (instanceID == 16 || instanceID == 17)
-        albedo = float3(0, 0, 0.5);
+        albedo = float3(0, 0, 1);
     else
         albedo = float3(0, 0, 1);
 
@@ -160,9 +219,13 @@ void ClosestHitMain(inout RayPayload payload, in MyAttributes attr)
     // hacky normal calculation - TODO use actual vertex normals
     tri /= 2;
     float3 normal = (tri.xxx % 3 == uint3(0, 1, 2)) * (tri < 3 ? -1 : 1);
-    float3 worldNormal = normalize(mul(normal, (float3x3) ObjectToWorld4x3()));
+    
+    // float3 bary = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
+    // float3 normal = normalize(float3(bary.x, bary.y, bary.z) * 2.0 - 1.0);
         
     float3 light_vec = normalize(light_pos - hit_pos);
+    
+
 
     float normal_dot_light = max(dot(normal, light_vec), 0.0);
     float3 diffuse = albedo * light_color * normal_dot_light;
@@ -171,11 +234,15 @@ void ClosestHitMain(inout RayPayload payload, in MyAttributes attr)
     
     // further TraceRay calls needed for reflective materials
 
-    payload.color = float4(albedo, 1.0); // using hacky colors right now, not diffuse
+    payload.hit_pos = hit_pos;
+    payload.normal = normal;
+    payload.hit = true;
+    payload.color = float4(color, 1.0); // using hacky colors right now, not diffuse
 }
 
 [shader("miss")]
 void MissMain(inout RayPayload payload)
 {
     payload.color = float4(0.0, 0.0, 0.0, 1.0);
+    payload.hit = false;
 }
