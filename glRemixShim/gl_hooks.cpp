@@ -1,8 +1,7 @@
 #include "gl_hooks.h"
 
 #include <gl_loader.h>
-
-#include <GL/gl.h>
+#include <shared/gl_utils.h>  // shared
 
 #include <mutex>
 #include <tsl/robin_map.h>
@@ -184,22 +183,40 @@ void APIENTRY gl_delete_textures_ovr(GLsizei n, const GLuint*)
     g_recorder.record(GLCommandType::GLCMD_DELETE_TEXTURES, &payload, sizeof(payload));
 }
 
+/* This override is slightly unique. We will record most of the parameters as usual.
+ * However, since the `pixels` pointer means nothing in the renderer process context, we also do
+ * O(n) `memcpy` raw image bytes into the command payload. The renderer can subsequently then handle
+ * this special-case command cleanly.
+ */
 void APIENTRY gl_tex_image_2d_ovr(GLenum target, GLint level, GLint internalFormat, GLsizei width,
                                   GLsizei height, GLint border, GLenum format, GLenum type,
                                   const void* pixels)
 {
-    GLTexImage2DCommand payload;
-    payload.target = target;
-    payload.level = level;
-    payload.internalFormat = internalFormat;
-    payload.width = (UINT32)width;
-    payload.height = (UINT32)height;
-    payload.border = border;
-    payload.format = format;
-    payload.type = type;
-    payload.dataPtr = reinterpret_cast<UINT64>(pixels);
+    const size_t pixels_bytes = ComputePixelDataSize(width, height, format, type);
+    const size_t cmd_bytes = sizeof(GLTexImage2DCommand);
+    const size_t total_bytes = cmd_bytes + pixels_bytes;
 
-    g_recorder.record(GLCommandType::GLCMD_TEX_IMAGE_2D, &payload, sizeof(payload));
+    std::unique_ptr<uint8_t[]> payload(new uint8_t[total_bytes]);
+    auto* cmd = reinterpret_cast<GLTexImage2DCommand*>(payload.get());
+
+    cmd->target = static_cast<UINT32>(target);
+    cmd->level = static_cast<UINT32>(level);
+    cmd->internalFormat = static_cast<UINT32>(internalFormat);
+    cmd->width = static_cast<UINT32>(width);
+    cmd->height = static_cast<UINT32>(height);
+    cmd->border = static_cast<UINT32>(border);
+    cmd->format = static_cast<UINT32>(format);
+    cmd->type = static_cast<UINT32>(type);
+    cmd->dataSize = static_cast<UINT32>(pixels_bytes);
+    cmd->dataOffset = static_cast<UINT32>(cmd_bytes);
+
+    if (pixels && pixels_bytes > 0)
+    {
+        memcpy(payload.get() + cmd_bytes, pixels, pixels_bytes);
+    }
+
+    g_recorder.record(GLCommandType::GLCMD_TEX_IMAGE_2D, payload.get(),
+                      static_cast<UINT32>(total_bytes));
 }
 
 void APIENTRY gl_tex_parameterf_ovr(GLenum target, GLenum pname, GLfloat param)
