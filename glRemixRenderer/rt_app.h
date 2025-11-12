@@ -54,7 +54,7 @@ namespace glRemix
 		std::vector<dx::D3D12Buffer> m_index_buffers;
 
 		// matrix stack
-		gl::glMatrixStack m_matrix_stack;
+        gl::glMatrixStack m_matrix_stack;
 		std::vector<XMFLOAT4X4> m_matrix_pool;
 		XMMATRIX inverse_view;
 
@@ -66,6 +66,7 @@ namespace glRemix
 		gl::GLListMode listMode = gl::GLListMode::COMPILE_AND_EXECUTE;
 
 		std::array<float, 4> color = {1.0f, 1.0f, 1.0f, 1.0f}; // current color (may need to be tracked globally)
+        std::array<float, 3> normal = {0.0f, 0.0f, 1.0f}; // global normal - default
 		Material m_material; // global states that can be modified
 		
 		// shader resources

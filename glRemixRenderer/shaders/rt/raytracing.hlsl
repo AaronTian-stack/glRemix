@@ -66,6 +66,8 @@ typedef BuiltInTriangleIntersectionAttributes MyAttributes;
 struct RayPayload
 {
     float4 color;
+    // float3 normal;
+    //bool hit;
 };
 
 [shader("raygeneration")]
@@ -127,17 +129,53 @@ void ClosestHitMain(inout RayPayload payload, in MyAttributes attr)
     float3 diffuse = material.diffuse.rgb + light.diffuse.rgb + normal_l_dot;
 
     float3 color = ambient + diffuse;
-    payload.color = float4(color, 1.0f);
+    payload.color = float4(color, 1.0f);*/
 
-    // TODO recursively fire more rays*/
+    uint instanceID = InstanceID();
+    uint tri = PrimitiveIndex();
+    float3 hit_pos = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
 
+    // hacky gear color
+    float3 albedo = float3(0, 0, 0);
 
-    float3 barycentrics = float3(1 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
-    payload.color = float4(barycentrics, 1);
+    if (instanceID >= 0 && instanceID < 4)
+        albedo = float3(1, 0, 0);
+    else if (instanceID == 4 || instanceID == 5)
+        albedo = float3(0.5, 0, 0);
+
+    else if (instanceID >= 6 && instanceID < 10)
+        albedo = float3(0, 1, 0);
+    else if (instanceID == 10 || instanceID == 11)
+        albedo = float3(0, 0.5, 0);
+    
+    else if (instanceID == 16 || instanceID == 17)
+        albedo = float3(0, 0, 0.5);
+    else
+        albedo = float3(0, 0, 1);
+
+    float3 light_pos = float3(10.0, 10.0, 10.0);
+    float3 light_color = float3(1.0, 1.0, 1.0);
+    float3 ambient = 0.1 * albedo;
+    
+    // hacky normal calculation - TODO use actual vertex normals
+    tri /= 2;
+    float3 normal = (tri.xxx % 3 == uint3(0, 1, 2)) * (tri < 3 ? -1 : 1);
+    float3 worldNormal = normalize(mul(normal, (float3x3) ObjectToWorld4x3()));
+        
+    float3 light_vec = normalize(light_pos - hit_pos);
+
+    float normal_dot_light = max(dot(normal, light_vec), 0.0);
+    float3 diffuse = albedo * light_color * normal_dot_light;
+
+    float3 color = ambient + diffuse;
+    
+    // further TraceRay calls needed for reflective materials
+
+    payload.color = float4(albedo, 1.0); // using hacky colors right now, not diffuse
 }
 
 [shader("miss")]
 void MissMain(inout RayPayload payload)
 {
-    payload.color = float4(1.0, 0.5, 0.0, 1.0);
+    payload.color = float4(0.0, 0.0, 0.0, 1.0);
 }

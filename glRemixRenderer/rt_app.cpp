@@ -147,7 +147,7 @@ void glRemix::glRemixRenderer::create()
 	rt_desc.global_root_signature = m_rt_global_root_signature.Get();
 	rt_desc.max_recursion_depth = 1;
 	// Make sure these match in the shader
-	rt_desc.payload_size = sizeof(float) * 4;
+	rt_desc.payload_size = sizeof(float) * 4;	
 	rt_desc.attribute_size = sizeof(float) * 2;
 	THROW_IF_FALSE(m_context.create_raytracing_pipeline(rt_desc, raytracing_shaders.Get(), m_rt_pipeline.ReleaseAndGetAddressOf(), "rt pipeline"));
 
@@ -383,6 +383,14 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipcBuf, size_
                     bytesRead, cmd_list);  // store geometry data in vertex buffers depending on topology type
                 break;
             }
+            case glRemix::GLCommandType::GLCMD_NORMAL3F: {
+                const auto* n = reinterpret_cast<const glRemix::GLNormal3fCommand*>(ipcBuf.data()
+                                                                                    + offset);
+                normal[0] = n->x;
+                normal[1] = n->y;
+                normal[2] = n->z;
+                break;
+            }
 			case glRemix::GLCommandType::GLCMD_MATERIALF:
 			{
 				const auto* mat = reinterpret_cast<const glRemix::GLMaterialCommand*>(ipcBuf.data() + offset);  // reach into data payload
@@ -519,8 +527,18 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
 			{
                 const auto* v = reinterpret_cast<const glRemix::GLVertex3fCommand*>(ipcBuf.data()
                                                                                     + offset);
-                Vertex vertex{{v->x, v->y, v->z}, {color[0], color[1], color[2]}};
+                Vertex vertex{{v->x, v->y, v->z},
+                              {color[0], color[1], color[2]},
+                              {normal[0], normal[1], normal[2]}};
                 t_vertices.push_back(vertex);
+                break;
+            }
+            case glRemix::GLCommandType::GLCMD_NORMAL3F: {
+                const auto* n = reinterpret_cast<const glRemix::GLNormal3fCommand*>(ipcBuf.data()
+                                                                                    + offset);
+                normal[0] = n->x;
+                normal[1] = n->y;
+                normal[2] = n->z;
                 break;
             }
 			case glRemix::GLCommandType::GLCMD_COLOR3F: 
@@ -675,7 +693,7 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf,
         memcpy(cpu_ptr, t_indices.data(), index_buffer_desc.size);
         m_context.unmap_buffer(&t_index_buffer);
 		m_index_buffers.push_back(std::move(t_index_buffer));
-        
+
 		// create blas buffer
 		mesh.blasID = build_mesh_blas(m_vertex_buffers[mesh.vertexID], m_index_buffers[mesh.indexID], cmd_list);
 

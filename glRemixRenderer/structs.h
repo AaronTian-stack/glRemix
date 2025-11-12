@@ -20,6 +20,7 @@ namespace glRemix
     {
         std::array<float, 3> position;
         std::array<float, 3> color;
+        std::array<float, 3> normal;
     };
 
     // TODO add more parameters (such as enabled) when encountered
