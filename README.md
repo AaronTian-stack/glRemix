@@ -35,9 +35,9 @@ To facilitate development, you may enable this option and set a custom path to t
 cmake .. -DGLREMIX_OVERRIDE_RENDERER_PATH=ON -DGLREMIX_CUSTOM_RENDERER_EXE_PATH="path\to\the\renderer\executable
 ```
 
-By default, `GLREMIX_CUSTOM_RENDERER_EXE_PATH` will be set to where it has been deposited from CMake's deploy step, i.e. `${GLREMIX_DEPLOY_DIR}/$<CONFIG>/renderer/glRemix_renderer.exe`, where `<CONFIG>` is `Debug`, `Release`, etc.
+This will override the path that the shim looks for when launching the DX12 renderer executable as a child process. Note that in deployed builds, this location does **not** need to be overriden, as without overriding the shim will look for `glRemix_renderer.exe` right next to the built `opengl32.dll`, and this is desired user behavior. Thus, the `GLREMIX_OVERRIDE_RENDERER_PATH` option is preemptively **DEVELOPMENT-ONLY**.
 
-Thus, in most cases you should technically **not** have to additionally configure `GLREMIX_CUSTOM_RENDERER_EXE_PATH` and can just enable `GLREMIX_OVERRIDE_RENDERER_PATH` and be good to go.
+On the other hand when enabled, by default `GLREMIX_CUSTOM_RENDERER_EXE_PATH` will be set to where it has been deposited from CMake's deploy step, i.e. `${GLREMIX_DEPLOY_DIR}/$<CONFIG>/renderer/glRemix_renderer.exe`, where `<CONFIG>` is `Debug`, `Release`, etc. So as a developer in most cases you should technically **not** have to additionally configure `GLREMIX_CUSTOM_RENDERER_EXE_PATH`. Just enable `GLREMIX_OVERRIDE_RENDERER_PATH` and you will be good to go.
 
 ## Developer Tools
 
