@@ -8,14 +8,14 @@ using Microsoft::WRL::ComPtr;
 
 namespace glRemix::dx
 {
-	// BLAS is just a buffer
-	
-	struct D3D12TLAS
-	{
-		D3D12Buffer buffer;
-		D3D12Buffer instance; // This should use a GPU upload heap for dynamic updates
-		UINT last_instance_count = 0; // Track instance count for update
-	};
+// BLAS is just a buffer
 
-	// TODO: SBT
-}
+struct D3D12TLAS
+{
+    D3D12Buffer buffer;
+    D3D12Buffer instance;          // This should use a GPU upload heap for dynamic updates
+    UINT last_instance_count = 0;  // Track instance count for update
+};
+
+// TODO: SBT
+}  // namespace glRemix::dx

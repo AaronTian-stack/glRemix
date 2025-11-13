@@ -4,9 +4,9 @@
 
 namespace glRemix::dx
 {
-    struct D3D12CommandAllocator
-    {
-        D3D12Queue* queue = nullptr;
-        ComPtr<ID3D12CommandAllocator> cmd_allocator;
-    };
-}
+struct D3D12CommandAllocator
+{
+    D3D12Queue* queue = nullptr;
+    ComPtr<ID3D12CommandAllocator> cmd_allocator;
+};
+}  // namespace glRemix::dx

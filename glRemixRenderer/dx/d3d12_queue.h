@@ -6,6 +6,6 @@ using Microsoft::WRL::ComPtr;
 
 struct D3D12Queue
 {
-	D3D12_COMMAND_LIST_TYPE type;
+    D3D12_COMMAND_LIST_TYPE type;
     ComPtr<ID3D12CommandQueue> queue;
 };

@@ -36,7 +36,9 @@ void glMatrixStack::identity(GLMatrixMode mode)
     }
 
     if (stack->empty())
+    {
         return;
+    }
 
     XMStoreFloat4x4(&stack->top(), XMMatrixIdentity());
 }
@@ -103,17 +105,13 @@ XMFLOAT4X4& glMatrixStack::top(GLMatrixMode mode)
 {
     switch (mode)
     {
-        case GLMatrixMode::MODELVIEW:
-            return model_view.top();
+        case GLMatrixMode::MODELVIEW: return model_view.top();
 
-        case GLMatrixMode::PROJECTION:
-            return projection.top();
+        case GLMatrixMode::PROJECTION: return projection.top();
 
-        case GLMatrixMode::TEXTURE:
-            return texture.top();
+        case GLMatrixMode::TEXTURE: return texture.top();
 
-        default:
-        {
+        default: {
             static XMFLOAT4X4 identity;
             XMStoreFloat4x4(&identity, XMMatrixIdentity());
             return identity;
@@ -126,14 +124,16 @@ void glMatrixStack::mulSet(GLMatrixMode mode, XMMATRIX R)
     std::stack<XMFLOAT4X4>* stack = nullptr;
     switch (mode)
     {
-        case GLMatrixMode::MODELVIEW:  stack = &model_view;  break;
-        case GLMatrixMode::PROJECTION: stack = &projection;  break;
-        case GLMatrixMode::TEXTURE:    stack = &texture;     break;
+        case GLMatrixMode::MODELVIEW: stack = &model_view; break;
+        case GLMatrixMode::PROJECTION: stack = &projection; break;
+        case GLMatrixMode::TEXTURE: stack = &texture; break;
         default: return;
     }
 
     if (!stack || stack->empty())
+    {
         return;
+    }
 
     XMMATRIX M = XMLoadFloat4x4(&stack->top());
 
@@ -164,8 +164,8 @@ void glMatrixStack::translate(GLMatrixMode mode, float x, float y, float z)
     mulSet(mode, T);
 }
 
-void glMatrixStack::frustum(
-    GLMatrixMode mode, double l, double r, double b, double t, double n, double f)
+void glMatrixStack::frustum(GLMatrixMode mode, double l, double r, double b, double t, double n,
+                            double f)
 {
     const float L = static_cast<float>(l);
     const float R = static_cast<float>(r);
@@ -181,23 +181,17 @@ void glMatrixStack::frustum(
 
 void glMatrixStack::printStacks() const
 {
-    auto printMatrix = [](const DirectX::XMFLOAT4X4& m, const char* label, int level)
-    {
+    auto printMatrix = [](const DirectX::XMFLOAT4X4& m, const char* label, int level) {
         std::printf("[%s stack level %d]\n", label, level);
-        std::printf(
-            "  %.6f  %.6f  %.6f  %.6f\n"
-            "  %.6f  %.6f  %.6f  %.6f\n"
-            "  %.6f  %.6f  %.6f  %.6f\n"
-            "  %.6f  %.6f  %.6f  %.6f\n",
-            m._11, m._12, m._13, m._14,
-            m._21, m._22, m._23, m._24,
-            m._31, m._32, m._33, m._34,
-            m._41, m._42, m._43, m._44
-        );
+        std::printf("  %.6f  %.6f  %.6f  %.6f\n"
+                    "  %.6f  %.6f  %.6f  %.6f\n"
+                    "  %.6f  %.6f  %.6f  %.6f\n"
+                    "  %.6f  %.6f  %.6f  %.6f\n",
+                    m._11, m._12, m._13, m._14, m._21, m._22, m._23, m._24, m._31, m._32, m._33,
+                    m._34, m._41, m._42, m._43, m._44);
     };
 
-    auto dumpStack = [&](const std::stack<DirectX::XMFLOAT4X4>& s, const char* name)
-    {
+    auto dumpStack = [&](const std::stack<DirectX::XMFLOAT4X4>& s, const char* name) {
         if (s.empty())
         {
             std::printf("[%s stack] (empty)\n", name);

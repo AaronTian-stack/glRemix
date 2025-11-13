@@ -8,14 +8,9 @@
 namespace glRemix
 {
 
-enum class GLTopology : uint32_t 
-{ 
-    GL_QUADS = 0x0007, 
-    GL_QUAD_STRIP = 0x0008 
-};
+enum class GLTopology : uint32_t { GL_QUADS = 0x0007, GL_QUAD_STRIP = 0x0008 };
 
-enum class GLLight : uint32_t
-{
+enum class GLLight : uint32_t {
     // light name
     GL_LIGHT0 = 0x4000,
     GL_LIGHT1 = 0x4001,
@@ -39,33 +34,31 @@ enum class GLLight : uint32_t
     GL_QUADRATIC_ATTENUATION = 0x1209
 };
 
-enum class GLMaterial : uint32_t
-{
+enum class GLMaterial : uint32_t {
     // face
-    GL_NONE           = 0x0000,
-    GL_FRONT_LEFT     = 0x0400,
-    GL_FRONT_RIGHT    = 0x0401,
-    GL_BACK_LEFT      = 0x0402,
-    GL_BACK_RIGHT     = 0x0403,
-    GL_FRONT          = 0x0404,
-    GL_BACK           = 0x0405,
-    GL_LEFT           = 0x0406,
-    GL_RIGHT          = 0x0407,
+    GL_NONE = 0x0000,
+    GL_FRONT_LEFT = 0x0400,
+    GL_FRONT_RIGHT = 0x0401,
+    GL_BACK_LEFT = 0x0402,
+    GL_BACK_RIGHT = 0x0403,
+    GL_FRONT = 0x0404,
+    GL_BACK = 0x0405,
+    GL_LEFT = 0x0406,
+    GL_RIGHT = 0x0407,
     GL_FRONT_AND_BACK = 0x0408,
-    GL_AUX0           = 0x0409,
-    GL_AUX1           = 0x040A,
-    GL_AUX2           = 0x040B,
-    GL_AUX3           = 0x040C,
+    GL_AUX0 = 0x0409,
+    GL_AUX1 = 0x040A,
+    GL_AUX2 = 0x040B,
+    GL_AUX3 = 0x040C,
 
     // property
-    GL_EMISSION            = 0x1600,
-    GL_SHININESS           = 0x1601,
+    GL_EMISSION = 0x1600,
+    GL_SHININESS = 0x1601,
     GL_AMBIENT_AND_DIFFUSE = 0x1602,
-    GL_COLOR_INDEXES       = 0x1603
+    GL_COLOR_INDEXES = 0x1603
 };
 
-enum class GLCommandType : uint32_t
-{
+enum class GLCommandType : uint32_t {
     // Basic OpenGL 1.x commands
     GLCMD_BEGIN = 1,
     GLCMD_END,
