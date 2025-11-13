@@ -33,7 +33,7 @@ include("${GLREMIX_SHIM_SOURCE_DIR}/cmake/shim_sources.cmake")
 
 set(GLREMIX_SHIM_EXTERNAL_SUFFIX "_builder")
 
-if(NOT DEFINED GLREMIX_CUSTOM_RENDERER_EXE_PATH)
+if(GLREMIX_OVERRIDE_RENDERER_PATH AND NOT DEFINED GLREMIX_CUSTOM_RENDERER_EXE_PATH)
     set(GLREMIX_CUSTOM_RENDERER_EXE_PATH "${GLREMIX_DEPLOY_DIR}/$<CONFIG>/renderer/glRemix_renderer.exe")
 
     message(WARNING "'GLREMIX_OVERRIDE_RENDERER_PATH' CMake option is enabled but 'GLREMIX_CUSTOM_RENDERER_EXE_PATH' CMake variable was not specified. Setting to default path for now.")
