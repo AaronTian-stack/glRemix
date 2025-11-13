@@ -48,16 +48,14 @@ public:
         std::vector<uint8_t> buffer;
         buffer.reserve(sizeof(m_frameUnifs) + m_frameUnifs.payloadSize);
 
-        buffer.insert(buffer.end(),
-                      reinterpret_cast<uint8_t*>(&m_frameUnifs),
+        buffer.insert(buffer.end(), reinterpret_cast<uint8_t*>(&m_frameUnifs),
                       reinterpret_cast<uint8_t*>(&m_frameUnifs) + sizeof(m_frameUnifs));
 
         if (!m_commands.empty())
         {
             for (auto& cmd : m_commands)
             {
-                buffer.insert(buffer.end(),
-                              reinterpret_cast<uint8_t*>(&cmd.cmdUnifs),
+                buffer.insert(buffer.end(), reinterpret_cast<uint8_t*>(&cmd.cmdUnifs),
                               reinterpret_cast<uint8_t*>(&cmd.cmdUnifs) + sizeof(cmd.cmdUnifs));
                 buffer.insert(buffer.end(), cmd.data.begin(), cmd.data.end());
             }

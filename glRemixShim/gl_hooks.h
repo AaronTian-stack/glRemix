@@ -2,5 +2,5 @@
 
 namespace glRemix::hooks
 {
-	void install_overrides();
+void install_overrides();
 }

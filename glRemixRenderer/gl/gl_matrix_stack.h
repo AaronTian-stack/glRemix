@@ -6,18 +6,12 @@
 namespace glRemix::gl
 {
 
-enum class GLListMode : uint32_t
-{
+enum class GLListMode : uint32_t {
     COMPILE = 0x1300,
     COMPILE_AND_EXECUTE = 0x1301,
 };
 
-enum class GLMatrixMode : uint32_t
-{
-    MODELVIEW = 0x1700,
-    PROJECTION = 0x1701,
-    TEXTURE = 0x1702
-};
+enum class GLMatrixMode : uint32_t { MODELVIEW = 0x1700, PROJECTION = 0x1701, TEXTURE = 0x1702 };
 
 class glMatrixStack
 {
@@ -31,7 +25,7 @@ public:
     void push(GLMatrixMode mode);
     void pop(GLMatrixMode mode);
     DirectX::XMFLOAT4X4& top(GLMatrixMode mode);
-    void mulSet(GLMatrixMode mode, DirectX::XMMATRIX R); // multiplies and sets top of stack
+    void mulSet(GLMatrixMode mode, DirectX::XMMATRIX R);  // multiplies and sets top of stack
 
     // operations
     void identity(GLMatrixMode mode);
@@ -43,4 +37,4 @@ public:
     void printStacks() const;
 };
 
-}  // namespace glRemix
+}  // namespace glRemix::gl

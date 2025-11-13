@@ -121,10 +121,7 @@ bool glRemix::SharedMemory::Write(const void* src, uint32_t bytes, uint32_t offs
     return true;
 }
 
-bool glRemix::SharedMemory::Read(void* dst,
-                                     uint32_t maxBytes,
-                                     uint32_t offset,
-                                     uint32_t* outBytes)
+bool glRemix::SharedMemory::Read(void* dst, uint32_t maxBytes, uint32_t offset, uint32_t* outBytes)
 {
     std::ostringstream ss;
     if (!m_header || !dst)
@@ -151,7 +148,7 @@ bool glRemix::SharedMemory::Read(void* dst,
         n = maxBytes;
     }
 
-    std::memcpy(dst, m_payload + offset, n); // copy into payload
+    std::memcpy(dst, m_payload + offset, n);  // copy into payload
 
     if (outBytes)
     {
@@ -200,9 +197,7 @@ bool glRemix::SharedMemory::_MapCommon(HANDLE hMapFile)
 {
     m_view = (LPTSTR)MapViewOfFile(hMapFile,             // handle to map object
                                    FILE_MAP_ALL_ACCESS,  // rw permission
-                                   0,
-                                   0,
-                                   0);
+                                   0, 0, 0);
 
     if (m_view == NULL)
     {

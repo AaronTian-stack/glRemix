@@ -80,8 +80,8 @@ AlwaysBreakAfterDefinitionReturnType: None
 AlwaysBreakBeforeMultilineStrings: false
 AttributeMacros:
   - __capability
-BinPackArguments: false
-BinPackParameters: false
+BinPackArguments: true
+BinPackParameters: true
 BitFieldColonSpacing: Both
 BracedInitializerIndentWidth: 4
 BraceWrapping:
@@ -128,7 +128,6 @@ DerivePointerAlignment: false
 DisableFormat:   false
 EmptyLineAfterAccessModifier: Never
 EmptyLineBeforeAccessModifier: Always
-ExperimentalAutoDetectBinPacking: true
 FixNamespaceComments: true
 ForEachMacros:
   - forever

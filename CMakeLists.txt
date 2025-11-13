@@ -20,6 +20,7 @@ include(ExternalProject)
 option(GLREMIX_BUILD_SHIM_WIN32 "Build 32-bit OpenGL shim" ON)
 option(GLREMIX_BUILD_SHIM_X64 "Build 64-bit OpenGL shim" OFF)
 option(GLREMIX_BUILD_RENDERER "Build renderer" ON)
+option(GLREMIX_OVERRIDE_RENDERER_PATH "Override path to glRemix renderer. If 'GLREMIX_CUSTOM_RENDERER_EXE_PATH' is not set, default path to renderer executable within deploy directory is used." ON)
 
 set(GLREMIX_COPY_IF_EXISTS_SCRIPT "${REPO_ROOT}/cmake/copy_if_exists.cmake")
 
@@ -31,6 +32,12 @@ include("${REPO_ROOT}/cmake/shared_files.cmake")
 include("${GLREMIX_SHIM_SOURCE_DIR}/cmake/shim_sources.cmake")
 
 set(GLREMIX_SHIM_EXTERNAL_SUFFIX "_builder")
+
+if(GLREMIX_OVERRIDE_RENDERER_PATH AND NOT DEFINED GLREMIX_CUSTOM_RENDERER_EXE_PATH)
+    set(GLREMIX_CUSTOM_RENDERER_EXE_PATH "${GLREMIX_DEPLOY_DIR}/$<CONFIG>/renderer/glRemix_renderer.exe")
+
+    message(WARNING "'GLREMIX_OVERRIDE_RENDERER_PATH' CMake option is enabled but 'GLREMIX_CUSTOM_RENDERER_EXE_PATH' CMake variable was not specified. Setting to default path for now.")
+endif()
 
 # Add external project builders for the shim config, this is to allow building both 32-bit and 64-bit with the 64-bit renderer
 function(glremix_add_shim_builder suffix generator_platform description)
@@ -49,6 +56,8 @@ function(glremix_add_shim_builder suffix generator_platform description)
 			-DREPO_ROOT=${REPO_ROOT}
 			-DGLREMIX_DEPLOY_DIR=${GLREMIX_DEPLOY_DIR}
 			-DGLREMIX_SHIM_DEPLOY_SUBDIR=shim/${suffix}
+            -DGLREMIX_OVERRIDE_RENDERER_PATH=${GLREMIX_OVERRIDE_RENDERER_PATH}
+            -DGLREMIX_CUSTOM_RENDERER_EXE_PATH=${GLREMIX_CUSTOM_RENDERER_EXE_PATH}
 		BUILD_COMMAND ${CMAKE_COMMAND} --build . --config $<CONFIG>
 		INSTALL_COMMAND ""
 		BUILD_BYPRODUCTS 

@@ -23,11 +23,11 @@ RayGenConstantBuffer g_rayGenCB : register(b0);
 PSInput VSMain(VSInput input)
 {
     PSInput output;
-    
+
     float4 p = float4(input.Position, 1.0f);
     output.Position = mul(p, g_rayGenCB.view_proj);
     output.Color = input.Color;
-    
+
     return output;
 }
 
