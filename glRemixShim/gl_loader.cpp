@@ -50,6 +50,11 @@ void initialize()
             const size_t remaining = MAX_PATH - (end - dll_path.data());
             strcpy_s(end, remaining, "\\glRemix_renderer.exe");
 
+#ifdef GLREMIX_CUSTOM_RENDERER_EXE_PATH
+            // override `dll_path`
+            std::array renderer_path = std::to_array(GLREMIX_CUSTOM_RENDERER_EXE_PATH);
+            std::strcpy(dll_path.data(), renderer_path.data());
+#endif
             STARTUPINFOA si{.cb = sizeof(STARTUPINFOA)};
             PROCESS_INFORMATION pi;
             if (CreateProcessA(nullptr, dll_path.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,

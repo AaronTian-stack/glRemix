@@ -21,4 +21,10 @@ function(set_shim_compile_specifications proj_name)
             ole32
         )
     endif()
+
+    message("")
+
+    if (GLREMIX_OVERRIDE_RENDERER_PATH)
+        target_compile_definitions(${proj_name} PRIVATE GLREMIX_CUSTOM_RENDERER_EXE_PATH="${GLREMIX_CUSTOM_RENDERER_EXE_PATH}")
+    endif()
 endfunction()
