@@ -1,6 +1,6 @@
 # glRemix
 
-<img src="docs\assets\glRemix_glxgears_barycentric.gif" alt="glxgears barycentric raytraced">
+<img src="docs\assets\glRemix_glxgears_barycentric.gif" alt="glxgears barycentric raytraced" width="600">
 
 ## Overview
 
