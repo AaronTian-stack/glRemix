@@ -9,8 +9,8 @@ namespace glRemix
 // maintains per-frame uniforms for OpenGL commands sent via IPC
 struct GLFrameUnifs
 {
-    uint32_t frameIndex = 0;   // incremental frame counter
-    uint32_t payloadSize = 0;  // bytes following this header
+    UINT32 frame_index = 0;   // incremental frame counter
+    UINT32 payload_size = 0;  // bytes following this header
 };
 
 /* For now, a simple manager for `SharedMemory` */
@@ -18,16 +18,16 @@ class IPCProtocol
 {
 public:
     /* for shim */
-    bool InitWriter(const wchar_t* name = kDEFAULT_MAP_NAME, uint32_t capacity = kDEFAULT_CAPACITY);
-    bool SendFrame(const void* data, uint32_t bytes);  // TODO: offset
+    bool init_writer(const wchar_t* name = kDEFAULT_MAP_NAME, UINT32 capacity = kDEFAULT_CAPACITY);
+    bool send_frame(const void* data, UINT32 bytes);  // TODO: offset
 
     /* for renderer */
-    bool InitReader(const wchar_t* name = kDEFAULT_MAP_NAME);  // use same map name or else...
-    bool TryConsumeFrame(void* dst, uint32_t maxBytes, uint32_t* outBytes = nullptr);
+    bool init_reader(const wchar_t* name = kDEFAULT_MAP_NAME);  // use same map name or else...
+    bool try_consume_frame(void* dst, UINT32 maxBytes, UINT32* outBytes = nullptr);
 
-    uint32_t GetCapacity() const
+    UINT32 get_capacity() const
     {
-        return m_smem.GetCapacity();
+        return m_smem.get_capacity();
     }
 
 private:

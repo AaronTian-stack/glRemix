@@ -20,33 +20,33 @@ struct UseDefinition
 // These need to be in the correct order as the enum
 constexpr std::array use_definitions = {
     // SRV uses
-    UseDefinition{.access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE,
-                  .sync = D3D12_BARRIER_SYNC_PIXEL_SHADING,
-                  .layout = D3D12_BARRIER_LAYOUT_SHADER_RESOURCE},
-    UseDefinition{.access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE,
-                  .sync = D3D12_BARRIER_SYNC_NON_PIXEL_SHADING,
-                  .layout = D3D12_BARRIER_LAYOUT_SHADER_RESOURCE},
-    UseDefinition{.access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE,
-                  .sync = D3D12_BARRIER_SYNC_COMPUTE_SHADING,
-                  .layout = D3D12_BARRIER_LAYOUT_SHADER_RESOURCE},
-    UseDefinition{.access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE,
-                  .sync = D3D12_BARRIER_SYNC_RAYTRACING,
-                  .layout = D3D12_BARRIER_LAYOUT_SHADER_RESOURCE},
+    UseDefinition{ .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE,
+                   .sync = D3D12_BARRIER_SYNC_PIXEL_SHADING,
+                   .layout = D3D12_BARRIER_LAYOUT_SHADER_RESOURCE },
+    UseDefinition{ .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE,
+                   .sync = D3D12_BARRIER_SYNC_NON_PIXEL_SHADING,
+                   .layout = D3D12_BARRIER_LAYOUT_SHADER_RESOURCE },
+    UseDefinition{ .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE,
+                   .sync = D3D12_BARRIER_SYNC_COMPUTE_SHADING,
+                   .layout = D3D12_BARRIER_LAYOUT_SHADER_RESOURCE },
+    UseDefinition{ .access = D3D12_BARRIER_ACCESS_SHADER_RESOURCE,
+                   .sync = D3D12_BARRIER_SYNC_RAYTRACING,
+                   .layout = D3D12_BARRIER_LAYOUT_SHADER_RESOURCE },
 
-    UseDefinition{.access = D3D12_BARRIER_ACCESS_CONSTANT_BUFFER,
-                  .sync = D3D12_BARRIER_SYNC_ALL_SHADING,
-                  .layout = D3D12_BARRIER_LAYOUT_GENERIC_READ},
+    UseDefinition{ .access = D3D12_BARRIER_ACCESS_CONSTANT_BUFFER,
+                   .sync = D3D12_BARRIER_SYNC_ALL_SHADING,
+                   .layout = D3D12_BARRIER_LAYOUT_GENERIC_READ },
 
     // UAV uses
-    UseDefinition{.access = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
-                  .sync = D3D12_BARRIER_SYNC_PIXEL_SHADING,
-                  .layout = D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS},
-    UseDefinition{.access = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
-                  .sync = D3D12_BARRIER_SYNC_COMPUTE_SHADING,
-                  .layout = D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS},
-    UseDefinition{.access = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
-                  .sync = D3D12_BARRIER_SYNC_RAYTRACING,
-                  .layout = D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS},
+    UseDefinition{ .access = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
+                   .sync = D3D12_BARRIER_SYNC_PIXEL_SHADING,
+                   .layout = D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS },
+    UseDefinition{ .access = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
+                   .sync = D3D12_BARRIER_SYNC_COMPUTE_SHADING,
+                   .layout = D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS },
+    UseDefinition{ .access = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
+                   .sync = D3D12_BARRIER_SYNC_RAYTRACING,
+                   .layout = D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS },
 
     // Render target
     UseDefinition{
@@ -201,7 +201,8 @@ void initialize_tracked_resource(Resource* resource, ID3D12Resource* d3d_resourc
         if (subresources)
         {
             resource->subresource_range = *subresources;
-        } else
+        }
+        else
         {
             D3D12_BARRIER_SUBRESOURCE_RANGE range{
                 .IndexOrFirstMipLevel = 0,
@@ -221,7 +222,8 @@ void initialize_tracked_resource(Resource* resource, ID3D12Resource* d3d_resourc
 
             resource->subresource_range = range;
         }
-    } else
+    }
+    else
     {
         // Initialize buffer-specific data in the union
         resource->size_in_bytes = explicit_size_in_bytes;
@@ -250,7 +252,8 @@ bool mark_use(Resource& resource, const Usage usage)
             resource.next_layout = definition.layout;
         }
         resource.touched = true;
-    } else
+    }
+    else
     {
         resource.next_access |= definition.access;
         resource.next_sync |= definition.sync;
@@ -342,7 +345,8 @@ void emit_barriers(ID3D12GraphicsCommandList7* command_list, Resource* const* re
                     debug_log->push_back(event);
                 }
             }
-        } else
+        }
+        else
         {
             D3D12_BUFFER_BARRIER barrier{
                 .SyncBefore = sync_before,

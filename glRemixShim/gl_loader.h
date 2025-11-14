@@ -2,7 +2,7 @@
 
 #include "framework.h"
 
-#include "framerecorder.h"
+#include "frame_recorder.h"
 
 namespace glRemix
 {

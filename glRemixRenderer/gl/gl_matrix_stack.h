@@ -1,17 +1,24 @@
 #pragma once
 
+#include <basetsd.h>
 #include <DirectXMath.h>
 #include <stack>
 
 namespace glRemix::gl
 {
 
-enum class GLListMode : uint32_t {
+enum class GLListMode : UINT32
+{
     COMPILE = 0x1300,
     COMPILE_AND_EXECUTE = 0x1301,
 };
 
-enum class GLMatrixMode : uint32_t { MODELVIEW = 0x1700, PROJECTION = 0x1701, TEXTURE = 0x1702 };
+enum class GLMatrixMode : UINT32
+{
+    MODELVIEW = 0x1700,
+    PROJECTION = 0x1701,
+    TEXTURE = 0x1702
+};
 
 class glMatrixStack
 {

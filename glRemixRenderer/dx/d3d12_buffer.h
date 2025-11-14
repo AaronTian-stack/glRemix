@@ -24,7 +24,8 @@ public:
 };
 
 // Bitfield
-enum BufferVisibility : uint8_t {
+enum BufferVisibility : uint8_t
+{
     GPU = 1 << 0,
     CPU = 1 << 1,
 };

@@ -26,45 +26,45 @@ struct Vertex
 // TODO add more parameters (such as enabled) when encountered
 struct Light
 {
-    float ambient[4] = {0.f, 0.f, 0.f, 1.f};
-    float diffuse[4] = {1.f, 1.f, 1.f, 1.f};
-    float specular[4] = {1.f, 1.f, 1.f, 1.f};
+    float ambient[4] = { 0.f, 0.f, 0.f, 1.f };
+    float diffuse[4] = { 1.f, 1.f, 1.f, 1.f };
+    float specular[4] = { 1.f, 1.f, 1.f, 1.f };
 
-    float position[4] = {0.f, 0.f, 1.f, 0.f};  // default head down
+    float position[4] = { 0.f, 0.f, 1.f, 0.f };  // default head down
 
-    float spotDirection[3] = {0.f, 0.f, -1.f};
-    float spotExponent = 0.f;
-    float spotCutoff = 180.f;
+    float spot_direction[3] = { 0.f, 0.f, -1.f };
+    float spot_exponent = 0.f;
+    float spot_cutoff = 180.f;
 
-    float constantAttenuation = 1.f;
-    float linearAttenuation = 0.f;
-    float quadraticAttenuation = 0.f;
+    float constant_attenuation = 1.f;
+    float linear_attenuation = 0.f;
+    float quadratic_attenuation = 0.f;
 };
 
 // TODO add more parameters if encountered
 struct Material
 {
-    float ambient[4] = {1.f, 1.f, 1.f, 1.f};
-    float diffuse[4] = {1.f, 1.f, 1.f, 1.f};
-    float specular[4] = {0.f, 0.f, 0.f, 1.f};
-    float emission[4] = {0.f, 0.f, 0.f, 1.f};
+    float ambient[4] = { 1.f, 1.f, 1.f, 1.f };
+    float diffuse[4] = { 1.f, 1.f, 1.f, 1.f };
+    float specular[4] = { 0.f, 0.f, 0.f, 1.f };
+    float emission[4] = { 0.f, 0.f, 0.f, 1.f };
 
     float shininess = 0.f;
 };
 
 struct MeshRecord
 {
-    uint32_t meshId;      // will eventually be hashed
-    uint32_t vertexCount;
-    uint32_t indexCount;  // number of indices belonging to this mesh
+    UINT32 meshId;      // will eventually be hashed
+    UINT32 vertexCount;
+    UINT32 indexCount;  // number of indices belonging to this mesh
 
     // pointers
-    uint32_t vertexID;  // index into vertex buffer
-    uint32_t indexID;   // index into index buffer
-    uint32_t blasID;
-    uint32_t MVID;      // index into model view array
-    uint32_t matID;
-    uint32_t texID;
+    UINT32 vertexID;  // index into vertex buffer
+    UINT32 indexID;   // index into index buffer
+    UINT32 blasID;
+    UINT32 MVID;      // index into model view array
+    UINT32 matID;
+    UINT32 texID;
 };
 
 struct alignas(16) MVP

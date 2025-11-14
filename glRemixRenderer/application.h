@@ -5,12 +5,9 @@
 #include "dx/d3d12_context.h"
 #include "dx/d3d12_descriptor_heap.h"
 
-#define THROW_IF_FALSE(cond) \
-    do \
-    { \
-        if (!(cond)) \
-            throw std::runtime_error(#cond " failed"); \
-    } while (0)
+// clang-format off
+#define THROW_IF_FALSE(cond) do { if (!(cond)) throw std::runtime_error(#cond " failed"); } while (0)
+// clang-format on
 
 namespace glRemix
 {
@@ -26,7 +23,7 @@ protected:
     D3D12Queue m_gfx_queue;  // Direct command queue
 
     dx::D3D12Fence m_fence_frame_ready{};
-    std::array<uint64_t, m_frames_in_flight> m_fence_frame_ready_val{0, 0};
+    std::array<UINT64, m_frames_in_flight> m_fence_frame_ready_val{ 0, 0 };
 
     UINT m_frame_index = 0;
     bool m_quit = false;

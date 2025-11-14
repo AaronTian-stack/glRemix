@@ -20,7 +20,7 @@ set(GLREMIX_SHIM_HEADER_FILES
     "${GLREMIX_SHIM_SOURCE_DIR}/wgl_export_aliases.inl"
     "${GLREMIX_SHIM_SOURCE_DIR}/export_macros.h"
     "${GLREMIX_SHIM_SOURCE_DIR}/undef_export_macros.h"
-    "${GLREMIX_SHIM_SOURCE_DIR}/framerecorder.h"
+    "${GLREMIX_SHIM_SOURCE_DIR}/frame_recorder.h"
 )
 
 set(GLREMIX_SHIM_SCRIPT_FILES

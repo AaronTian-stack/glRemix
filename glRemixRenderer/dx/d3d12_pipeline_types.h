@@ -33,7 +33,8 @@ struct GraphicsPipelineDesc
         = false;  // For shader reflection: if true, increment slot for each input element
 };
 
-enum class ExportType : UINT {
+enum class ExportType : UINT
+{
     RAY_GEN = 0,
     MISS = 1,
     CLOSEST_HIT = 2,
