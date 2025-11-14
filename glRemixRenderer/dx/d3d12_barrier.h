@@ -10,7 +10,8 @@ struct Resource
 {
     ID3D12Resource* resource = nullptr;
 
-    union {
+    union
+    {
         D3D12_BARRIER_SUBRESOURCE_RANGE subresource_range;  // Textures
         UINT64 size_in_bytes;                               // Buffers
     };
@@ -26,7 +27,8 @@ struct Resource
     bool touched = false;
 };
 
-enum class Usage : uint32_t {
+enum class Usage : UINT32
+{
     SRV_PIXEL,
     SRV_NON_PIXEL,
     SRV_COMPUTE,

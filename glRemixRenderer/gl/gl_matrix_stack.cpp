@@ -111,7 +111,8 @@ XMFLOAT4X4& glMatrixStack::top(GLMatrixMode mode)
 
         case GLMatrixMode::TEXTURE: return texture.top();
 
-        default: {
+        default:
+        {
             static XMFLOAT4X4 identity;
             XMStoreFloat4x4(&identity, XMMatrixIdentity());
             return identity;
@@ -181,7 +182,8 @@ void glMatrixStack::frustum(GLMatrixMode mode, double l, double r, double b, dou
 
 void glMatrixStack::printStacks() const
 {
-    auto printMatrix = [](const DirectX::XMFLOAT4X4& m, const char* label, int level) {
+    auto printMatrix = [](const DirectX::XMFLOAT4X4& m, const char* label, int level)
+    {
         std::printf("[%s stack level %d]\n", label, level);
         std::printf("  %.6f  %.6f  %.6f  %.6f\n"
                     "  %.6f  %.6f  %.6f  %.6f\n"
@@ -191,7 +193,8 @@ void glMatrixStack::printStacks() const
                     m._34, m._41, m._42, m._43, m._44);
     };
 
-    auto dumpStack = [&](const std::stack<DirectX::XMFLOAT4X4>& s, const char* name) {
+    auto dumpStack = [&](const std::stack<DirectX::XMFLOAT4X4>& s, const char* name)
+    {
         if (s.empty())
         {
             std::printf("[%s stack] (empty)\n", name);

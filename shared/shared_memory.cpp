@@ -4,15 +4,15 @@
 
 glRemix::SharedMemory::~SharedMemory()
 {
-    _CloseAll();
+    _close_all();
 }
 
 // `CreateFileMapping`
-bool glRemix::SharedMemory::CreateForWriter(const wchar_t* name, uint32_t capacity)
+bool glRemix::SharedMemory::create_for_writer(const wchar_t* name, UINT32 capacity)
 {
-    _CloseAll();
+    _close_all();
 
-    DWORD _maxObjSize = static_cast<DWORD>(_MaxObjectSize(capacity));
+    DWORD _maxObjSize = static_cast<DWORD>(_max_object_size(capacity));
     HANDLE hMapFile = CreateFileMappingW(INVALID_HANDLE_VALUE,  // use paging file
                                          NULL,                  // default security
                                          PAGE_READWRITE,        // rw access
@@ -28,9 +28,9 @@ bool glRemix::SharedMemory::CreateForWriter(const wchar_t* name, uint32_t capaci
         return false;
     }
 
-    if (!_MapCommon(hMapFile))
+    if (!_map_common(hMapFile))
     {
-        // _MapCommon does its own error handling
+        // _map_common does its own error handling
         CloseHandle(hMapFile);
         return false;
     }
@@ -51,9 +51,9 @@ bool glRemix::SharedMemory::CreateForWriter(const wchar_t* name, uint32_t capaci
 }
 
 // `
-bool glRemix::SharedMemory::OpenForReader(const wchar_t* name)
+bool glRemix::SharedMemory::open_for_reader(const wchar_t* name)
 {
-    _CloseAll();
+    _close_all();
 
     HANDLE hMapFile = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, name);
     if (!hMapFile)
@@ -65,7 +65,7 @@ bool glRemix::SharedMemory::OpenForReader(const wchar_t* name)
         return false;
     }
 
-    if (!_MapCommon(hMapFile))
+    if (!_map_common(hMapFile))
     {
         CloseHandle(hMapFile);
         return false;
@@ -78,12 +78,12 @@ bool glRemix::SharedMemory::OpenForReader(const wchar_t* name)
     return true;
 }
 
-bool glRemix::SharedMemory::Write(const void* src, uint32_t bytes, uint32_t offset)
+bool glRemix::SharedMemory::write(const void* src, UINT32 bytes, UINT32 offset)
 {
     std::ostringstream ss;
     if (!m_header || !src || bytes > m_header->capacity)
     {
-        ss << "File not ready for writing, call `::CreateForWriter` first." << "\n";
+        ss << "File not ready for writing, call `::create_for_writer` first." << "\n";
         OutputDebugStringA(ss.str().c_str());
         return false;
     }
@@ -121,12 +121,12 @@ bool glRemix::SharedMemory::Write(const void* src, uint32_t bytes, uint32_t offs
     return true;
 }
 
-bool glRemix::SharedMemory::Read(void* dst, uint32_t maxBytes, uint32_t offset, uint32_t* outBytes)
+bool glRemix::SharedMemory::read(void* dst, UINT32 maxBytes, UINT32 offset, UINT32* outBytes)
 {
     std::ostringstream ss;
     if (!m_header || !dst)
     {
-        ss << "File not ready for reading, call `::OpenForReader` first." << "\n";
+        ss << "File not ready for reading, call `::open_for_reader` first." << "\n";
         OutputDebugStringA(ss.str().c_str());
 
         return false;
@@ -139,7 +139,7 @@ bool glRemix::SharedMemory::Read(void* dst, uint32_t maxBytes, uint32_t offset, 
         return false;
     }
 
-    uint32_t n = m_header->size;
+    UINT32 n = m_header->size;
     if (n > maxBytes)
     {
         ss << "Header size greater than desired max bytes. Truncating..." << "\n";
@@ -168,7 +168,7 @@ bool glRemix::SharedMemory::Read(void* dst, uint32_t maxBytes, uint32_t offset, 
     return true;
 }
 
-bool glRemix::SharedMemory::Peek(void* dst, uint32_t maxBytes, uint32_t offset, uint32_t* outBytes)
+bool glRemix::SharedMemory::peek(void* dst, UINT32 maxBytes, UINT32 offset, UINT32* outBytes)
 {
     if (!m_header || !dst)
     {
@@ -179,7 +179,7 @@ bool glRemix::SharedMemory::Peek(void* dst, uint32_t maxBytes, uint32_t offset, 
         return false;
     }
 
-    uint32_t n = m_header->size;
+    UINT32 n = m_header->size;
     if ((offset + n) > maxBytes)
     {
         n = (maxBytes > offset) ? (maxBytes - offset) : 0;
@@ -193,7 +193,7 @@ bool glRemix::SharedMemory::Peek(void* dst, uint32_t maxBytes, uint32_t offset, 
     return true;
 }
 
-bool glRemix::SharedMemory::_MapCommon(HANDLE hMapFile)
+bool glRemix::SharedMemory::_map_common(HANDLE hMapFile)
 {
     m_view = (LPTSTR)MapViewOfFile(hMapFile,             // handle to map object
                                    FILE_MAP_ALL_ACCESS,  // rw permission
@@ -217,7 +217,7 @@ bool glRemix::SharedMemory::_MapCommon(HANDLE hMapFile)
     return true;
 }
 
-void glRemix::SharedMemory::_CloseAll()
+void glRemix::SharedMemory::_close_all()
 {
     if (m_view)
     {

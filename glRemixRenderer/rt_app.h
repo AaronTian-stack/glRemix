@@ -66,10 +66,10 @@ class glRemixRenderer : public Application
         = gl::GLMatrixMode::MODELVIEW;  // "The initial matrix mode is MODELVIEW" - glspec pg. 29
     gl::GLListMode listMode = gl::GLListMode::COMPILE_AND_EXECUTE;
 
-    std::array<float, 4> color = {1.0f, 1.0f, 1.0f,
-                                  1.0f};  // current color (may need to be tracked globally)
-    std::array<float, 3> normal = {0.0f, 0.0f, 1.0f};  // global normal - default
-    Material m_material;                               // global states that can be modified
+    std::array<float, 4> color = { 1.0f, 1.0f, 1.0f,
+                                   1.0f };  // current color (may need to be tracked globally)
+    std::array<float, 3> normal = { 0.0f, 0.0f, 1.0f };  // global normal - default
+    Material m_material;                                 // global states that can be modified
 
     // shader resources
     std::array<Light, 8> m_lights{};
@@ -85,7 +85,7 @@ protected:
     void create_uav_rt();
 
     void read_gl_command_stream();
-    void read_ipc_buffer(std::vector<UINT8>& ipcBuf, size_t start_offset, uint32_t bytesRead,
+    void read_ipc_buffer(std::vector<UINT8>& ipcBuf, size_t start_offset, UINT32 bytesRead,
                          ID3D12GraphicsCommandList7* cmd_list, bool callList = false);
     void read_geometry(std::vector<UINT8>& ipcBuf, size_t& offset, GLTopology topology,
                        UINT32 bytes_read, ID3D12GraphicsCommandList7* cmd_list);

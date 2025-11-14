@@ -8,9 +8,14 @@
 namespace glRemix
 {
 
-enum class GLTopology : uint32_t { GL_QUADS = 0x0007, GL_QUAD_STRIP = 0x0008 };
+enum class GLTopology : UINT32
+{
+    GL_QUADS = 0x0007,
+    GL_QUAD_STRIP = 0x0008
+};
 
-enum class GLLight : uint32_t {
+enum class GLLight : UINT32
+{
     // light name
     GL_LIGHT0 = 0x4000,
     GL_LIGHT1 = 0x4001,
@@ -34,7 +39,8 @@ enum class GLLight : uint32_t {
     GL_QUADRATIC_ATTENUATION = 0x1209
 };
 
-enum class GLMaterial : uint32_t {
+enum class GLMaterial : UINT32
+{
     // face
     GL_NONE = 0x0000,
     GL_FRONT_LEFT = 0x0400,
@@ -58,7 +64,8 @@ enum class GLMaterial : uint32_t {
     GL_COLOR_INDEXES = 0x1603
 };
 
-enum class GLCommandType : uint32_t {
+enum class GLCommandType : UINT32
+{
     // Basic OpenGL 1.x commands
     GLCMD_BEGIN = 1,
     GLCMD_END,
@@ -146,7 +153,7 @@ struct GLVec4d
 
 struct GLEmptyCommand
 {
-    uint32_t reserved = 0;  // to maintain alignment. think of as padding GPUBuffers
+    UINT32 reserved = 0;  // to maintain alignment. think of as padding GPUBuffers
 };
 
 // Name *Unifs for clear association
@@ -154,13 +161,13 @@ struct GLEmptyCommand
 struct GLCommandUnifs
 {
     GLCommandType type;
-    uint32_t dataSize;
+    UINT32 dataSize;
 };
 
 // Specific command structures
 struct GLBeginCommand
 {
-    uint32_t mode;  // GL_TRIANGLES, GL_QUADS, etc.
+    UINT32 mode;  // GL_TRIANGLES, GL_QUADS, etc.
 };
 
 using GLEndCommand = GLEmptyCommand;
@@ -175,7 +182,7 @@ using GLTexCoord2fCommand = GLVec2f;
 // Matrix operations
 struct GLMatrixModeCommand
 {
-    uint32_t mode;
+    UINT32 mode;
 };
 
 struct GLLoadMatrixCommand
@@ -211,83 +218,83 @@ struct GLScaleCommand
 // Texture operations
 struct GLBindTextureCommand
 {
-    uint32_t target;
-    uint32_t texture;
+    UINT32 target;
+    UINT32 texture;
 };
 
 struct GLGenTexturesCommand
 {
-    uint32_t n;
+    UINT32 n;
 };
 
 struct GLDeleteTexturesCommand
 {
-    uint32_t n;
+    UINT32 n;
 };
 
 struct GLTexImage2DCommand
 {
-    uint32_t target;
+    UINT32 target;
     int32_t level;
     int32_t internalFormat;
-    uint32_t width;
-    uint32_t height;
+    UINT32 width;
+    UINT32 height;
     int32_t border;
-    uint32_t format;
-    uint32_t type;
-    uint64_t dataPtr;  // optional pointer for serialization
+    UINT32 format;
+    UINT32 type;
+    UINT64 dataPtr;  // optional pointer for serialization
 };
 
 struct GLTexParameterCommand
 {
-    uint32_t target;
-    uint32_t pname;
+    UINT32 target;
+    UINT32 pname;
     float param;
 };
 
 // Lighting
 struct GLEnableCommand
 {
-    uint32_t cap;
+    UINT32 cap;
 };
 
 struct GLDisableCommand
 {
-    uint32_t cap;
+    UINT32 cap;
 };
 
 struct GLLightCommand
 {
-    uint32_t light;
-    uint32_t pname;
+    UINT32 light;
+    UINT32 pname;
     float param;
 };
 
 struct GLLightfvCommand
 {
-    uint32_t light;
-    uint32_t pname;
+    UINT32 light;
+    UINT32 pname;
     GLVec4f params;
 };
 
 struct GLMaterialCommand
 {
-    uint32_t face;
-    uint32_t pname;
+    UINT32 face;
+    UINT32 pname;
     float param;
 };
 
 struct GLMaterialfvCommand
 {
-    uint32_t face;
-    uint32_t pname;
+    UINT32 face;
+    UINT32 pname;
     GLVec4f params;
 };
 
 // Buffer ops
 struct GLClearCommand
 {
-    uint32_t mask;
+    UINT32 mask;
 };
 
 struct GLClearColorCommand
@@ -325,13 +332,13 @@ using GLShutdownCommand = GLEmptyCommand;
 // Display Lists
 struct GLCallListCommand
 {
-    uint32_t list;
+    UINT32 list;
 };
 
 struct GLNewListCommand
 {
-    uint32_t list;
-    uint32_t mode;  // enum GL_COMPILE or GL_COMPILE_AND_EXECUTE
+    UINT32 list;
+    UINT32 mode;  // enum GL_COMPILE or GL_COMPILE_AND_EXECUTE
 };
 
 using GLEndListCommand = GLEmptyCommand;

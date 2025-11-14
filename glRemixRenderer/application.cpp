@@ -9,10 +9,10 @@ void Application::run_with_hwnd(const bool enable_debug_layer)
 
     THROW_IF_FALSE(m_context.create_queue(D3D12_COMMAND_LIST_TYPE_DIRECT, &m_gfx_queue));
 
-    D3D12_DESCRIPTOR_HEAP_DESC desc{.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
-                                    .NumDescriptors = 32,
-                                    .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
-                                    .NodeMask = 0};
+    D3D12_DESCRIPTOR_HEAP_DESC desc{ .Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
+                                     .NumDescriptors = 32,
+                                     .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
+                                     .NodeMask = 0 };
     THROW_IF_FALSE(m_context.create_descriptor_heap(desc, &m_rtv_heap, "default rtv heap"));
 
     // Swapchain creation is deferred until we receive HWND from command stream
