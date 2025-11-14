@@ -4,5 +4,5 @@
 
 c81c1a0ca30e97c0ff14b7c5d9a8f0e1e2c3d4e5  # ci: run clang-format on glRemixRenderer, glRemixShim, shared dirs
 b80dceab1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f  # ci: standardize casing for glRemix namespace
-7a75c1d44bc0814239c722553c691fdc5c7b7fc4  # ci: allman, UINT32/64, snakecase, git blame ignore
+6436be7d8ca891790ef7e2d43c16046af42de0e9  # ci: allman, UINT32/64, snakecase, git blame ignore
 
