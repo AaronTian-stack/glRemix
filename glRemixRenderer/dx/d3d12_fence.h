@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <wrl/client.h>
 #include <d3d12.h>
 

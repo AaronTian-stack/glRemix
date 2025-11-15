@@ -1,13 +1,12 @@
 #pragma once
+
+#include <array>
 #include <DirectXMath.h>
 
 using namespace DirectX;
 
 namespace glRemix
 {
-constexpr UINT64 MEGABYTE = 1024u * 1024u;
-constexpr UINT CB_ALIGNMENT = 256;
-
 struct RayGenConstantBuffer
 {
     XMFLOAT4X4 projection_matrix;
@@ -54,23 +53,16 @@ struct Material
 
 struct MeshRecord
 {
-    UINT32 meshId;      // will eventually be hashed
-    UINT32 vertexCount;
-    UINT32 indexCount;  // number of indices belonging to this mesh
+    UINT32 mesh_id;      // will eventually be hashed
+    UINT32 vertex_count;
+    UINT32 index_count;  // number of indices belonging to this mesh
 
     // pointers
-    UINT32 vertexID;  // index into vertex buffer
-    UINT32 indexID;   // index into index buffer
-    UINT32 blasID;
-    UINT32 MVID;      // index into model view array
-    UINT32 matID;
-    UINT32 texID;
-};
-
-struct alignas(16) MVP
-{
-    XMFLOAT4X4 model;
-    XMFLOAT4X4 view;
-    XMFLOAT4X4 proj;
+    UINT32 vertex_id;  // index into vertex buffer
+    UINT32 index_id;   // index into index buffer
+    UINT32 blas_id;
+    UINT32 mv_id;      // index into model view array
+    UINT32 mat_id;
+    UINT32 tex_id;
 };
 }  // namespace glRemix
