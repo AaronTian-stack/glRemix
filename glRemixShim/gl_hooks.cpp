@@ -197,7 +197,7 @@ void APIENTRY gl_tex_image_2d_ovr(GLenum target, GLint level, GLint internalForm
     payload.border = border;
     payload.format = format;
     payload.type = type;
-    payload.dataPtr = reinterpret_cast<uint64_t>(pixels);
+    payload.dataPtr = reinterpret_cast<UINT64>(pixels);
 
     g_recorder.record(GLCommandType::GLCMD_TEX_IMAGE_2D, &payload, sizeof(payload));
 }
@@ -406,7 +406,7 @@ HGLRC WINAPI create_context_ovr(HDC dc)
 
     g_recorder.record(GLCommandType::GLCMD_CREATE, &hwnd, sizeof(HWND));
 
-    return reinterpret_cast<HGLRC>(0xDEADBEEF);  // Dummy context handle
+    return reinterpret_cast<HGLRC>(static_cast<UINT_PTR>(0xDEADBEEF));  // Dummy context handle
 }
 
 BOOL WINAPI delete_context_ovr(HGLRC context)
