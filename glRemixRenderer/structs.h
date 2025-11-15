@@ -25,13 +25,13 @@ struct Vertex
 // TODO add more parameters (such as enabled) when encountered
 struct Light
 {
-    float ambient[4] = { 0.f, 0.f, 0.f, 1.f };
-    float diffuse[4] = { 1.f, 1.f, 1.f, 1.f };
-    float specular[4] = { 1.f, 1.f, 1.f, 1.f };
+    std::array<float, 4> ambient = { 0.f, 0.f, 0.f, 1.f };
+    std::array<float, 4> diffuse = { 1.f, 1.f, 1.f, 1.f };
+    std::array<float, 4> specular = { 1.f, 1.f, 1.f, 1.f };
 
-    float position[4] = { 0.f, 0.f, 1.f, 0.f };  // default head down
+    std::array<float, 4> position = { 0.f, 0.f, 1.f, 0.f };  // default head down
 
-    float spot_direction[3] = { 0.f, 0.f, -1.f };
+    std::array<float, 3> spot_direction = { 0.f, 0.f, -1.f };
     float spot_exponent = 0.f;
     float spot_cutoff = 180.f;
 
@@ -43,10 +43,10 @@ struct Light
 // TODO add more parameters if encountered
 struct Material
 {
-    float ambient[4] = { 1.f, 1.f, 1.f, 1.f };
-    float diffuse[4] = { 1.f, 1.f, 1.f, 1.f };
-    float specular[4] = { 0.f, 0.f, 0.f, 1.f };
-    float emission[4] = { 0.f, 0.f, 0.f, 1.f };
+    std::array<float, 4> ambient = { 1.f, 1.f, 1.f, 1.f };
+    std::array<float, 4> diffuse = { 1.f, 1.f, 1.f, 1.f };
+    std::array<float, 4> specular = { 0.f, 0.f, 0.f, 1.f };
+    std::array<float, 4> emission = { 0.f, 0.f, 0.f, 1.f };
 
     float shininess = 0.f;
 };
