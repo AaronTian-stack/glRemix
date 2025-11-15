@@ -6,7 +6,7 @@
 
 #include "application.h"
 #include <DirectXMath.h>
-#include "helper.h"
+#include "math_utils.h"
 
 #include "imgui.h"
 #include "imgui_impl_win32.h"

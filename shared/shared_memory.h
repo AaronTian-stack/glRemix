@@ -2,7 +2,7 @@
 
 #include <windows.h>
 
-#include "helper.h"
+#include "math_utils.h"
 
 namespace glRemix
 {

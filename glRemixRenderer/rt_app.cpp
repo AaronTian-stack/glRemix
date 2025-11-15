@@ -1,6 +1,6 @@
 #include "rt_app.h"
 
-#include "helper.h"
+#include "math_utils.h"
 #include "imgui.h"
 #include "dx/d3d12_barrier.h"
 #include <cstdio>
