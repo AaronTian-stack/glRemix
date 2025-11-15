@@ -4,6 +4,8 @@
 #include <DirectXMath.h>
 #include <stack>
 
+using namespace DirectX;
+
 namespace glRemix::gl
 {
 
@@ -25,14 +27,14 @@ class glMatrixStack
 public:
     glMatrixStack();
 
-    std::stack<DirectX::XMFLOAT4X4> model_view;
-    std::stack<DirectX::XMFLOAT4X4> projection;
-    std::stack<DirectX::XMFLOAT4X4> texture;
+    std::stack<XMFLOAT4X4> model_view;
+    std::stack<XMFLOAT4X4> projection;
+    std::stack<XMFLOAT4X4> texture;
 
     void push(GLMatrixMode mode);
     void pop(GLMatrixMode mode);
-    DirectX::XMFLOAT4X4& top(GLMatrixMode mode);
-    void mulSet(GLMatrixMode mode, DirectX::XMMATRIX R);  // multiplies and sets top of stack
+    XMFLOAT4X4& top(GLMatrixMode mode);
+    void mul_set(GLMatrixMode mode, const XMMATRIX& r);  // multiplies and sets top of stack
 
     // operations
     void identity(GLMatrixMode mode);
@@ -41,7 +43,7 @@ public:
     void frustum(GLMatrixMode mode, double l, double r, double b, double t, double n, double f);
 
     // debug
-    void printStacks() const;
+    void print_stacks() const;
 };
 
 }  // namespace glRemix::gl

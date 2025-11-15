@@ -35,7 +35,7 @@ void DebugWindow::render_performance_stats()
     const ImGuiIO& io = ImGui::GetIO();
     m_fps = io.Framerate;
 
-    ImGui::Text("FPS: %.1f (%.3f ms/frame)", m_fps, 1000.f / m_fps);
+    ImGui::Text("FPS: %.1f (%.3f ms/frame)", m_fps, 1000.0f / m_fps);
 }
 
 void DebugWindow::render_settings()

@@ -12,6 +12,7 @@ set(GLREMIX_SHARED_HEADER_NAMES
 	"shared_memory.h"
 	"gl_commands.h"
 	"ipc_protocol.h"
+	"helper.h"
 )
 
 set(GLREMIX_SHARED_SOURCE_NAMES

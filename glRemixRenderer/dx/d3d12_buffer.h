@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <wrl/client.h>
 #include <D3D12MemAlloc.h>
 #include "d3d12_barrier.h"
@@ -24,7 +23,7 @@ public:
 };
 
 // Bitfield
-enum BufferVisibility : uint8_t
+enum BufferVisibility : UINT8
 {
     GPU = 1 << 0,
     CPU = 1 << 1,

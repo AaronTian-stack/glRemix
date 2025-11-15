@@ -18,7 +18,7 @@ std::mutex g_hook_mutex;
 // Function pointers for our custom hook implementations
 tsl::robin_map<std::string, PROC> g_hooks;
 
-HANDLE g_renderer_process = NULL;
+HANDLE g_renderer_process = nullptr;
 
 std::once_flag g_initialize_flag;
 
@@ -57,7 +57,7 @@ void initialize()
                            // override `dll_path`
                            std::array renderer_path = std::to_array(
                                GLREMIX_CUSTOM_RENDERER_EXE_PATH);
-                           std::strcpy(dll_path.data(), renderer_path.data());
+                           strcpy_s(dll_path.data(), dll_path.size(), renderer_path.data());
 #endif
                            STARTUPINFOA si{ .cb = sizeof(STARTUPINFOA) };
                            PROCESS_INFORMATION pi;
@@ -78,7 +78,7 @@ void initialize()
                    });
 }
 
-void register_hook(const char* name, PROC proc)
+void register_hook(const char* name, const PROC proc)
 {
     if (name == nullptr)
     {
