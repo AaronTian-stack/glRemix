@@ -46,14 +46,14 @@ void FrameRecorder::end_frame()
     m_buffer.reserve(sizeof(m_frame_unifs) + m_frame_unifs.payload_size);
 
     m_buffer.insert(m_buffer.end(), reinterpret_cast<UINT8*>(&m_frame_unifs),
-                  reinterpret_cast<UINT8*>(&m_frame_unifs) + sizeof(m_frame_unifs));
+                    reinterpret_cast<UINT8*>(&m_frame_unifs) + sizeof(m_frame_unifs));
 
     if (!m_commands.empty())
     {
         for (auto& cmd : m_commands)
         {
             m_buffer.insert(m_buffer.end(), reinterpret_cast<UINT8*>(&cmd.cmd_unifs),
-                          reinterpret_cast<UINT8*>(&cmd.cmd_unifs) + sizeof(cmd.cmd_unifs));
+                            reinterpret_cast<UINT8*>(&cmd.cmd_unifs) + sizeof(cmd.cmd_unifs));
             m_buffer.insert(m_buffer.end(), cmd.data.begin(), cmd.data.end());
         }
     }

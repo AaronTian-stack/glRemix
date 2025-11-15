@@ -143,7 +143,8 @@ void glMatrixStack::mul_set(const GLMatrixMode mode, const XMMATRIX& r)
 
 // operations
 
-void glMatrixStack::rotate(const GLMatrixMode mode, const float angle, const float x, const float y, const float z)
+void glMatrixStack::rotate(const GLMatrixMode mode, const float angle, const float x, const float y,
+                           const float z)
 {
     const float len = std::sqrt(x * x + y * y + z * z);
     const float inv_len = 1.0f / len;
@@ -163,8 +164,8 @@ void glMatrixStack::translate(GLMatrixMode mode, float x, float y, float z)
     mul_set(mode, t);
 }
 
-void glMatrixStack::frustum(const GLMatrixMode mode, const double l, const double r, const double b, const double t, const double n,
-                            const double f)
+void glMatrixStack::frustum(const GLMatrixMode mode, const double l, const double r, const double b,
+                            const double t, const double n, const double f)
 {
     const auto L = static_cast<float>(l);
     const auto R = static_cast<float>(r);

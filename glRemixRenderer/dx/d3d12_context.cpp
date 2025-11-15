@@ -926,7 +926,8 @@ void D3D12Context::create_shader_resource_view_acceleration_structure(
     m_device->CreateShaderResourceView(nullptr, &srv_desc, cpu_handle);
 }
 
-void D3D12Context::create_unordered_access_view_texture(const D3D12Texture* texture, const DXGI_FORMAT format,
+void D3D12Context::create_unordered_access_view_texture(const D3D12Texture* texture,
+                                                        const DXGI_FORMAT format,
                                                         const D3D12DescriptorTable* descriptor_table,
                                                         const UINT descriptor_index) const
 {
@@ -959,8 +960,8 @@ bool D3D12Context::create_root_signature(const D3D12_ROOT_SIGNATURE_DESC& desc,
     ComPtr<ID3DBlob> signature;
     ComPtr<ID3DBlob> error;
     if (FAILED(D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1,
-        signature.ReleaseAndGetAddressOf(),
-        error.ReleaseAndGetAddressOf())))
+                                           signature.ReleaseAndGetAddressOf(),
+                                           error.ReleaseAndGetAddressOf())))
     {
         if (error)
         {
@@ -970,8 +971,8 @@ bool D3D12Context::create_root_signature(const D3D12_ROOT_SIGNATURE_DESC& desc,
     }
 
     if (FAILED(m_device->CreateRootSignature(0, signature->GetBufferPointer(),
-        signature->GetBufferSize(),
-        IID_PPV_ARGS(root_signature))))
+                                             signature->GetBufferSize(),
+                                             IID_PPV_ARGS(root_signature))))
     {
         OutputDebugStringA("D3D12 ERROR: Failed to create root signature\n");
         return false;
@@ -1277,8 +1278,7 @@ D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC D3D12Context::get_buffer_rt_description
 
 D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC D3D12Context::get_buffer_rt_description_subrange(
     const D3D12Buffer* vertex_buffer, const UINT32 vertex_count, const UINT32 vertex_offset,
-    const D3D12Buffer* index_buffer, const UINT32 index_count,
-    const UINT32 index_offset)
+    const D3D12Buffer* index_buffer, const UINT32 index_count, const UINT32 index_offset)
 {
     assert(vertex_buffer);
     assert(vertex_buffer->desc.visibility & GPU);
@@ -1485,9 +1485,9 @@ bool D3D12Context::init_imgui()
     };
     init_info.SrvDescriptorFreeFn =
         [](ImGui_ImplDX12_InitInfo*, D3D12_CPU_DESCRIPTOR_HANDLE, D3D12_GPU_DESCRIPTOR_HANDLE)
-        {
-            // Managed by entire heap
-        };
+    {
+        // Managed by entire heap
+    };
 
     if (!ImGui_ImplDX12_Init(&init_info))
     {

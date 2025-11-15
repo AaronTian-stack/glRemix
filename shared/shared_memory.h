@@ -30,8 +30,8 @@ struct SharedMemoryHeader
 {
     // must use UINT32 here, int does not fix size
     volatile SharedState state;  // tracks state across processes
-    volatile UINT32 size;      // curr bytes in payload[]
-    UINT32 capacity;           // total bytes available in payload[]
+    volatile UINT32 size;        // curr bytes in payload[]
+    UINT32 capacity;             // total bytes available in payload[]
 };
 
 class SharedMemory
@@ -101,6 +101,5 @@ public:
     {
         return m_readEvent;
     }
-
 };
 }  // namespace glRemix

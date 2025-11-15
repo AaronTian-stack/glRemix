@@ -68,9 +68,9 @@ class glRemixRenderer : public Application
     gl::GLListMode list_mode_ = gl::GLListMode::COMPILE_AND_EXECUTE;
 
     std::array<float, 4> m_color = { 1.0f, 1.0f, 1.0f,
-                                   1.0f };  // current color (may need to be tracked globally)
+                                     1.0f };  // current color (may need to be tracked globally)
     std::array<float, 3> m_normal = { 0.0f, 0.0f, 1.0f };  // global normal - default
-    Material m_material;                                 // global states that can be modified
+    Material m_material;                                   // global states that can be modified
 
     // shader resources
     std::array<Light, 8> m_lights{};

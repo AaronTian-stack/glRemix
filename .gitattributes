@@ -1,0 +1,15 @@
+# Normalize line endings
+* text=auto eol=lf
+
+# Binary files
+*.exe binary
+*.dll binary
+*.lib binary
+*.obj binary
+*.o binary
+
+# Visual Studio files
+*.vcxproj text eol=lf
+*.vcxproj.filters text eol=lf
+*.sln text eol=lf
+*.props text eol=lf

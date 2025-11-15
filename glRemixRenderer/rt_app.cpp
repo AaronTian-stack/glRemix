@@ -262,7 +262,8 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
 
     // stall until frame data is grabbed
     UINT32 bytes_read = 0;
-    while (!m_ipc.try_consume_frame(ipc_buf.data(), static_cast<UINT32>(ipc_buf.size()), &bytes_read))
+    while (
+        !m_ipc.try_consume_frame(ipc_buf.data(), static_cast<UINT32>(ipc_buf.size()), &bytes_read))
     {
         OutputDebugStringA("No frame data available.\n");
         std::this_thread::sleep_for(std::chrono::milliseconds(60));  // rest before next poll
@@ -383,7 +384,8 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf, size
                     return;  // return immediately if we are within a calllist (we should return to
                              // the invocation of read_ipc_buffer)
                 }
-                const auto display_list_end = offset;  // record GL_END_LIST to mark end of display list
+                const auto display_list_end
+                    = offset;  // record GL_END_LIST to mark end of display list
 
                 // record new list in respective index
                 std::vector new_list(ipc_buf.begin() + display_list_begin,
@@ -399,8 +401,8 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf, size
             {
                 const auto* type = reinterpret_cast<const GLBeginCommand*>(
                     ipc_buf.data() + offset);  // reach into data payload
-                offset += header->dataSize;   // we enter read geometry assuming first command
-                                              // inbetween glbegin and end
+                offset += header->dataSize;    // we enter read geometry assuming first command
+                                               // inbetween glbegin and end
                 advance = false;
                 read_geometry(
                     ipc_buf, &offset, static_cast<GLTopology>(type->mode), bytes_read,
@@ -480,7 +482,7 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf, size
             case GLCommandType::GLCMD_ROTATE:
             {
                 const auto* angle_axis = reinterpret_cast<const GLRotateCommand*>(ipc_buf.data()
-                                                                                 + offset);
+                                                                                  + offset);
                 const float angle = angle_axis->angle;
                 const float x = angle_axis->axis.x;
                 const float y = angle_axis->axis.y;
@@ -527,8 +529,8 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf, size
             default:
             {
                 char buffer[256];
-                sprintf_s(buffer, "Unhandled Command: %d (size: %u)\n",
-                          header->type, header->dataSize);
+                sprintf_s(buffer, "Unhandled Command: %d (size: %u)\n", header->type,
+                          header->dataSize);
                 OutputDebugStringA(buffer);
                 break;
             }
@@ -736,7 +738,7 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
 
         // create blas buffer
         mesh.blas_id = build_mesh_blas(m_vertex_buffers[mesh.vertex_id],
-                                      m_index_buffers[mesh.index_id], cmd_list);
+                                       m_index_buffers[mesh.index_id], cmd_list);
 
         m_mesh_map[hash] = mesh;
     }

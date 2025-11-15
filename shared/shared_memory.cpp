@@ -13,12 +13,13 @@ bool glRemix::SharedMemory::create_for_writer(const wchar_t* name, const UINT32 
     close_all();
 
     const auto max_obj_size = static_cast<DWORD>(max_object_size(capacity));
-    const auto h_map_file = CreateFileMappingW(INVALID_HANDLE_VALUE,  // use paging file
-                                         nullptr,                  // default security
-                                         PAGE_READWRITE,        // rw access
-                                         0,            // maximum object size (high-order DWORD)
-                                         max_obj_size,  // maximum object size (low-order DWORD)
-                                         name);        // name of mapping object
+    const auto h_map_file
+        = CreateFileMappingW(INVALID_HANDLE_VALUE,  // use paging file
+                             nullptr,               // default security
+                             PAGE_READWRITE,        // rw access
+                             0,                     // maximum object size (high-order DWORD)
+                             max_obj_size,          // maximum object size (low-order DWORD)
+                             name);                 // name of mapping object
 
     if (!h_map_file)
     {
@@ -120,7 +121,8 @@ bool glRemix::SharedMemory::write(const void* src, const UINT32 bytes, const UIN
     return true;
 }
 
-bool glRemix::SharedMemory::read(void* dst, const UINT32 max_bytes, const UINT32 offset, UINT32* out_bytes)
+bool glRemix::SharedMemory::read(void* dst, const UINT32 max_bytes, const UINT32 offset,
+                                 UINT32* out_bytes)
 {
     std::ostringstream ss;
     if (!m_header || !dst)
@@ -167,7 +169,8 @@ bool glRemix::SharedMemory::read(void* dst, const UINT32 max_bytes, const UINT32
     return true;
 }
 
-bool glRemix::SharedMemory::peek(void* dst, const UINT32 max_bytes, const UINT32 offset, UINT32* out_bytes) const
+bool glRemix::SharedMemory::peek(void* dst, const UINT32 max_bytes, const UINT32 offset,
+                                 UINT32* out_bytes) const
 {
     if (!m_header || !dst)
     {
@@ -194,8 +197,8 @@ bool glRemix::SharedMemory::peek(void* dst, const UINT32 max_bytes, const UINT32
 
 bool glRemix::SharedMemory::map_common(const HANDLE h_map_file)
 {
-    m_view = static_cast<LPTSTR>(MapViewOfFile(h_map_file, // handle to map object
-                                               FILE_MAP_ALL_ACCESS, // rw permission
+    m_view = static_cast<LPTSTR>(MapViewOfFile(h_map_file,           // handle to map object
+                                               FILE_MAP_ALL_ACCESS,  // rw permission
                                                0, 0, 0));
 
     if (m_view == nullptr)

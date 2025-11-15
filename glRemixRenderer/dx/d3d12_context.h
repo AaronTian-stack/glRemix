@@ -137,8 +137,8 @@ public:
                                     const char* debug_name) const;
 
     // TODO: Similar function for AABB buffers? Need it for area lights.
-    static D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC get_buffer_rt_description(const D3D12Buffer* vertex_buffer,
-                                                                              const D3D12Buffer* index_buffer);
+    static D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC get_buffer_rt_description(
+        const D3D12Buffer* vertex_buffer, const D3D12Buffer* index_buffer);
     static D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC get_buffer_rt_description_subrange(
         const D3D12Buffer* vertex_buffer, UINT32 vertex_count, UINT32 vertex_offset,
         const D3D12Buffer* index_buffer, UINT32 index_count, UINT32 index_offset);
@@ -152,8 +152,7 @@ public:
     bool mark_use(D3D12Texture* texture, Usage use_kind);
 
     void emit_barriers(ID3D12GraphicsCommandList7* cmd_list, D3D12Buffer* const* buffers,
-                       size_t buffer_count, D3D12Texture* const* textures,
-                       size_t texture_count);
+                       size_t buffer_count, D3D12Texture* const* textures, size_t texture_count);
 
     void bind_vertex_buffers(ID3D12GraphicsCommandList7* cmd_list, UINT start_slot,
                              UINT buffer_count, const D3D12Buffer* const* buffers,
