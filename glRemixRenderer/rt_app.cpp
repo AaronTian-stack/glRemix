@@ -45,7 +45,7 @@ void glRemix::glRemixRenderer::create()
 
     // Get executable directory for shader paths
     wchar_t exe_path[MAX_PATH];
-    GetModuleFileNameW(NULL, exe_path, MAX_PATH);
+    GetModuleFileNameW(nullptr, exe_path, MAX_PATH);
     std::filesystem::path exe_dir = std::filesystem::path(exe_path).parent_path();
     std::filesystem::path shader_dir = exe_dir / "shaders";
 
@@ -133,8 +133,7 @@ void glRemix::glRemixRenderer::create()
     {
         D3D12_DESCRIPTOR_HEAP_DESC descriptor_heap_desc{
             .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-            .NumDescriptors
-            = 6,  // TLAS SRV, meshes SRV, materials SRV, lights SRV, Output UAV, Raygen CB
+            .NumDescriptors = 1000000,
             .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
         };
         THROW_IF_FALSE(m_context.create_descriptor_heap(descriptor_heap_desc, &m_rt_descriptor_heap,
@@ -188,7 +187,7 @@ void glRemix::glRemixRenderer::create()
         dx::BufferDesc shader_table_desc{
             .size = total_shader_table_size,
             .stride = 0,
-            .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+            .visibility = dx::CPU | dx::GPU,
         };
         THROW_IF_FALSE(m_context.create_buffer(shader_table_desc, &m_shader_table, "shader tables"));
 
@@ -217,7 +216,7 @@ void glRemix::glRemixRenderer::create()
     dx::BufferDesc raygen_cb_desc{
         .size = align_u32(sizeof(RayGenConstantBuffer), CB_ALIGNMENT),
         .stride = align_u32(sizeof(RayGenConstantBuffer), CB_ALIGNMENT),
-        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+        .visibility = dx::CPU | dx::GPU,
     };
     for (UINT i = 0; i < m_frames_in_flight; i++)
     {
@@ -239,7 +238,7 @@ void glRemix::glRemixRenderer::create()
     dx::BufferDesc instance_buffer_desc{
         .size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * 64,
         .stride = sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
-        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+        .visibility = dx::CPU | dx::GPU,
     };
     THROW_IF_FALSE(
         m_context.create_buffer(instance_buffer_desc, &m_tlas.instance, "TLAS instance buffer"));
@@ -312,9 +311,9 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     THROW_IF_FALSE(m_context.wait_fences(wait_info));  // Block CPU until done
 }
 
-void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf, size_t start_offset,
-                                               UINT32 bytes_read,
-                                               ID3D12GraphicsCommandList7* cmd_list, bool call_list)
+void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf, const size_t start_offset,
+                                               const UINT32 bytes_read,
+                                               ID3D12GraphicsCommandList7* cmd_list, const bool call_list)
 {
     // display list logic
     UINT32 list_index = 0;
