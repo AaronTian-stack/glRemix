@@ -21,6 +21,7 @@ set(RENDERER_SOURCES
     "${dx_dir}/d3d12_descriptor_heap.cpp"
     "${dx_dir}/d3d12_pipeline_types.cpp"
     "${dx_dir}/d3d12_barrier.cpp"
+    "descriptor_pager.cpp"
 
     "${gl_dir}/gl_matrix_stack.cpp"
 
@@ -41,6 +42,7 @@ set(RENDERER_HEADERS
     "${dx_dir}/d3d12_buffer.h"
     "${dx_dir}/d3d12_texture.h"
     "${dx_dir}/d3d12_barrier.h"
+    "descriptor_pager.h"
 
     "${gl_dir}/gl_matrix_stack.h"
 

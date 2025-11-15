@@ -6,19 +6,16 @@ struct RayGenConstantBuffer
     float height;
 };
 
+// Other stuff matches C layout
+// TODO: Make shared file for these structs
+
 struct MeshRecord
 {
-    uint meshId;
-    uint vertexOffset;
-    uint vertexCount;
-    uint indexOffset;
-    uint indexCount;
-
-    uint blasID;
-    uint MVID;
-    uint matID;
-    uint texID;
-    // need padding?
+    uint vertex_idx;
+    uint index_idx;
+    // Materials are structured buffers. For now assume index 0
+    // TODO: Add second buffer index
+    uint mat_idx;
 };
 
 struct Material
@@ -29,7 +26,6 @@ struct Material
     float4 emission;
 
     float shininess;
-    // need padding?
 };
 
 struct Light
@@ -40,28 +36,24 @@ struct Light
 
     float4 position;
 
-    float3 spotDirection;
-    float spotExponent;
-    float spotCutoff;
+    float3 spot_direction;
+    float spot_exponent;
+    float spot_cutoff;
 
-    float constantAttenuation;
-    float linearAttenuation;
-    float quadraticAttenuation;
-    // need padding?
+    float constant_attenuation;
+    float linear_attenuation;
+    float quadratic_attenuation;
 };
 
-RaytracingAccelerationStructure Scene : register(t0, space0);
+RaytracingAccelerationStructure scene : register(t0);
 
-/*
-StructuredBuffer<MeshRecord> meshes : register(t1);
-StructuredBuffer<Material> materials : register(t2);
-StructuredBuffer<Light> lights : register(t3);*/
+RWTexture2D<float4> render_target : register(u0);
+ConstantBuffer<RayGenConstantBuffer> g_raygen_cb : register(b0);
 
-RWTexture2D<float4> RenderTarget : register(u0);
-ConstantBuffer<RayGenConstantBuffer> g_rayGenCB : register(b0);
+StructuredBuffer<MeshRecord> meshes[] : register(t1);
 
 // https://learn.microsoft.com/en-us/windows/win32/direct3d12/intersection-attributes
-typedef BuiltInTriangleIntersectionAttributes MyAttributes;
+typedef BuiltInTriangleIntersectionAttributes TriAttributes;
 
 struct RayPayload
 {
@@ -88,17 +80,17 @@ float3 cosine_sample_hemisphere(float2 xi)
     return float3(x, y, z);
 }
 
-float3 transform_to_world(float3 localDir, float3 N)
+float3 transform_to_world(float3 local_dir, float3 N)
 {
     float3 up = abs(N.z) < 0.999f ? float3(0, 0, 1) : float3(1, 0, 0);
     float3 tangent = normalize(cross(up, N));
     float3 bitangent = cross(N, tangent);
-    return normalize(localDir.x * tangent + localDir.y * bitangent + localDir.z * N);
+    return normalize(local_dir.x * tangent + local_dir.y * bitangent + local_dir.z * N);
 }
 
 [shader("raygeneration")] void RayGenMain()
 {
-    float2 uv = (float2)DispatchRaysIndex() / float2(g_rayGenCB.width, g_rayGenCB.height);
+    float2 uv = (float2)DispatchRaysIndex() / float2(g_raygen_cb.width, g_raygen_cb.height);
 
     float2 ndc = uv * 2.0f - 1.0f;
     ndc.y = -ndc.y;  // Flip Y for correct screen space orientation
@@ -109,8 +101,8 @@ float3 transform_to_world(float3 localDir, float3 N)
     float4 far_point = float4(ndc, 1.0f, 1.0f);  // look down -Z match gl convention
 
     // Transform to world space
-    float4 near_world = mul(near_point, g_rayGenCB.inv_view_proj);
-    float4 far_world = mul(far_point, g_rayGenCB.inv_view_proj);
+    float4 near_world = mul(near_point, g_raygen_cb.inv_view_proj);
+    float4 far_world = mul(far_point, g_raygen_cb.inv_view_proj);
 
     near_world /= near_world.w;
     far_world /= far_world.w;
@@ -137,7 +129,7 @@ float3 transform_to_world(float3 localDir, float3 N)
         ray.TMax = 10000.0;
 
         // Note winding order if you don't see anything
-        TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
+        TraceRay(scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
 
         if (!payload.hit)
         {
@@ -151,20 +143,20 @@ float3 transform_to_world(float3 localDir, float3 N)
         // throughput *= 0.6f;
 
         float2 xi = float2(rand(seed), rand(seed));
-        float3 localDir = cosine_sample_hemisphere(xi);
+        float3 local_dir = cosine_sample_hemisphere(xi);
         float3 N = normalize(payload.normal);
-        float3 newDir = transform_to_world(localDir, N);
+        float3 new_dir = transform_to_world(local_dir, N);
 
-        ray_dir = newDir;
+        ray_dir = new_dir;
         origin = payload.hit_pos + ray_dir * 0.001f;
     }
 
-    RenderTarget[DispatchRaysIndex().xy] = float4(total_color, 1.0);
+    render_target[DispatchRaysIndex().xy] = float4(total_color, 1.0);
     // RenderTarget[DispatchRaysIndex().xy] = float4(uv, 0.0, 1.0);
     // RenderTarget[DispatchRaysIndex().xy] = float4(ray_dir * 0.5 + 0.5, 1.0);
 }
 
-    [shader("closesthit")] void ClosestHitMain(inout RayPayload payload, in MyAttributes attr)
+    [shader("closesthit")] void ClosestHitMain(inout RayPayload payload, in TriAttributes attr)
 {
     /*
     // check indexing logic

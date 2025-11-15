@@ -53,16 +53,20 @@ struct Material
 
 struct MeshRecord
 {
-    UINT32 mesh_id;      // will eventually be hashed
-    UINT32 vertex_count;
-    UINT32 index_count;  // number of indices belonging to this mesh
+    UINT32 mesh_id;       // will eventually be hashed
 
-    // pointers
-    UINT32 vertex_id;  // index into vertex buffer
-    UINT32 index_id;   // index into index buffer
-    UINT32 blas_id;
-    UINT32 mv_id;      // index into model view array
-    UINT32 mat_id;
-    UINT32 tex_id;
+    UINT32 blas_idx;
+    UINT32 mv_idx;        // index into model view array
+    UINT32 vertex_idx;    // index into vertex buffer
+    UINT32 index_idx;     // index into index buffer
+    UINT32 mat_idx;
 };
+
+struct GPUMeshRecord
+{
+    UINT32 vertex_idx;
+    UINT32 index_idx;
+    UINT32 mat_idx;
+};
+
 }  // namespace glRemix

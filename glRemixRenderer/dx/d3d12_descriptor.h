@@ -1,16 +1,17 @@
 #pragma once
+#include <cassert>
+
+#include "d3d12_descriptor_heap.h"
 
 namespace glRemix::dx
 {
 class D3D12DescriptorHeap;
 
-struct D3D12DescriptorTable
+constexpr UINT CREATE_NEW_DESCRIPTOR = UINT_MAX;
+
+struct D3D12Descriptor
 {
-    UINT64 offset = 0;  // Offset from start of heap in number of descriptors
-    size_t count = 0;   // Number of descriptors in this table
     D3D12DescriptorHeap* heap = nullptr;
-private:
-    D3D12MA::VirtualAllocation alloc{};
-    friend class D3D12DescriptorHeap;
+    UINT offset = CREATE_NEW_DESCRIPTOR;
 };
 }  // namespace glRemix::dx

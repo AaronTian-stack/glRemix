@@ -3,6 +3,7 @@
 #include "application.h"
 #include "debug_window.h"
 #include "dx/d3d12_as.h"
+#include "descriptor_pager.h"
 #include "gl/gl_matrix_stack.h"
 #include <DirectXMath.h>
 #include <ipc_protocol.h>
@@ -23,15 +24,18 @@ class glRemixRenderer : public Application
     ComPtr<ID3D12RootSignature> m_rt_global_root_signature{};
     ComPtr<ID3D12StateObject> m_rt_pipeline{};
 
-    dx::D3D12DescriptorHeap m_rt_descriptor_heap{};
-    dx::D3D12DescriptorTable m_rt_descriptors{};
+    dx::D3D12DescriptorHeap m_GPU_descriptor_heap{};
+    dx::D3D12DescriptorHeap m_CPU_descriptor_heap{};
 
-    // TODO: Add other per frame constants as needed, rename accordingly
-    // Copy parameters to this buffer each frame
+    dx::DescriptorPager m_descriptor_pager{};
+
     std::array<dx::D3D12Buffer, m_frames_in_flight> m_raygen_constant_buffers{};
+    std::array<dx::D3D12Descriptor, m_frames_in_flight> m_raygen_cbv_descriptors{};
 
     dx::D3D12Buffer m_scratch_space{};
+
     dx::D3D12TLAS m_tlas{};
+    dx::D3D12Descriptor m_tlas_descriptor{};
 
     dx::D3D12Buffer m_meshes_buffer{};
     dx::D3D12Buffer m_materials_buffer{};
@@ -43,7 +47,8 @@ class glRemixRenderer : public Application
     UINT64 m_miss_shader_table_offset{};
     UINT64 m_hit_group_shader_table_offset{};
 
-    dx::D3D12Texture m_uav_render_target{};
+    dx::D3D12Texture m_uav_rt{};
+    dx::D3D12Descriptor m_uav_rt_descriptor{};
 
     IPCProtocol m_ipc;
 
