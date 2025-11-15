@@ -8,8 +8,6 @@
 
 namespace glRemix
 {
-FrameRecorder g_recorder;
-
 namespace gl
 {
 // Both WGL and OpenGL functions may be called from multiple threads hence the mutex
