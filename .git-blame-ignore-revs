@@ -8,3 +8,4 @@ d419e873b93b22311bd15558a299b1e49608cda0  # ci: move helper.h, const correct, na
 c81c1a06ea27093ba468ea94e98c89b7821e3a3d  # ci: run clang-format on glRemixRenderer, glRemixShim, shared dirs
 b80dcead419e99dcc9f926d5f30c9df9666772b1  # ci: standardize casing for glRemix namespace
 25d509d19faa92fe817cdea45ae4e7cff08ffc1c  # ci: convert 'frame_recorder.h' to CRLF
+9007611c0aa459df1c3fe1eabd4b9ab8abf0c2dc  # ci: convert 'frame_recorder.cpp' to LF
