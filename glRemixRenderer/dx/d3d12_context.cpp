@@ -143,11 +143,11 @@ bool D3D12Context::create(const bool enable_debug_layer)
     }
     if (m_options5.RaytracingTier < D3D12_RAYTRACING_TIER_1_1)
     {
-        OutputDebugStringA("D3D12 ERROR: Raytracing tier 1.1 is not supported\n");
+        OutputDebugStringA("D3D12 ERROR: Raytracing Tier 1.1 is not supported\n");
         return false;
     }
 
-    D3D12_FEATURE_DATA_D3D12_OPTIONS16 options16 = {};  // For GPU upload heaps
+    D3D12_FEATURE_DATA_D3D12_OPTIONS16 options16{};  // For GPU upload heaps
     if (FAILED(m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS16, &options16,
                                              sizeof(options16))))
     {
@@ -155,7 +155,7 @@ bool D3D12Context::create(const bool enable_debug_layer)
         return false;
     }
 
-    // Find the highest supported shader model
+    // Find the highest supported SM
     constexpr std::array shader_models{
         D3D_SHADER_MODEL_6_6, D3D_SHADER_MODEL_6_5, D3D_SHADER_MODEL_6_4, D3D_SHADER_MODEL_6_2,
         D3D_SHADER_MODEL_6_1, D3D_SHADER_MODEL_6_0, D3D_SHADER_MODEL_5_1,
@@ -171,10 +171,28 @@ bool D3D12Context::create(const bool enable_debug_layer)
             break;
         }
     }
+    // Require SM 6.6
+    if (m_shader_model.HighestShaderModel < D3D_SHADER_MODEL_6_6)
+    {
+        OutputDebugStringA("D3D12 ERROR: SM 6.6 is not supported\n");
+        return false;
+    }
 
-    const D3D12MA::ALLOCATOR_DESC allocator_desc = {
-        .Flags = D3D12MA::ALLOCATOR_FLAG_MSAA_TEXTURES_ALWAYS_COMMITTED
-                 | D3D12MA::ALLOCATOR_FLAG_DEFAULT_POOLS_NOT_ZEROED,  // Optional but recommended
+    D3D12_FEATURE_DATA_D3D12_OPTIONS options{}; // For Tier 2 Descriptor Heaps
+    if (FAILED(m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options))))
+    {
+        OutputDebugStringA("D3D12 ERROR: Failed to query D3D12 options");
+        return false;
+    }
+    if (options.ResourceBindingTier < D3D12_RESOURCE_BINDING_TIER_2)
+    {
+        // Need full heap for SRVs
+        OutputDebugStringA("D3D12 ERROR: Descriptor Heap Tier 2 is not supported\n");
+        return false;
+    }
+
+    const D3D12MA::ALLOCATOR_DESC allocator_desc{
+        .Flags = D3D12MA_RECOMMENDED_ALLOCATOR_FLAGS,  // Optional but recommended
         .pDevice = m_device.Get(),
         .PreferredBlockSize{},
         .pAllocationCallbacks{},
