@@ -26,10 +26,17 @@ public:
 
     UINT32 get_capacity() const
     {
-        return m_smem.get_capacity();
+        return m_smem_A.get_capacity();
     }
 
 private:
-    SharedMemory m_smem;  // smem!
+    // double buffers
+    SharedMemory m_smem_A;
+    SharedMemory m_smem_B;
+
+    UINT32 g_frame_index;
+
+    SharedMemory* wait_for_write_buffer();
+    SharedMemory* wait_for_read_buffer();
 };
 }  // namespace glRemix

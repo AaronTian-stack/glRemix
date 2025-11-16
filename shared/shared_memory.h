@@ -46,13 +46,14 @@ struct SharedMemoryHeader
 
 class SharedMemory
 {
+private:
     HANDLE m_map = nullptr;  // windows provides `HANDLE` typedef
     LPTSTR m_view = nullptr;
     SharedMemoryHeader* m_header = nullptr;
     UINT8* m_payload = nullptr;
 
-    HANDLE m_writeEvent = nullptr;
-    HANDLE m_readEvent = nullptr;
+    HANDLE m_write_event = nullptr;
+    HANDLE m_read_event = nullptr;
 
     // helpers
     bool map_common(HANDLE h_map);
@@ -104,12 +105,12 @@ public:
     /* for usage in future sync ops. dummy fxns for now */
     HANDLE get_write_event() const
     {
-        return m_writeEvent;
+        return m_write_event;
     }
 
     HANDLE get_read_event() const
     {
-        return m_readEvent;
+        return m_read_event;
     }
 };
 }  // namespace glRemix

@@ -46,8 +46,8 @@ bool glRemix::SharedMemory::create_for_writer(const wchar_t* name, const UINT32 
                         static_cast<LONG>(SharedState::EMPTY));
 
     // create named events
-    m_writeEvent = CreateEventW(nullptr, FALSE, FALSE, k_DEFAULT_WRITE_EVENT);
-    m_readEvent = CreateEventW(nullptr, FALSE, FALSE, k_DEFAULT_READ_EVENT);
+    m_write_event = CreateEventW(nullptr, FALSE, FALSE, k_DEFAULT_WRITE_EVENT);
+    m_read_event = CreateEventW(nullptr, FALSE, FALSE, k_DEFAULT_READ_EVENT);
 
     return true;
 }
@@ -74,8 +74,8 @@ bool glRemix::SharedMemory::open_for_reader(const wchar_t* name)
     }
 
     // Try to open events (safe if they don't exist yet)
-    m_writeEvent = OpenEventW(EVENT_ALL_ACCESS, FALSE, k_DEFAULT_WRITE_EVENT);
-    m_readEvent = OpenEventW(EVENT_ALL_ACCESS, FALSE, k_DEFAULT_READ_EVENT);
+    m_write_event = OpenEventW(EVENT_ALL_ACCESS, FALSE, k_DEFAULT_WRITE_EVENT);
+    m_read_event = OpenEventW(EVENT_ALL_ACCESS, FALSE, k_DEFAULT_READ_EVENT);
 
     return true;
 }
@@ -116,9 +116,9 @@ bool glRemix::SharedMemory::write(const void* src, const UINT32 bytes, const UIN
                         static_cast<LONG>(SharedState::FILLED));
 
     // signal write event
-    if (m_writeEvent)
+    if (m_write_event)
     {
-        SetEvent(m_writeEvent);
+        SetEvent(m_write_event);
     }
 
     return true;
@@ -164,9 +164,9 @@ bool glRemix::SharedMemory::read(void* dst, const UINT32 max_bytes, const UINT32
                         static_cast<LONG>(SharedState::CONSUMED));
 
     // signal read event
-    if (m_readEvent)
+    if (m_read_event)
     {
-        SetEvent(m_readEvent);
+        SetEvent(m_read_event);
     }
 
     return true;
@@ -234,15 +234,15 @@ void glRemix::SharedMemory::close_all()
         CloseHandle(m_map);
         m_map = nullptr;
     }
-    if (m_writeEvent)
+    if (m_write_event)
     {
-        CloseHandle(m_writeEvent);
-        m_writeEvent = nullptr;
+        CloseHandle(m_write_event);
+        m_write_event = nullptr;
     }
-    if (m_readEvent)
+    if (m_read_event)
     {
-        CloseHandle(m_readEvent);
-        m_readEvent = nullptr;
+        CloseHandle(m_read_event);
+        m_read_event = nullptr;
     }
 
     m_header = nullptr;  // host side buffers
