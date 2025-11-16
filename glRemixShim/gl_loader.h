@@ -2,12 +2,10 @@
 
 #include "framework.h"
 
-#include "framerecorder.h"
+#include "frame_recorder.h"
 
 namespace glRemix
 {
-extern FrameRecorder g_recorder;
-
 namespace gl
 {
 extern HANDLE g_renderer_process;

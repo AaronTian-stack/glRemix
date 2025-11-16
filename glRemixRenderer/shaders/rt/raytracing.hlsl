@@ -96,7 +96,8 @@ float3 transform_to_world(float3 localDir, float3 N)
     return normalize(localDir.x * tangent + localDir.y * bitangent + localDir.z * N);
 }
 
-[shader("raygeneration")] void RayGenMain() {
+[shader("raygeneration")] void RayGenMain()
+{
     float2 uv = (float2)DispatchRaysIndex() / float2(g_rayGenCB.width, g_rayGenCB.height);
 
     float2 ndc = uv * 2.0f - 1.0f;
@@ -193,7 +194,8 @@ float3 transform_to_world(float3 localDir, float3 N)
     if (instanceID >= 0 && instanceID < 4)
     {
         albedo = float3(1, 0, 0);
-    } else if (instanceID == 4 || instanceID == 5)
+    }
+    else if (instanceID == 4 || instanceID == 5)
     {
         albedo = float3(1, 0, 0);
     }
@@ -201,7 +203,8 @@ float3 transform_to_world(float3 localDir, float3 N)
     else if (instanceID >= 6 && instanceID < 10)
     {
         albedo = float3(0, 1, 0);
-    } else if (instanceID == 10 || instanceID == 11)
+    }
+    else if (instanceID == 10 || instanceID == 11)
     {
         albedo = float3(0, 1, 0);
     }
@@ -209,7 +212,8 @@ float3 transform_to_world(float3 localDir, float3 N)
     else if (instanceID == 16 || instanceID == 17)
     {
         albedo = float3(0, 0, 1);
-    } else
+    }
+    else
     {
         albedo = float3(0, 0, 1);
     }
@@ -240,7 +244,8 @@ float3 transform_to_world(float3 localDir, float3 N)
     payload.color = float4(color, 1.0);  // using hacky colors right now, not diffuse
 }
 
-[shader("miss")] void MissMain(inout RayPayload payload) {
+[shader("miss")] void MissMain(inout RayPayload payload)
+{
     payload.color = float4(0.0, 0.0, 0.0, 1.0);
     payload.hit = false;
 }

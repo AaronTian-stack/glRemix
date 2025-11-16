@@ -6,6 +6,8 @@
 #include "gl/gl_matrix_stack.h"
 #include <DirectXMath.h>
 #include <ipc_protocol.h>
+
+#include "gl_commands.h"
 #include "structs.h"
 #include "tsl/robin_map.h"
 
@@ -55,8 +57,12 @@ class glRemixRenderer : public Application
 
     // matrix stack
     gl::glMatrixStack m_matrix_stack;
+<<<<<<< HEAD
     std::vector<XMFLOAT4X4> m_matrix_pool; // reset each frame
     XMMATRIX inverse_view;
+=======
+    std::vector<XMFLOAT4X4> m_matrix_pool;
+>>>>>>> 43dbb35157104085e1d77ed261adc2f62042f8fc
 
     // display lists
     tsl::robin_map<int, std::vector<UINT8>> m_display_lists;
@@ -64,12 +70,12 @@ class glRemixRenderer : public Application
     // state trackers
     gl::GLMatrixMode matrix_mode
         = gl::GLMatrixMode::MODELVIEW;  // "The initial matrix mode is MODELVIEW" - glspec pg. 29
-    gl::GLListMode listMode = gl::GLListMode::COMPILE_AND_EXECUTE;
+    gl::GLListMode list_mode_ = gl::GLListMode::COMPILE_AND_EXECUTE;
 
-    std::array<float, 4> color = {1.0f, 1.0f, 1.0f,
-                                  1.0f};  // current color (may need to be tracked globally)
-    std::array<float, 3> normal = {0.0f, 0.0f, 1.0f};  // global normal - default
-    Material m_material;                               // global states that can be modified
+    std::array<float, 4> m_color = { 1.0f, 1.0f, 1.0f,
+                                     1.0f };  // current color (may need to be tracked globally)
+    std::array<float, 3> m_normal = { 0.0f, 0.0f, 1.0f };  // global normal - default
+    Material m_material;                                   // global states that can be modified
 
     // shader resources
     std::array<Light, 8> m_lights{};
@@ -88,13 +94,13 @@ protected:
     void create_uav_rt();
 
     void read_gl_command_stream();
-    void read_ipc_buffer(std::vector<UINT8>& ipcBuf, size_t start_offset, uint32_t bytesRead,
-                         ID3D12GraphicsCommandList7* cmd_list, bool callList = false);
-    void read_geometry(std::vector<UINT8>& ipcBuf, size_t& offset, GLTopology topology,
+    void read_ipc_buffer(std::vector<UINT8>& ipc_buf, size_t start_offset, UINT32 bytes_read,
+                         ID3D12GraphicsCommandList7* cmd_list, bool call_list = false);
+    void read_geometry(std::vector<UINT8>& ipc_buf, size_t* offset, GLTopology topology,
                        UINT32 bytes_read, ID3D12GraphicsCommandList7* cmd_list);
 
     // acceleration structure builders
-    int build_mesh_blas(dx::D3D12Buffer& vertex_buffer, dx::D3D12Buffer& index_buffer,
+    int build_mesh_blas(const dx::D3D12Buffer& vertex_buffer, const dx::D3D12Buffer& index_buffer,
                         ID3D12GraphicsCommandList7* cmd_list);
     void build_tlas(ID3D12GraphicsCommandList7* cmd_list);
     void delete_mesh(MeshRecord mesh);

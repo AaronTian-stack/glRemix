@@ -73,8 +73,8 @@ public:
     bool create_buffer(const BufferDesc& desc, D3D12Buffer* buffer,
                        const char* debug_name = nullptr) const;
     // Convenience functions
-    bool map_buffer(D3D12Buffer* buffer, void** pointer);
-    void unmap_buffer(D3D12Buffer* buffer);
+    bool map_buffer(const D3D12Buffer* buffer, void** pointer);
+    void unmap_buffer(const D3D12Buffer* buffer);
 
     bool create_descriptor_heap(const D3D12_DESCRIPTOR_HEAP_DESC& desc, D3D12DescriptorHeap* heap,
                                 const char* debug_name = nullptr) const;
@@ -90,7 +90,7 @@ public:
     void create_shader_resource_view_acceleration_structure(
         const D3D12Buffer& tlas, const D3D12DescriptorTable* descriptor_table,
         UINT descriptor_index) const;
-    void create_unordered_access_view_texture(D3D12Texture* texture, DXGI_FORMAT format,
+    void create_unordered_access_view_texture(const D3D12Texture* texture, DXGI_FORMAT format,
                                               const D3D12DescriptorTable* descriptor_table,
                                               UINT descriptor_index) const;
 
@@ -110,8 +110,8 @@ public:
                       const char* debug_name = nullptr) const;
     bool wait_fences(const WaitInfo& info) const;
 
-    void set_barrier_resource(D3D12Buffer* buffer, D3D12_BUFFER_BARRIER* barrier);
-    void set_barrier_resource(D3D12Texture* texture, D3D12_TEXTURE_BARRIER* barrier);
+    void set_barrier_resource(const D3D12Buffer* buffer, D3D12_BUFFER_BARRIER* barrier);
+    void set_barrier_resource(const D3D12Texture* texture, D3D12_TEXTURE_BARRIER* barrier);
 
     // TODO: Copy parameters
     void copy_texture_to_swapchain(ID3D12GraphicsCommandList7* cmd_list,
@@ -130,18 +130,18 @@ public:
 
     bool create_graphics_pipeline(const GraphicsPipelineDesc& desc, IDxcBlob* vertex_shader,
                                   IDxcBlob* pixel_shader, ID3D12PipelineState** pipeline_state,
-                                  const char* debug_name);
+                                  const char* debug_name) const;
 
     bool create_raytracing_pipeline(const RayTracingPipelineDesc& desc,
                                     IDxcBlob* raytracing_shaders, ID3D12StateObject** state_object,
                                     const char* debug_name) const;
 
     // TODO: Similar function for AABB buffers? Need it for area lights.
-    D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC get_buffer_rt_description(D3D12Buffer* vertex_buffer,
-                                                                       D3D12Buffer* index_buffer);
-    D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC get_buffer_rt_description_subrange(
-        D3D12Buffer* vertex_buffer, uint32_t vertex_count, uint32_t vertex_offset,
-        D3D12Buffer* index_buffer, uint32_t index_count, uint32_t index_offset);
+    static D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC get_buffer_rt_description(
+        const D3D12Buffer* vertex_buffer, const D3D12Buffer* index_buffer);
+    static D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC get_buffer_rt_description_subrange(
+        const D3D12Buffer* vertex_buffer, UINT32 vertex_count, UINT32 vertex_offset,
+        const D3D12Buffer* index_buffer, UINT32 index_count, UINT32 index_offset);
     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO get_acceleration_structure_prebuild_info(
         const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& desc) const;
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC get_raytracing_acceleration_structure(
@@ -152,8 +152,7 @@ public:
     bool mark_use(D3D12Texture* texture, Usage use_kind);
 
     void emit_barriers(ID3D12GraphicsCommandList7* cmd_list, D3D12Buffer* const* buffers,
-                       const size_t buffer_count, D3D12Texture* const* textures,
-                       const size_t texture_count);
+                       size_t buffer_count, D3D12Texture* const* textures, size_t texture_count);
 
     void bind_vertex_buffers(ID3D12GraphicsCommandList7* cmd_list, UINT start_slot,
                              UINT buffer_count, const D3D12Buffer* const* buffers,
@@ -167,7 +166,7 @@ public:
     void render_imgui_draw_data(ID3D12GraphicsCommandList7* cmd_list);
     void destroy_imgui();
 
-    bool wait_idle(D3D12Queue* queue);
+    bool wait_idle(const D3D12Queue* queue);
     ~D3D12Context();
 };
 

@@ -1,13 +1,12 @@
 #pragma once
+
+#include <array>
 #include <DirectXMath.h>
 
 using namespace DirectX;
 
 namespace glRemix
 {
-constexpr UINT64 MEGABYTE = 1024u * 1024u;
-constexpr UINT CB_ALIGNMENT = 256;
-
 struct RayGenConstantBuffer
 {
     XMFLOAT4X4 projection_matrix;
@@ -26,34 +25,35 @@ struct Vertex
 // TODO add more parameters (such as enabled) when encountered
 struct Light
 {
-    float ambient[4] = {0.f, 0.f, 0.f, 1.f};
-    float diffuse[4] = {1.f, 1.f, 1.f, 1.f};
-    float specular[4] = {1.f, 1.f, 1.f, 1.f};
+    float ambient[4] = { 0.f, 0.f, 0.f, 1.f };
+    float diffuse[4] = { 1.f, 1.f, 1.f, 1.f };
+    float specular[4] = { 1.f, 1.f, 1.f, 1.f };
 
-    float position[4] = {0.f, 0.f, 1.f, 0.f};  // default head down
+    float position[4] = { 0.f, 0.f, 1.f, 0.f };  // default head down
 
-    float spotDirection[3] = {0.f, 0.f, -1.f};
-    float spotExponent = 0.f;
-    float spotCutoff = 180.f;
+    float spot_direction[3] = { 0.f, 0.f, -1.f };
+    float spot_exponent = 0.f;
+    float spot_cutoff = 180.f;
 
-    float constantAttenuation = 1.f;
-    float linearAttenuation = 0.f;
-    float quadraticAttenuation = 0.f;
+    float constant_attenuation = 1.f;
+    float linear_attenuation = 0.f;
+    float quadratic_attenuation = 0.f;
 };
 
 // TODO add more parameters if encountered
 struct Material
 {
-    float ambient[4] = {1.f, 1.f, 1.f, 1.f};
-    float diffuse[4] = {1.f, 1.f, 1.f, 1.f};
-    float specular[4] = {0.f, 0.f, 0.f, 1.f};
-    float emission[4] = {0.f, 0.f, 0.f, 1.f};
+    float ambient[4] = { 1.f, 1.f, 1.f, 1.f };
+    float diffuse[4] = { 1.f, 1.f, 1.f, 1.f };
+    float specular[4] = { 0.f, 0.f, 0.f, 1.f };
+    float emission[4] = { 0.f, 0.f, 0.f, 1.f };
 
     float shininess = 0.f;
 };
 
 struct MeshRecord
 {
+<<<<<<< HEAD
     uint32_t mesh_id;      // will eventually be hashed
     uint32_t vertex_count;
     uint32_t index_count;  // number of indices belonging to this mesh
@@ -104,5 +104,18 @@ struct alignas(16) MVP
     XMFLOAT4X4 model;
     XMFLOAT4X4 view;
     XMFLOAT4X4 proj;
+=======
+    UINT32 mesh_id;      // will eventually be hashed
+    UINT32 vertex_count;
+    UINT32 index_count;  // number of indices belonging to this mesh
+
+    // pointers
+    UINT32 vertex_id;  // index into vertex buffer
+    UINT32 index_id;   // index into index buffer
+    UINT32 blas_id;
+    UINT32 mv_id;      // index into model view array
+    UINT32 mat_id;
+    UINT32 tex_id;
+>>>>>>> 43dbb35157104085e1d77ed261adc2f62042f8fc
 };
 }  // namespace glRemix
