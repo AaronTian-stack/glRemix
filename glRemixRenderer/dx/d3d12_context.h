@@ -85,6 +85,13 @@ public:
 
     void create_constant_buffer_view(const D3D12Buffer* buffer,
                                      const D3D12Descriptor& descriptor) const;
+    // Structured buffers only
+    void create_shader_resource_view(const D3D12Buffer& buffer,
+                                     const D3D12Descriptor& descriptor) const;
+    void create_shader_resource_view_raw(const D3D12Buffer& buffer,
+                                     const D3D12Descriptor& descriptor) const;
+    void create_shader_resource_view_typed(const D3D12Buffer& buffer, DXGI_FORMAT format,
+                                           const D3D12Descriptor& descriptor) const;
     void create_shader_resource_view_acceleration_structure(
         const D3D12Buffer& tlas, const D3D12Descriptor& descriptor) const;
     void create_unordered_access_view_texture(const D3D12Texture& texture, DXGI_FORMAT format,

@@ -918,6 +918,70 @@ void D3D12Context::create_constant_buffer_view(const D3D12Buffer* buffer,
     m_device->CreateConstantBufferView(&cbv_desc, cpu_handle);
 }
 
+void D3D12Context::create_shader_resource_view(const D3D12Buffer& buffer,
+    const D3D12Descriptor& descriptor) const
+{
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
+    assert(!u64_overflows_u32(buffer.desc.stride));
+    descriptor.heap->get_cpu_descriptor(&cpu_handle, descriptor.offset);
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc{
+        .Format = DXGI_FORMAT_UNKNOWN,
+        .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+        .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+        .Buffer{
+            .FirstElement = 0,
+            .NumElements = static_cast<UINT>(buffer.desc.size / buffer.desc.stride),
+            .StructureByteStride = static_cast<UINT>(buffer.desc.stride),
+            .Flags = D3D12_BUFFER_SRV_FLAG_NONE,
+        },
+    };
+    m_device->CreateShaderResourceView(buffer.allocation->GetResource(), &srv_desc, cpu_handle);
+}
+
+void D3D12Context::create_shader_resource_view_raw(const D3D12Buffer& buffer,
+    const D3D12Descriptor& descriptor) const
+{
+    assert(is_multiple_of_power_of_two(buffer.desc.size, 4));
+    const auto num_elements = buffer.desc.size / 4;
+    assert(!u64_overflows_u32(num_elements));
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
+    descriptor.heap->get_cpu_descriptor(&cpu_handle, descriptor.offset);
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc{
+        .Format = DXGI_FORMAT_R32_TYPELESS,
+        .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+        .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+        .Buffer{
+            .FirstElement = 0,
+            .NumElements = static_cast<UINT>(num_elements),
+            .StructureByteStride = 0,
+            .Flags = D3D12_BUFFER_SRV_FLAG_RAW,
+        },
+    };
+    m_device->CreateShaderResourceView(buffer.allocation->GetResource(), &srv_desc, cpu_handle);
+}
+
+void D3D12Context::create_shader_resource_view_typed(const D3D12Buffer& buffer,
+    const DXGI_FORMAT format, const D3D12Descriptor& descriptor) const
+{
+    const auto num_elements = buffer.desc.size / buffer.desc.stride;
+    assert(!u64_overflows_u32(num_elements));
+    // TODO: bpp check
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
+    descriptor.heap->get_cpu_descriptor(&cpu_handle, descriptor.offset);
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc{
+        .Format = format,
+        .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+        .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+        .Buffer{
+            .FirstElement = 0,
+            .NumElements = static_cast<UINT>(num_elements),
+            .StructureByteStride = 0,
+            .Flags = D3D12_BUFFER_SRV_FLAG_NONE,
+        },
+    };
+    m_device->CreateShaderResourceView(buffer.allocation->GetResource(), &srv_desc, cpu_handle);
+}
+
 void D3D12Context::create_shader_resource_view_acceleration_structure(
     const D3D12Buffer& tlas, const D3D12Descriptor& descriptor) const
 {

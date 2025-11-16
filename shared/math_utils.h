@@ -21,6 +21,23 @@ inline bool is_power_of_two(const UINT32 value)
     return (value & (value - 1)) == 0;
 }
 
+inline bool is_power_of_two(const UINT64 value)
+{
+    return (value & (value - 1)) == 0;
+}
+
+inline bool is_multiple_of_power_of_two(const UINT32 value, const UINT32 divisor)
+{
+    assert(is_power_of_two(divisor));
+    return (value & (divisor - 1)) == 0;
+}
+
+inline bool is_multiple_of_power_of_two(const UINT64 value, const UINT64 divisor)
+{
+    assert(is_power_of_two(divisor));
+    return (value & divisor - 1) == 0;
+}
+
 inline UINT32 align_u32(const UINT32 size, const UINT32 alignment)
 {
     assert(is_power_of_two(alignment));
