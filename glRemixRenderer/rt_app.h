@@ -56,9 +56,21 @@ class glRemixRenderer : public Application
     tsl::robin_map<UINT64, MeshRecord> m_mesh_map;
     std::vector<MeshRecord> m_meshes;
 
-    std::vector<dx::D3D12Buffer> m_blas_buffers;
-    std::vector<dx::D3D12Buffer> m_vertex_buffers;
-    std::vector<dx::D3D12Buffer> m_index_buffers;
+    struct BufferAndDescriptor
+    {
+        dx::D3D12Buffer buffer;
+        dx::D3D12Descriptor descriptor;
+    };
+    struct MeshResources
+    {
+        dx::D3D12Buffer blas;
+        BufferAndDescriptor vertex_buffer;
+        BufferAndDescriptor index_buffer;
+    };
+
+    // BLAS, VB, IB per mesh
+    // VB and IB have descriptors for SRV to be allocated from pager
+    std::vector<MeshResources> m_mesh_resources;
 
     // matrix stack
     gl::glMatrixStack m_matrix_stack;
@@ -77,8 +89,8 @@ class glRemixRenderer : public Application
     std::array<float, 3> m_normal = { 0.0f, 0.0f, 1.0f };  // global normal - default
     Material m_material;                                   // global states that can be modified
 
-    // shader resources
     std::array<Light, 8> m_lights{};
+    //std::vector<>
     std::vector<Material> m_materials;
 
     DebugWindow m_debug_window;
@@ -97,8 +109,8 @@ protected:
                        UINT32 bytes_read, ID3D12GraphicsCommandList7* cmd_list);
 
     // acceleration structure builders
-    int build_mesh_blas(const dx::D3D12Buffer& vertex_buffer, const dx::D3D12Buffer& index_buffer,
-                        ID3D12GraphicsCommandList7* cmd_list);
+    void build_mesh_blas(const dx::D3D12Buffer& vertex_buffer, const dx::D3D12Buffer& index_buffer,
+                        ID3D12GraphicsCommandList7* cmd_list, dx::D3D12Buffer* blas);
     void build_tlas(ID3D12GraphicsCommandList7* cmd_list);
 
 public:

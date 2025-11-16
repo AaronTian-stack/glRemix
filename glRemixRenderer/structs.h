@@ -55,17 +55,14 @@ struct MeshRecord
 {
     UINT32 mesh_id;       // will eventually be hashed
 
-    UINT32 blas_idx;
+    UINT32 blas_vb_ib_idx;
     UINT32 mv_idx;        // index into model view array
-    UINT32 vertex_idx;    // index into vertex buffer
-    UINT32 index_idx;     // index into index buffer
     UINT32 mat_idx;
 };
 
 struct GPUMeshRecord
 {
-    UINT32 vertex_idx;
-    UINT32 index_idx;
+    UINT32 vb_id_idx;
     UINT32 mat_idx;
 };
 

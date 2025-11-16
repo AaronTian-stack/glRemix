@@ -11,8 +11,7 @@ struct RayGenConstantBuffer
 
 struct MeshRecord
 {
-    uint vertex_idx;
-    uint index_idx;
+    uint blas_vb_id_idx;
     // Materials are structured buffers. For now assume index 0
     // TODO: Add second buffer index
     uint mat_idx;

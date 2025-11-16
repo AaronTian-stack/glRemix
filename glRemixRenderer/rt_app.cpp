@@ -710,57 +710,57 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
     UINT64 hash = seed;
 
     MeshRecord mesh;
-    m_mesh_map.find(hash);
+    mesh.mesh_id = hash;
+    
     if (m_mesh_map.contains(hash))
     {
-        mesh = m_mesh_map[hash];
+        // Retrieve cached geometry index
+        mesh.blas_vb_ib_idx = m_mesh_map[hash].blas_vb_ib_idx;
     }
     else
     {
-        mesh.mesh_id = hash;  // set hash to meshID
+        MeshResources resource;
 
-        // create vertex buffer
-        dx::D3D12Buffer t_vertex_buffer;
-        dx::D3D12Buffer t_index_buffer;
+        mesh.blas_vb_ib_idx = m_mesh_resources.size();
 
-        mesh.vertex_idx = m_vertex_buffers.size();
-        mesh.index_idx = m_index_buffers.size();
-
+        auto& vb = resource.vertex_buffer;
         dx::BufferDesc vertex_buffer_desc{
             .size = sizeof(Vertex) * t_vertices.size(),
             .stride = sizeof(Vertex),
             .visibility = dx::CPU | dx::GPU,
         };
         void* cpu_ptr;
-        THROW_IF_FALSE(
-            m_context.create_buffer(vertex_buffer_desc, &t_vertex_buffer, "vertex buffer"));
+        THROW_IF_FALSE(m_context.create_buffer(vertex_buffer_desc, &vb.buffer, "vertex buffer"));
 
-        THROW_IF_FALSE(m_context.map_buffer(&t_vertex_buffer, &cpu_ptr));
+        THROW_IF_FALSE(m_context.map_buffer(&vb.buffer, &cpu_ptr));
         memcpy(cpu_ptr, t_vertices.data(), vertex_buffer_desc.size);
-        m_context.unmap_buffer(&t_vertex_buffer);
-        m_vertex_buffers.push_back(std::move(t_vertex_buffer));
+        m_context.unmap_buffer(&vb.buffer);
 
-        // create index buffer
+        auto& ib = resource.index_buffer;
         dx::BufferDesc index_buffer_desc{
             .size = sizeof(UINT) * t_indices.size(),
             .stride = sizeof(UINT),
             .visibility = dx::CPU | dx::GPU,
         };
-        THROW_IF_FALSE(m_context.create_buffer(index_buffer_desc, &t_index_buffer, "index buffer"));
+        THROW_IF_FALSE(m_context.create_buffer(index_buffer_desc, &ib.buffer, "index buffer"));
 
-        THROW_IF_FALSE(m_context.map_buffer(&t_index_buffer, &cpu_ptr));
+        THROW_IF_FALSE(m_context.map_buffer(&ib.buffer, &cpu_ptr));
         memcpy(cpu_ptr, t_indices.data(), index_buffer_desc.size);
-        m_context.unmap_buffer(&t_index_buffer);
-        m_index_buffers.push_back(std::move(t_index_buffer));
+        m_context.unmap_buffer(&ib.buffer);
 
         // create blas buffer
-        mesh.blas_idx = build_mesh_blas(m_vertex_buffers[mesh.vertex_idx],
-                                       m_index_buffers[mesh.index_idx], cmd_list);
+        build_mesh_blas(vb.buffer, ib.buffer, cmd_list, &resource.blas);
 
-        m_mesh_map[hash] = mesh;
+        // Cache only the geometry index, not per-instance data
+        MeshRecord cached_mesh;
+        cached_mesh.mesh_id = hash;
+        cached_mesh.blas_vb_ib_idx = mesh.blas_vb_ib_idx;
+        m_mesh_map[hash] = cached_mesh;
+
+        m_mesh_resources.push_back(std::move(resource));
     }
 
-    // we assign materials here
+    // Assign per-instance data (not cached)
     mesh.mat_idx = static_cast<UINT32>(m_materials.size());
     m_materials.push_back(
         m_material);  // store the current state of the material in the materials buffer
@@ -771,12 +771,11 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
     m_meshes.push_back(std::move(mesh));
 }
 
-int glRemix::glRemixRenderer::build_mesh_blas(const dx::D3D12Buffer& vertex_buffer,
-                                              const dx::D3D12Buffer& index_buffer,
-                                              ID3D12GraphicsCommandList7* cmd_list)
+void glRemix::glRemixRenderer::build_mesh_blas(const dx::D3D12Buffer& vertex_buffer,
+                                               const dx::D3D12Buffer& index_buffer,
+                                               ID3D12GraphicsCommandList7* cmd_list,
+                                               dx::D3D12Buffer* blas)
 {
-    dx::D3D12Buffer t_blas_buffer;
-
     D3D12_RAYTRACING_GEOMETRY_DESC tri_desc{
         .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
         .Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,  // Try to use this liberally as its faster
@@ -803,28 +802,25 @@ int glRemix::glRemixRenderer::build_mesh_blas(const dx::D3D12Buffer& vertex_buff
         .visibility = dx::GPU,
         .acceleration_structure = true,
     };
-    THROW_IF_FALSE(m_context.create_buffer(blas_buffer_desc, &t_blas_buffer, "BLAS buffer"));
+    THROW_IF_FALSE(m_context.create_buffer(blas_buffer_desc, blas, "BLAS buffer"));
 
     const auto blas_build_desc = m_context.get_raytracing_acceleration_structure(blas_desc,
-                                                                                 &t_blas_buffer,
+                                                                                 blas,
                                                                                  nullptr,
                                                                                  &m_scratch_space);
 
     // Mark resources for BLAS build
     m_context.mark_use(&m_scratch_space, dx::Usage::UAV_COMPUTE);
-    m_context.mark_use(&t_blas_buffer, dx::Usage::AS_WRITE);
-    const std::array build_resources = { &m_scratch_space, &t_blas_buffer };
+    m_context.mark_use(blas, dx::Usage::AS_WRITE);
+    const std::array build_resources = { &m_scratch_space, blas };
     m_context.emit_barriers(cmd_list, build_resources.data(), build_resources.size(), nullptr, 0);
 
     cmd_list->BuildRaytracingAccelerationStructure(&blas_build_desc, 0, nullptr);
 
     // Transition BLAS to read state
-    m_context.mark_use(&t_blas_buffer, dx::Usage::AS_READ);
-    std::array read_resources = { &t_blas_buffer };
+    m_context.mark_use(blas, dx::Usage::AS_READ);
+    std::array read_resources = { blas };
     m_context.emit_barriers(cmd_list, read_resources.data(), read_resources.size(), nullptr, 0);
-
-    m_blas_buffers.push_back(std::move(t_blas_buffer));
-    return m_blas_buffers.size() - 1;
 }
 
 static D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const XMFLOAT4X4& mv)
@@ -873,10 +869,9 @@ void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
     {
         MeshRecord mesh = m_meshes[i];
 
-        assert(mesh.blas_idx < m_blas_buffers.size());
         assert(mesh.mv_idx < m_matrix_pool.size());
 
-        const auto blas_addr = m_blas_buffers[mesh.blas_idx].get_gpu_address();
+        const auto blas_addr = m_mesh_resources[mesh.blas_vb_ib_idx].blas.get_gpu_address();
         assert(blas_addr != 0);
 
         D3D12_RAYTRACING_INSTANCE_DESC desc = mv_to_instance_desc(m_matrix_pool[mesh.mv_idx]);
