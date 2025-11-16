@@ -51,13 +51,15 @@ class glRemixRenderer : public Application
     tsl::robin_map<UINT64, MeshRecord> m_mesh_map;
     std::vector<MeshRecord> m_meshes;
 
-    std::vector<dx::D3D12Buffer> m_blas_buffers;
-    std::vector<dx::D3D12Buffer> m_vertex_buffers;
-    std::vector<dx::D3D12Buffer> m_index_buffers;
+    BufferPool m_blas_pool;
+    BufferPool m_vertex_pool;
+    BufferPool m_index_pool;
 
     // matrix stack
     gl::glMatrixStack m_matrix_stack;
-    std::vector<XMFLOAT4X4> m_matrix_pool;
+
+    std::vector<XMFLOAT4X4> m_matrix_pool; // reset each frame
+    XMMATRIX inverse_view;
 
     // display lists
     tsl::robin_map<int, std::vector<UINT8>> m_display_lists;
@@ -77,6 +79,9 @@ class glRemixRenderer : public Application
     std::vector<Material> m_materials;
 
     DebugWindow m_debug_window;
+
+    uint32_t frame_leniency = 10;
+    uint32_t current_frame;
 
 protected:
     void create() override;
