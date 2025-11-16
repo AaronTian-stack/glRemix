@@ -24,7 +24,8 @@ bool glRemix::SharedMemory::create_for_writer(const wchar_t* name, const UINT32 
     if (!h_map_file)
     {
         std::ostringstream ss;
-        ss << "Could not create file mapping of file. Error Code: " << GetLastError() << "\n";
+        ss << "SharedMemory - Could not create file mapping of file. Error Code: " << GetLastError()
+           << "\n";
         OutputDebugStringA(ss.str().c_str());
         return false;
     }
@@ -59,7 +60,8 @@ bool glRemix::SharedMemory::open_for_reader(const wchar_t* name)
     if (!hMapFile)
     {
         std::ostringstream ss;
-        ss << "Could not open file mapping of file. Ensure external process has created it. ";
+        ss << "SharedMemory - Could not open file mapping of file. Ensure external process has "
+              "created it. ";
         ss << "Error Code: " << GetLastError() << "\n";
         OutputDebugStringA(ss.str().c_str());
         return false;
@@ -83,7 +85,8 @@ bool glRemix::SharedMemory::write(const void* src, const UINT32 bytes, const UIN
     std::ostringstream ss;
     if (!m_header || !src || bytes > m_header->capacity)
     {
-        ss << "File not ready for writing, call `::create_for_writer` first." << "\n";
+        ss << "SharedMemory - File not ready for writing, call `::create_for_writer` first."
+           << "\n";
         OutputDebugStringA(ss.str().c_str());
         return false;
     }
@@ -97,13 +100,13 @@ bool glRemix::SharedMemory::write(const void* src, const UINT32 bytes, const UIN
     // only write when EMPTY
     if (m_header->state != SharedState::EMPTY)
     {
-        ss << "File state not consumed. Will skip writing." << "\n";
+        ss << "SharedMemory - File state not consumed. Will skip writing." << "\n";
         OutputDebugStringA(ss.str().c_str());
         return false;
     }
 
     memcpy(m_payload + offset, src, bytes);
-    ss << "Wrote " << bytes << " bytes." << "\n";
+    ss << "SharedMemory - Wrote " << bytes << " bytes." << "\n";
     OutputDebugStringA(ss.str().c_str());
     m_header->size = bytes;
 
@@ -127,7 +130,7 @@ bool glRemix::SharedMemory::read(void* dst, const UINT32 max_bytes, const UINT32
     std::ostringstream ss;
     if (!m_header || !dst)
     {
-        ss << "File not ready for reading, call `::open_for_reader` first." << "\n";
+        ss << "SharedMemory - File not ready for reading, call `::open_for_reader` first." << "\n";
         OutputDebugStringA(ss.str().c_str());
 
         return false;
@@ -135,7 +138,7 @@ bool glRemix::SharedMemory::read(void* dst, const UINT32 max_bytes, const UINT32
 
     if (m_header->state != SharedState::FILLED)
     {
-        ss << "File state not filled. Nothing to read." << "\n";
+        ss << "SharedMemory - File state not filled. Nothing to read." << "\n";
         OutputDebugStringA(ss.str().c_str());
         return false;
     }
@@ -143,7 +146,7 @@ bool glRemix::SharedMemory::read(void* dst, const UINT32 max_bytes, const UINT32
     UINT32 n = m_header->size;
     if (n > max_bytes)
     {
-        ss << "Header size greater than desired max bytes. Truncating..." << "\n";
+        ss << "SharedMemory - Header size greater than desired max bytes. Truncating..." << "\n";
         OutputDebugStringA(ss.str().c_str());
 
         n = max_bytes;
@@ -204,7 +207,7 @@ bool glRemix::SharedMemory::map_common(const HANDLE h_map_file)
     if (m_view == nullptr)
     {
         std::ostringstream ss;
-        ss << "Could not map view of file. Error Code: " << GetLastError() << "\n";
+        ss << "SharedMemory - Could not map view of file. Error Code: " << GetLastError() << "\n";
         OutputDebugStringA(ss.str().c_str());
 
         CloseHandle(h_map_file);

@@ -281,6 +281,9 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
         OutputDebugStringA(buffer);
         return;
     }
+    char buffer[256];
+    sprintf(buffer, "glxRemixRenderer - Frame %u\n", frameHeader->frame_index);
+    OutputDebugStringA(buffer);
 
     current_frame = frameHeader->frame_index;
 
@@ -552,8 +555,8 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf, size
             default:
             {
                 char buffer[256];
-                sprintf_s(buffer, "Unhandled Command: %d (size: %u)\n", header->type,
-                          header->dataSize);
+                sprintf_s(buffer, "glxRemixRenderer - Unhandled Command: %d (size: %u)\n",
+                          header->type, header->dataSize);
                 OutputDebugStringA(buffer);
                 break;
             }
