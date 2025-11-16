@@ -1,16 +1,19 @@
 #include "rt_app.h"
 
-#include "math_utils.h"
-#include "imgui.h"
-#include "dx/d3d12_barrier.h"
 #include <cstdio>
 #include <cmath>
 
 #include <thread>
 #include <chrono>
 #include <vector>
-
 #include <filesystem>
+
+#include <imgui.h>
+
+#include <shared/math_utils.h>
+#include <shared/gl_commands.h>
+
+#include "dx/d3d12_barrier.h"
 
 void glRemix::glRemixRenderer::create()
 {

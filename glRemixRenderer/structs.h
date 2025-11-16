@@ -66,7 +66,7 @@ struct MeshRecord
     uint32_t tex_id;
 
     // garbage collection
-    uint32_t last_frame; // last frame this mesh record was accessed
+    uint32_t last_frame;  // last frame this mesh record was accessed
 };
 
 struct BufferPool
@@ -94,7 +94,10 @@ struct BufferPool
         free_indices.push_back(id);
     }
 
-    dx::D3D12Buffer& operator[](uint32_t id) { return buffers[id]; }
+    dx::D3D12Buffer& operator[](uint32_t id)
+    {
+        return buffers[id];
+    }
 };
 
 struct alignas(16) MVP

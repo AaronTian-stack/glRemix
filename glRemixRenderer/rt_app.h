@@ -1,15 +1,16 @@
 #pragma once
 
+#include <tsl/robin_map.h>
+#include <DirectXMath.h>
+
+#include <shared/ipc_protocol.h>
+#include <shared/gl_commands.h>
+
 #include "application.h"
 #include "debug_window.h"
 #include "dx/d3d12_as.h"
-#include "gl/gl_matrix_stack.h"
-#include <DirectXMath.h>
-#include <ipc_protocol.h>
-
-#include "gl_commands.h"
 #include "structs.h"
-#include "tsl/robin_map.h"
+#include "gl/gl_matrix_stack.h"
 
 namespace glRemix
 {
@@ -58,7 +59,7 @@ class glRemixRenderer : public Application
     // matrix stack
     gl::glMatrixStack m_matrix_stack;
 
-    std::vector<XMFLOAT4X4> m_matrix_pool; // reset each frame
+    std::vector<XMFLOAT4X4> m_matrix_pool;  // reset each frame
     XMMATRIX inverse_view;
 
     // display lists
