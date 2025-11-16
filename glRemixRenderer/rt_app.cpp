@@ -308,6 +308,12 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     };
 
     THROW_IF_FALSE(m_context.wait_fences(wait_info));  // Block CPU until done
+
+    // asset replacement: register callback
+    m_debug_window.set_replace_mesh_callback([this](uint64_t meshID, const std::string& asset_path) 
+        { 
+            this->replace_mesh(meshID, asset_path); 
+        });
 }
 
 void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipcBuf, size_t start_offset,
@@ -650,39 +656,8 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<uint8_t>& ipcBuf, size_
         }
     }
 
-    // hashing - logic from boost::hash_combine
-    size_t seed = 0;
-    auto hash_combine = [&seed](auto const& v)
-    {
-        seed ^= std::hash<std::decay_t<decltype(v)>>{}(v) + 0x9e3779b97f4a7c15ULL + (seed << 6)
-                + (seed >> 2);
-    };
-
-    // reduces floating point instability
-    auto quantize = [](float v, float precision = 1e-5f) -> float
-    { return std::round(v / precision) * precision; };
-
-    // get vertex data to hash
-    for (int i = 0; i < t_vertices.size(); ++i)
-    {
-        const Vertex& vertex = t_vertices[i];
-        hash_combine(quantize(vertex.position[0]));
-        hash_combine(quantize(vertex.position[1]));
-        hash_combine(quantize(vertex.position[2]));
-        hash_combine(quantize(vertex.color[0]));
-        hash_combine(quantize(vertex.color[1]));
-        hash_combine(quantize(vertex.color[2]));
-    }
-
-    // get index data to hash
-    for (int i = 0; i < t_indices.size(); ++i)
-    {
-        const UINT32& index = t_indices[i];
-        hash_combine(index);
-    }
-
     // check if hash exists
-    UINT64 hash = seed;
+    UINT64 hash = create_hash(t_vertices, t_indices);
 
     MeshRecord mesh;
     auto it = m_mesh_map.find(hash);
@@ -829,6 +804,83 @@ D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const XMFLOAT4X4& mv)
     return desc;
 }
 
+uint64_t glRemix::glRemixRenderer::create_hash(std::vector<Vertex> vertices, std::vector<UINT32> indices)
+{
+    // hashing - logic from boost::hash_combine
+    size_t seed = 0;
+    auto hash_combine = [&seed](auto const& v)
+    {
+        seed ^= std::hash<std::decay_t<decltype(v)>>{}(v) + 0x9e3779b97f4a7c15ULL + (seed << 6)
+                + (seed >> 2);
+    };
+
+    // reduces floating point instability
+    auto quantize = [](float v, float precision = 1e-5f) -> float
+    { return std::round(v / precision) * precision; };
+
+    // get vertex data to hash
+    for (int i = 0; i < vertices.size(); ++i)
+    {
+        const Vertex& vertex = vertices[i];
+        hash_combine(quantize(vertex.position[0]));
+        hash_combine(quantize(vertex.position[1]));
+        hash_combine(quantize(vertex.position[2]));
+        hash_combine(quantize(vertex.color[0]));
+        hash_combine(quantize(vertex.color[1]));
+        hash_combine(quantize(vertex.color[2]));
+    }
+
+    // get index data to hash
+    for (int i = 0; i < indices.size(); ++i)
+    {
+        const UINT32& index = indices[i];
+        hash_combine(index);
+    }
+
+    return seed;
+}
+
+// replaces asset in scene based on file provided by user in ImGui
+void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& new_asset_path)
+{
+    // get current mesh that needs to be replaced
+    MeshRecord* old_mesh;
+    for (int i = 0; i < m_meshes.size(); ++i)
+    {
+        if (m_meshes[i].meshId == meshID)
+        {
+            old_mesh = &m_meshes[i];
+            break;
+        }
+    }
+    assert(old_mesh != nullptr);
+
+    // load new asset from given file path
+    std::vector<Vertex> new_vertices;
+    std::vector<uint32_t> new_indices;
+    THROW_IF_FALSE(load_mesh_from_path(new_asset_path, new_vertices, new_indices));
+
+    // TODO-AR: resize and copy new vertex and index data into buffers
+
+    // TODO-AR: rebuild blas for new mesh
+
+    // update mesh record
+    old_mesh->meshId = create_hash(new_vertices, new_indices);
+    old_mesh->vertexCount = new_vertices.size();
+    old_mesh->indexCount = new_indices.size();
+
+    // TODO-AR: change vertexID and indexID of subsequent meshes in buffer
+
+}
+
+bool glRemix::glRemixRenderer::load_mesh_from_path(const std::string& asset_path,
+                                                   std::vector<Vertex>& out_vertices,
+                                                   std::vector<uint32_t>& out_indices)
+{
+    // TODO-AR: fill in function
+    return true;
+}
+
 // builds top level acceleration structure with blas buffer (can be called each frame likely)
 void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
 {
@@ -944,6 +996,7 @@ void glRemix::glRemixRenderer::render()
 
     m_context.start_imgui_frame();
 
+    m_debug_window.set_mesh_buffer(m_meshes);
     m_debug_window.render();
 
     // Be careful not to call the ID3D12Interface reset instead

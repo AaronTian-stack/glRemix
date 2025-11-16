@@ -89,11 +89,18 @@ protected:
                          ID3D12GraphicsCommandList7* cmd_list, bool callList = false);
     void read_geometry(std::vector<UINT8>& ipcBuf, size_t& offset, GLTopology topology,
                        UINT32 bytes_read, ID3D12GraphicsCommandList7* cmd_list);
+    uint64_t create_hash(std::vector<Vertex> vertices, std::vector<UINT32> indices);
 
     // acceleration structure builders
     int build_mesh_blas(dx::D3D12Buffer& vertex_buffer, dx::D3D12Buffer& index_buffer,
                         ID3D12GraphicsCommandList7* cmd_list);
     void build_tlas(ID3D12GraphicsCommandList7* cmd_list);
+
+    // asset replacement
+    void replace_mesh(uint64_t meshID, const std::string& new_asset_path);
+    bool load_mesh_from_path(const std::string& asset_path,
+                             std::vector<Vertex>& out_vertices,
+                             std::vector<uint32_t>& out_indices);
 
 public:
     glRemixRenderer() = default;

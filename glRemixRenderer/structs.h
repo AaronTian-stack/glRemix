@@ -54,7 +54,7 @@ struct Material
 
 struct MeshRecord
 {
-    UINT32 meshId;      // will eventually be hashed
+    UINT32 meshId;      // hash from vertices and indices
     UINT32 vertexCount;
     UINT32 indexCount;  // number of indices belonging to this mesh
 

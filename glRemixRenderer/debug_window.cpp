@@ -1,5 +1,7 @@
 #include "debug_window.h"
 #include "imgui.h"
+#include "structs.h"
+#include <cstdio>
 
 using namespace glRemix;
 
@@ -26,9 +28,78 @@ void DebugWindow::render()
             }
             ImGui::EndTabBar();
         }
+
+        if (ImGui::BeginTabBar("Asset Replacement"))
+        {
+            if (ImGui::BeginTabItem("Mesh IDs"))
+            {
+                render_mesh_ids();
+                ImGui::EndTabItem();
+            }
+        }
     }
     ImGui::End();
 }
+
+// get mesh buffer from rt_app
+void DebugWindow::set_mesh_buffer(const std::vector<MeshRecord>& meshes)
+{
+    m_meshes = meshes;
+}
+
+// get replace_mesh function from rt_app
+void DebugWindow::set_replace_mesh_callback(
+    std::function<void(uint64_t meshID, const std::string& asset_path)> callback)
+{
+    m_replace_mesh_callback = callback;
+}
+
+
+void DebugWindow::render_mesh_ids()
+{
+    ImGui::Text("Asset Replacement");
+    ImGui::Text("List of Assets");
+
+    // render meshIDs and get selected mesh
+    if (ImGui::BeginListBox("##assets"))
+    {
+        for (int i = 0; i < m_meshes.size(); i++)
+        {
+            uint64_t meshID = m_meshes[i].meshId;
+
+            const bool is_selected = (m_meshID_to_replace == meshID);
+            char buf[64];
+            snprintf(buf, 64, "Mesh ID: %llu", meshID);
+            if (ImGui::Selectable(buf, is_selected))
+            {
+                m_meshID_to_replace = meshID;
+            }
+        }
+        ImGui::EndListBox();
+    }
+
+    // handle asset replacement with selected mesh
+    if (m_meshID_to_replace != -1)
+    {
+        ImGui::Separator();
+
+        // get new asset path from user input
+        char new_asset_path_char[256] = "";
+        ImGui::InputText("Replacement Asset Path", new_asset_path_char, sizeof(new_asset_path_char));
+        m_new_asset_path = new_asset_path_char;
+
+        // if button is pressed to replace asset, call replace_mesh from rt_app
+        if (ImGui::Button("Replace Asset"))
+        {
+            if (m_replace_mesh_callback)
+            {
+                m_replace_mesh_callback(m_meshID_to_replace, m_new_asset_path);
+            }
+        }
+    }
+
+}
+
 
 void DebugWindow::render_performance_stats()
 {
