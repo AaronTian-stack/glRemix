@@ -4,6 +4,14 @@
 
 #include "math_utils.h"
 
+#define DBG_PRINT(fmt, ...)                                                                        \
+    do                                                                                             \
+    {                                                                                              \
+        char _buf[256];                                                                            \
+        std::snprintf(_buf, sizeof(_buf), fmt, __VA_ARGS__);                                       \
+        OutputDebugStringA(_buf);                                                                  \
+    } while (0)
+
 namespace glRemix
 {
 // Local keyword allows to stay per-session, Global requires elevated permissions

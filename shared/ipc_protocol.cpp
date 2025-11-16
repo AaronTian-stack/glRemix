@@ -1,12 +1,45 @@
 #include "ipc_protocol.h"
 
+#include <sstream>
+
 bool glRemix::IPCProtocol::init_writer(const wchar_t* name, const UINT32 capacity)
 {
     return this->m_smem.create_for_writer(name, capacity);
 }
 
+/*
+ * Using `WaitForSingleObject`, ::send_frame effectively forces all writers to stall
+ * until they are able to write.
+ */
 bool glRemix::IPCProtocol::send_frame(const void* data, const UINT32 bytes) const
 {
+    SharedMemoryHeader* header = m_smem.get_header();
+    if (!header || !data)
+    {
+        DBG_PRINT("IPCProtocol - Invalid state.\n");
+        return false;
+    }
+
+    DWORD dw_wait_result;
+
+    while (header->state == SharedState::FILLED)
+    {
+        HANDLE read_event = m_smem.read_event();
+        if (!read_event)
+        {
+            DBG_PRINT("IPCProtocol - `read_event` handle is NULL.\n");
+            return false;
+        }
+
+        dw_wait_result = WaitForSingleObject(read_event, INFINITE);
+
+        if (dw_wait_result != WAIT_OBJECT_0)
+        {
+            DBG_PRINT("IPCProtocol - WaitForSingleObject read_event failed. Error Code: %u\n",
+                      dw_wait_result);
+            return false;
+        }
+    }
     return this->m_smem.write(data, bytes);
 }
 
