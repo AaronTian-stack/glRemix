@@ -1,17 +1,19 @@
 #include "rt_app.h"
 
-#include "math_utils.h"
-#include "imgui.h"
-#include "dx/d3d12_barrier.h"
 #include <cstdio>
 #include <cmath>
 
 #include <thread>
 #include <chrono>
 #include <vector>
-
 #include <filesystem>
-#include <gl_commands.h>
+
+#include <imgui.h>
+
+#include <shared/math_utils.h>
+#include <shared/gl_commands.h>
+
+#include "dx/d3d12_barrier.h"
 
 void glRemix::glRemixRenderer::create()
 {
@@ -280,6 +282,8 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
         return;
     }
 
+    current_frame = frameHeader->frame_index;
+
     m_meshes.clear();       // per frame meshes
     m_matrix_pool.clear();  // reset matrix pool each frame
     m_materials.clear();
@@ -292,6 +296,25 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
 
     // loop through data from frame
     read_ipc_buffer(ipc_buf, sizeof(GLFrameUnifs), bytes_read, cmd_list.Get());
+
+    // garbage collect meshes
+    for (auto it = m_mesh_map.begin(); it != m_mesh_map.end();)
+    {
+        auto& mesh = it->second;
+
+        if (current_frame - mesh.last_frame > frame_leniency)
+        {
+            m_blas_pool.free(mesh.blas_id);
+            m_vertex_pool.free(mesh.vertex_id);
+            m_index_pool.free(mesh.index_id);
+
+            it = m_mesh_map.erase(it);
+        }
+        else
+        {
+            it++;
+        }
+    }
 
     THROW_IF_FALSE(SUCCEEDED(cmd_list->Close()));
     const std::array<ID3D12CommandList*, 1> lists = { cmd_list.Get() };
@@ -712,9 +735,6 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
         dx::D3D12Buffer t_vertex_buffer;
         dx::D3D12Buffer t_index_buffer;
 
-        mesh.vertex_id = m_vertex_buffers.size();
-        mesh.index_id = m_index_buffers.size();
-
         dx::BufferDesc vertex_buffer_desc{
             .size = sizeof(Vertex) * t_vertices.size(),
             .stride = sizeof(Vertex),
@@ -727,7 +747,7 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
         THROW_IF_FALSE(m_context.map_buffer(&t_vertex_buffer, &cpu_ptr));
         memcpy(cpu_ptr, t_vertices.data(), vertex_buffer_desc.size);
         m_context.unmap_buffer(&t_vertex_buffer);
-        m_vertex_buffers.push_back(std::move(t_vertex_buffer));
+        mesh.vertex_id = m_vertex_pool.push_back(std::move(t_vertex_buffer));
 
         // create index buffer
         dx::BufferDesc index_buffer_desc{
@@ -740,11 +760,11 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
         THROW_IF_FALSE(m_context.map_buffer(&t_index_buffer, &cpu_ptr));
         memcpy(cpu_ptr, t_indices.data(), index_buffer_desc.size);
         m_context.unmap_buffer(&t_index_buffer);
-        m_index_buffers.push_back(std::move(t_index_buffer));
+        mesh.index_id = m_index_pool.push_back(std::move(t_index_buffer));
 
         // create blas buffer
-        mesh.blas_id = build_mesh_blas(m_vertex_buffers[mesh.vertex_id],
-                                       m_index_buffers[mesh.index_id], cmd_list);
+        mesh.blas_id = build_mesh_blas(m_vertex_pool[mesh.vertex_id], m_index_pool[mesh.index_id],
+                                       cmd_list);
 
         m_mesh_map[hash] = mesh;
     }
@@ -756,6 +776,8 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
 
     mesh.mv_id = static_cast<UINT32>(m_matrix_pool.size());
     m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
+
+    mesh.last_frame = current_frame;
 
     m_meshes.push_back(std::move(mesh));
 }
@@ -814,8 +836,7 @@ int glRemix::glRemixRenderer::build_mesh_blas(const dx::D3D12Buffer& vertex_buff
     std::array read_resources = { &t_blas_buffer };
     m_context.emit_barriers(cmd_list, read_resources.data(), read_resources.size(), nullptr, 0);
 
-    m_blas_buffers.push_back(t_blas_buffer);
-    return m_blas_buffers.size() - 1;
+    return m_blas_pool.push_back(std::move(t_blas_buffer));
 }
 
 static D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const XMFLOAT4X4& mv)
@@ -941,10 +962,7 @@ void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
     {
         MeshRecord mesh = m_meshes[i];
 
-        assert(mesh.blas_id < m_blas_buffers.size());
-        assert(mesh.mv_id < m_matrix_pool.size());
-
-        const auto blas_addr = m_blas_buffers[mesh.blas_id].get_gpu_address();
+        const auto blas_addr = m_blas_pool[mesh.blas_id].get_gpu_address();
         assert(blas_addr != 0);
 
         D3D12_RAYTRACING_INSTANCE_DESC desc = mv_to_instance_desc(m_matrix_pool[mesh.mv_id]);
