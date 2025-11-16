@@ -757,8 +757,8 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
         mesh.index_id = m_index_pool.push_back(std::move(t_index_buffer));
 
         // create blas buffer
-        mesh.blas_id = build_mesh_blas(m_vertex_pool[mesh.vertex_id],
-                                      m_index_pool[mesh.index_id], cmd_list);
+        mesh.blas_id = build_mesh_blas(m_vertex_pool[mesh.vertex_id], m_index_pool[mesh.index_id],
+                                       cmd_list);
 
         m_mesh_map[hash] = mesh;
     }

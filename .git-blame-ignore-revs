@@ -2,6 +2,7 @@
 # To use this file, configure git with:
 #   git config blame.ignoreRevsFile .git-blame-ignore-revs
 
+7d7ed77d5024c9e1eefc9b2a5ccf7cdb3ef6dcd4  # ci: run clang-format on new miles in main
 c6c44c9849304bcf21cc6e21c86965109e960ee5  # ci: convert 'frame_recorder.cpp' to LF
 10b5704c70044a8d6c4130825168c95d08eb1a20  # ci: workarounds for unreadable allman formatting of lambdas and aligned init list
 fc0293aea3c474f79a1138fa081783770efeffc6  # ci: convert 'frame_recorder.h' to LF
