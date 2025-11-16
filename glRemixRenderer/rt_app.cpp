@@ -297,6 +297,24 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     // loop through data from frame
     read_ipc_buffer(ipc_buf, sizeof(GLFrameUnifs), bytes_read, cmd_list.Get());
 
+    THROW_IF_FALSE(SUCCEEDED(cmd_list->Close()));
+    const std::array<ID3D12CommandList*, 1> lists = { cmd_list.Get() };
+    m_gfx_queue.queue->ExecuteCommandLists(1, lists.data());
+
+    // Signal fence and wait for GPU to finish
+    auto current_fence_value = ++m_fence_frame_ready_val[get_frame_index()];
+    m_gfx_queue.queue->Signal(m_fence_frame_ready.fence.Get(), current_fence_value);
+
+    dx::WaitInfo wait_info{
+        .wait_all = true,
+        .count = 1,
+        .fences = &m_fence_frame_ready,
+        .values = &current_fence_value,
+        .timeout = INFINITE,
+    };
+
+    THROW_IF_FALSE(m_context.wait_fences(wait_info));  // Block CPU until done
+
     // garbage collect meshes
     for (auto it = m_mesh_map.begin(); it != m_mesh_map.end();)
     {
@@ -315,24 +333,6 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
             it++;
         }
     }
-
-    THROW_IF_FALSE(SUCCEEDED(cmd_list->Close()));
-    const std::array<ID3D12CommandList*, 1> lists = { cmd_list.Get() };
-    m_gfx_queue.queue->ExecuteCommandLists(1, lists.data());
-
-    // Signal fence and wait for GPU to finish
-    auto current_fence_value = ++m_fence_frame_ready_val[get_frame_index()];
-    m_gfx_queue.queue->Signal(m_fence_frame_ready.fence.Get(), current_fence_value);
-
-    dx::WaitInfo wait_info{
-        .wait_all = true,
-        .count = 1,
-        .fences = &m_fence_frame_ready,
-        .values = &current_fence_value,
-        .timeout = INFINITE,
-    };
-
-    THROW_IF_FALSE(m_context.wait_fences(wait_info));  // Block CPU until done
 }
 
 void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf, size_t start_offset,
@@ -713,17 +713,17 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
     // check if hash exists
     UINT64 hash = seed;
 
-    MeshRecord mesh;
-    m_mesh_map.find(hash);
+    MeshRecord* mesh = nullptr;
     if (m_mesh_map.contains(hash))
     {
-        mesh = m_mesh_map[hash];
+        mesh = &m_mesh_map[hash];
     }
     else
     {
-        mesh.vertex_count = t_vertices.size();
-        mesh.index_count = t_indices.size();
-        mesh.mesh_id = hash;  // set hash to meshID
+        MeshRecord new_mesh{};
+        new_mesh.vertex_count = t_vertices.size();
+        new_mesh.index_count = t_indices.size();
+        new_mesh.mesh_id = hash;
 
         // create vertex buffer
         dx::D3D12Buffer t_vertex_buffer;
@@ -734,14 +734,14 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
             .stride = sizeof(Vertex),
             .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
         };
-        void* cpu_ptr;
+
+        void* cpu_ptr = nullptr;
         THROW_IF_FALSE(
             m_context.create_buffer(vertex_buffer_desc, &t_vertex_buffer, "vertex buffer"));
-
         THROW_IF_FALSE(m_context.map_buffer(&t_vertex_buffer, &cpu_ptr));
         memcpy(cpu_ptr, t_vertices.data(), vertex_buffer_desc.size);
         m_context.unmap_buffer(&t_vertex_buffer);
-        mesh.vertex_id = m_vertex_pool.push_back(std::move(t_vertex_buffer));
+        new_mesh.vertex_id = m_vertex_pool.push_back(std::move(t_vertex_buffer));
 
         // create index buffer
         dx::BufferDesc index_buffer_desc{
@@ -749,31 +749,32 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
             .stride = sizeof(UINT),
             .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
         };
-        THROW_IF_FALSE(m_context.create_buffer(index_buffer_desc, &t_index_buffer, "index buffer"));
 
+        THROW_IF_FALSE(m_context.create_buffer(index_buffer_desc, &t_index_buffer, "index buffer"));
         THROW_IF_FALSE(m_context.map_buffer(&t_index_buffer, &cpu_ptr));
         memcpy(cpu_ptr, t_indices.data(), index_buffer_desc.size);
         m_context.unmap_buffer(&t_index_buffer);
-        mesh.index_id = m_index_pool.push_back(std::move(t_index_buffer));
+        new_mesh.index_id = m_index_pool.push_back(std::move(t_index_buffer));
 
-        // create blas buffer
-        mesh.blas_id = build_mesh_blas(m_vertex_pool[mesh.vertex_id], m_index_pool[mesh.index_id],
-                                       cmd_list);
+        // create BLAS
+        new_mesh.blas_id = build_mesh_blas(m_vertex_pool[new_mesh.vertex_id],
+                                           m_index_pool[new_mesh.index_id], cmd_list);
 
-        m_mesh_map[hash] = mesh;
+        m_mesh_map.emplace(hash, std::move(new_mesh));
+        mesh = &m_mesh_map[hash];
     }
 
     // we assign materials here
-    mesh.mat_id = static_cast<UINT32>(m_materials.size());
+    mesh->mat_id = static_cast<UINT32>(m_materials.size());
     m_materials.push_back(
         m_material);  // store the current state of the material in the materials buffer
 
-    mesh.mv_id = static_cast<UINT32>(m_matrix_pool.size());
+    mesh->mv_id = static_cast<UINT32>(m_matrix_pool.size());
     m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
 
-    mesh.last_frame = current_frame;
+    mesh->last_frame = current_frame;
 
-    m_meshes.push_back(std::move(mesh));
+    m_meshes.push_back(std::move(*mesh));
 }
 
 int glRemix::glRemixRenderer::build_mesh_blas(const dx::D3D12Buffer& vertex_buffer,
