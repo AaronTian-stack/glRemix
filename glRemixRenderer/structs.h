@@ -54,17 +54,49 @@ struct Material
 
 struct MeshRecord
 {
-    uint32_t meshId;      // will eventually be hashed
-    uint32_t vertexCount;
-    uint32_t indexCount;  // number of indices belonging to this mesh
+    uint32_t mesh_id;      // will eventually be hashed
+    uint32_t vertex_count;
+    uint32_t index_count;  // number of indices belonging to this mesh
 
     // pointers
-    uint32_t vertexID;  // index into vertex buffer
-    uint32_t indexID;   // index into index buffer
-    uint32_t blasID;
-    uint32_t MVID;      // index into model view array
-    uint32_t matID;
-    uint32_t texID;
+    uint32_t vertex_id;  // index into vertex buffer
+    uint32_t index_id;   // index into index buffer
+    uint32_t blas_id;
+    uint32_t mv_id;      // index into model view array
+    uint32_t mat_id;
+    uint32_t tex_id;
+
+    // garbage collection
+    uint32_t last_frame; // last frame this mesh record was accessed
+};
+
+struct BufferPool
+{
+    std::vector<dx::D3D12Buffer> buffers;
+    std::vector<uint32_t> free_indices;
+
+    uint32_t push_back(dx::D3D12Buffer&& buffer)
+    {
+        if (!free_indices.empty())
+        {
+            uint32_t id = free_indices.back();
+            free_indices.pop_back();
+
+            buffers[id] = std::move(buffer);
+            return id;
+        }
+
+        buffers.push_back(std::move(buffer));
+        return static_cast<uint32_t>(buffers.size() - 1);
+    }
+
+    void destroy(uint32_t id)
+    {
+        buffers[id].destroy();
+        free_indices.push_back(id);
+    }
+
+    dx::D3D12Buffer& operator[](uint32_t id) { return buffers[id]; }
 };
 
 struct alignas(16) MVP

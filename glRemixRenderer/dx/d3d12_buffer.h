@@ -44,6 +44,14 @@ struct D3D12Buffer : D3D12Resource
     BufferDesc desc;
     friend class D3D12Context;  // It would be better if the internals were just exposed as a void
                                 // pointer or something
+
+    public:
+        void destroy()
+        {
+            allocation.Reset();
+            desc = {};
+            barrier_state = {};
+    }
 };
 
 }  // namespace glRemix::dx
