@@ -100,7 +100,6 @@ protected:
     int build_mesh_blas(const dx::D3D12Buffer& vertex_buffer, const dx::D3D12Buffer& index_buffer,
                         ID3D12GraphicsCommandList7* cmd_list);
     void build_tlas(ID3D12GraphicsCommandList7* cmd_list);
-    void delete_mesh(MeshRecord mesh);
 
 public:
     glRemixRenderer() = default;

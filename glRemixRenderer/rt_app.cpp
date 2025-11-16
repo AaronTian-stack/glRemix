@@ -295,13 +295,21 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     read_ipc_buffer(ipc_buf, sizeof(GLFrameUnifs), bytes_read, cmd_list.Get());
 
     // garbage collect meshes
-    for (auto& kv : m_mesh_map)
+    for (auto it = m_mesh_map.begin(); it != m_mesh_map.end();)
     {
-        MeshRecord mesh = kv.second;
+        auto& mesh = it->second;
 
         if (current_frame - mesh.last_frame > frame_leniency)
         {
-            delete_mesh(mesh);
+            m_blas_pool.free(mesh.blas_id);
+            m_vertex_pool.free(mesh.vertex_id);
+            m_index_pool.free(mesh.index_id);
+
+            it = m_mesh_map.erase(it);
+        }
+        else
+        {
+            it++;
         }
     }
 
@@ -322,16 +330,6 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     };
 
     THROW_IF_FALSE(m_context.wait_fences(wait_info));  // Block CPU until done
-}
-
-void glRemix::glRemixRenderer::delete_mesh(MeshRecord mesh)
-{
-    m_blas_pool.destroy(mesh.blas_id);
-    m_vertex_pool.destroy(mesh.vertex_id);
-    m_index_pool.destroy(mesh.index_id);
-    // TODO add more garbage collection as resources come in
-
-    m_mesh_map.erase(mesh.mesh_id);
 }
 
 void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf, size_t start_offset,

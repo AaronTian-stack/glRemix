@@ -89,9 +89,8 @@ struct BufferPool
         return static_cast<uint32_t>(buffers.size() - 1);
     }
 
-    void destroy(uint32_t id)
+    void free(uint32_t id)
     {
-        buffers[id].destroy();
         free_indices.push_back(id);
     }
 
