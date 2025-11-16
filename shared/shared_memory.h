@@ -9,6 +9,8 @@ namespace glRemix
 // Local keyword allows to stay per-session, Global requires elevated permissions
 // wchar_t is standard for file mapping names in windows (though can maybe switch with TCHAR*)
 constexpr const wchar_t* k_DEFAULT_MAP_NAME = L"Local\\glRemix_DefaultMap";
+constexpr const wchar_t* k_DEFAULT_WRITE_EVENT = L"Local\\glRemix_DefaultWriteEvent";
+constexpr const wchar_t* k_DEFAULT_READ_EVENT = L"Local\\glRemix_DefaultReadEvent";
 constexpr UINT32 k_DEFAULT_CAPACITY = 1 * MEGABYTE;  // i.e. 1mb
 
 /*
