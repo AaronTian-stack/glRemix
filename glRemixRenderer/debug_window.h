@@ -1,15 +1,25 @@
 #pragma once
 
 #include <imgui.h>
-#include <structs.h>
 #include <vector>
 #include <functional>
 #include <string>
+
+#include "application.h"
+#include "dx/d3d12_as.h"
+#include "gl/gl_matrix_stack.h"
+#include <DirectXMath.h>
+#include <ipc_protocol.h>
+
+#include "gl_commands.h"
+#include "structs.h"
+#include "tsl/robin_map.h"
 
 namespace glRemix
 {
 class DebugWindow
 {
+
     float m_fps = 0.0f;
 
     std::vector<MeshRecord> m_meshes;
@@ -25,7 +35,7 @@ class DebugWindow
 public:
     void render();
 
-    void set_mesh_buffer(const std::vector<MeshRecord>& meshes);
+    void set_mesh_buffer(std::vector<MeshRecord> meshes);
     void set_replace_mesh_callback(
         std::function<void(uint64_t meshID, const std::string& asset_path)> callback
     );

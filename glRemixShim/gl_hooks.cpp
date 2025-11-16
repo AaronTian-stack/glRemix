@@ -65,7 +65,7 @@ void APIENTRY gl_begin_ovr(GLenum mode)
     g_recorder.record(GLCommandType::GLCMD_BEGIN, &payload, sizeof(payload));
 }
 
-void APIENTRY gl_end_ovr(void)
+void APIENTRY gl_end_ovr()
 {
     GLEmptyCommand payload{};  // init with default 0 value
     g_recorder.record(GLCommandType::GLCMD_END, &payload, sizeof(payload));

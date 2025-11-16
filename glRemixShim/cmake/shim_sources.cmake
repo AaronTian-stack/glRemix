@@ -11,6 +11,7 @@ set(GLREMIX_SHIM_SOURCE_FILES
     "${GLREMIX_SHIM_SOURCE_DIR}/gl_loader.cpp"
     "${GLREMIX_SHIM_SOURCE_DIR}/gl_hooks.cpp"
     "${GLREMIX_SHIM_SOURCE_DIR}/wgl_exports.cpp"
+    "${GLREMIX_SHIM_SOURCE_DIR}/frame_recorder.cpp"
 )
 
 set(GLREMIX_SHIM_HEADER_FILES

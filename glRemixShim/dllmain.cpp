@@ -1,4 +1,3 @@
-#include "framework.h"
 #include "gl_hooks.h"
 #include "gl_loader.h"
 

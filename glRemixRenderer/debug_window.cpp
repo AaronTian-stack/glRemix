@@ -1,7 +1,7 @@
 #include "debug_window.h"
 #include "imgui.h"
-#include "structs.h"
-#include <cstdio>
+//#include "structs.h"
+//#include <cstdio>
 
 using namespace glRemix;
 
@@ -36,13 +36,14 @@ void DebugWindow::render()
                 render_mesh_ids();
                 ImGui::EndTabItem();
             }
+            ImGui::EndTabBar();
         }
     }
     ImGui::End();
 }
 
 // get mesh buffer from rt_app
-void DebugWindow::set_mesh_buffer(const std::vector<MeshRecord>& meshes)
+void DebugWindow::set_mesh_buffer(const std::vector<MeshRecord> meshes)
 {
     m_meshes = meshes;
 }
@@ -65,7 +66,7 @@ void DebugWindow::render_mesh_ids()
     {
         for (int i = 0; i < m_meshes.size(); i++)
         {
-            uint64_t meshID = m_meshes[i].meshId;
+            uint64_t meshID = m_meshes[i].mesh_id;
 
             const bool is_selected = (m_meshID_to_replace == meshID);
             char buf[64];
@@ -106,7 +107,7 @@ void DebugWindow::render_performance_stats()
     const ImGuiIO& io = ImGui::GetIO();
     m_fps = io.Framerate;
 
-    ImGui::Text("FPS: %.1f (%.3f ms/frame)", m_fps, 1000.f / m_fps);
+    ImGui::Text("FPS: %.1f (%.3f ms/frame)", m_fps, 1000.0f / m_fps);
 }
 
 void DebugWindow::render_settings()
