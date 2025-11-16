@@ -279,7 +279,7 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
         return;
     }
 
-    current_frame = frameHeader->frameIndex;
+    current_frame = frameHeader->frame_index;
 
     m_meshes.clear();       // per frame meshes
     m_matrix_pool.clear();  // reset matrix pool each frame

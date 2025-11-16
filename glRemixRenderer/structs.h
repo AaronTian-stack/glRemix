@@ -53,7 +53,6 @@ struct Material
 
 struct MeshRecord
 {
-<<<<<<< HEAD
     uint32_t mesh_id;      // will eventually be hashed
     uint32_t vertex_count;
     uint32_t index_count;  // number of indices belonging to this mesh
@@ -104,7 +103,7 @@ struct alignas(16) MVP
     XMFLOAT4X4 model;
     XMFLOAT4X4 view;
     XMFLOAT4X4 proj;
-=======
+
     UINT32 mesh_id;      // will eventually be hashed
     UINT32 vertex_count;
     UINT32 index_count;  // number of indices belonging to this mesh
@@ -116,6 +115,5 @@ struct alignas(16) MVP
     UINT32 mv_id;      // index into model view array
     UINT32 mat_id;
     UINT32 tex_id;
->>>>>>> 43dbb35157104085e1d77ed261adc2f62042f8fc
 };
 }  // namespace glRemix

@@ -57,12 +57,9 @@ class glRemixRenderer : public Application
 
     // matrix stack
     gl::glMatrixStack m_matrix_stack;
-<<<<<<< HEAD
+
     std::vector<XMFLOAT4X4> m_matrix_pool; // reset each frame
     XMMATRIX inverse_view;
-=======
-    std::vector<XMFLOAT4X4> m_matrix_pool;
->>>>>>> 43dbb35157104085e1d77ed261adc2f62042f8fc
 
     // display lists
     tsl::robin_map<int, std::vector<UINT8>> m_display_lists;
