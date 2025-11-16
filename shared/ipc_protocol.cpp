@@ -24,18 +24,18 @@ bool glRemix::IPCProtocol::send_frame(const void* data, const UINT32 bytes) cons
 
     while (header->state == SharedState::FILLED)
     {
-        HANDLE read_event = m_smem.read_event();
-        if (!read_event)
+        HANDLE get_read_event = m_smem.get_read_event();
+        if (!get_read_event)
         {
             DBG_PRINT("IPCProtocol - `read_event` handle is NULL.\n");
             return false;
         }
 
-        dw_wait_result = WaitForSingleObject(read_event, INFINITE);
+        dw_wait_result = WaitForSingleObject(get_read_event, INFINITE);
 
         if (dw_wait_result != WAIT_OBJECT_0)
         {
-            DBG_PRINT("IPCProtocol - WaitForSingleObject read_event failed. Error Code: %u\n",
+            DBG_PRINT("IPCProtocol - WaitForSingleObject get_read_event failed. Error Code: %u\n",
                       dw_wait_result);
             return false;
         }
@@ -48,7 +48,7 @@ bool glRemix::IPCProtocol::init_reader(const wchar_t* name)
     return this->m_smem.open_for_reader(name);
 }
 
-bool glRemix::IPCProtocol::try_consume_frame(void* dst, const UINT32 max_bytes, UINT32* out_bytes)
+bool glRemix::IPCProtocol::consume_frame(void* dst, const UINT32 max_bytes, UINT32* out_bytes)
 {
     return this->m_smem.read(dst, max_bytes, 0, out_bytes);
 }

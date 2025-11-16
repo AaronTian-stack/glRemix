@@ -265,7 +265,7 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     // stall until frame data is grabbed
     UINT32 bytes_read = 0;
     while (
-        !m_ipc.try_consume_frame(ipc_buf.data(), static_cast<UINT32>(ipc_buf.size()), &bytes_read))
+        !m_ipc.consume_frame(ipc_buf.data(), static_cast<UINT32>(ipc_buf.size()), &bytes_read))
     {
         OutputDebugStringA("No frame data available.\n");
         std::this_thread::sleep_for(std::chrono::milliseconds(60));  // rest before next poll

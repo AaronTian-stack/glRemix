@@ -22,7 +22,7 @@ public:
 
     // for renderer
     bool init_reader(const wchar_t* name = k_DEFAULT_MAP_NAME);  // use same map name or else...
-    bool try_consume_frame(void* dst, UINT32 max_bytes, UINT32* out_bytes = nullptr);
+    bool consume_frame(void* dst, UINT32 max_bytes, UINT32* out_bytes = nullptr);
 
     UINT32 get_capacity() const
     {

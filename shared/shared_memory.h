@@ -102,12 +102,12 @@ public:
     }
 
     /* for usage in future sync ops. dummy fxns for now */
-    HANDLE write_event() const
+    HANDLE get_write_event() const
     {
         return m_writeEvent;
     }
 
-    HANDLE read_event() const
+    HANDLE get_read_event() const
     {
         return m_readEvent;
     }
