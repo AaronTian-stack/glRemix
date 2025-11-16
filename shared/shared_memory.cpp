@@ -45,8 +45,8 @@ bool glRemix::SharedMemory::create_for_writer(const wchar_t* name, const UINT32 
                         static_cast<LONG>(SharedState::EMPTY));
 
     // create named events
-    m_writeEvent = CreateEventW(nullptr, FALSE, FALSE, L"Local\\glRemix_WriteEvent");
-    m_readEvent = CreateEventW(nullptr, FALSE, FALSE, L"Local\\glRemix_ReadEvent");
+    m_writeEvent = CreateEventW(nullptr, FALSE, FALSE, k_DEFAULT_WRITE_EVENT);
+    m_readEvent = CreateEventW(nullptr, FALSE, FALSE, k_DEFAULT_READ_EVENT);
 
     return true;
 }
@@ -72,8 +72,8 @@ bool glRemix::SharedMemory::open_for_reader(const wchar_t* name)
     }
 
     // Try to open events (safe if they don't exist yet)
-    m_writeEvent = OpenEventW(EVENT_ALL_ACCESS, FALSE, L"Local\\glRemix_WriteEvent");
-    m_readEvent = OpenEventW(EVENT_ALL_ACCESS, FALSE, L"Local\\glRemix_ReadEvent");
+    m_writeEvent = OpenEventW(EVENT_ALL_ACCESS, FALSE, k_DEFAULT_WRITE_EVENT);
+    m_readEvent = OpenEventW(EVENT_ALL_ACCESS, FALSE, k_DEFAULT_READ_EVENT);
 
     return true;
 }
