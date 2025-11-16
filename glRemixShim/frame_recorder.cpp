@@ -7,7 +7,9 @@ FrameRecorder g_recorder;
 
 bool FrameRecorder::initialize()
 {
-    return m_ipc.init_writer();
+    m_ipc.init_writer();
+
+    return true;
 }
 
 void FrameRecorder::record(const GLCommandType type, const void* payload, const UINT32 size)

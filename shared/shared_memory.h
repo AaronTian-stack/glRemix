@@ -8,17 +8,12 @@
     do                                                                                             \
     {                                                                                              \
         char _buf[256];                                                                            \
-        std::snprintf(_buf, sizeof(_buf), fmt, __VA_ARGS__);                                       \
+        std::snprintf(_buf, sizeof(_buf), fmt "\n", __VA_ARGS__);                                  \
         OutputDebugStringA(_buf);                                                                  \
     } while (0)
 
 namespace glRemix
 {
-// Local keyword allows to stay per-session, Global requires elevated permissions
-// wchar_t is standard for file mapping names in windows (though can maybe switch with TCHAR*)
-constexpr const wchar_t* k_DEFAULT_MAP_NAME = L"Local\\glRemix_DefaultMap";
-constexpr const wchar_t* k_DEFAULT_WRITE_EVENT = L"Local\\glRemix_DefaultWriteEvent";
-constexpr const wchar_t* k_DEFAULT_READ_EVENT = L"Local\\glRemix_DefaultReadEvent";
 constexpr UINT32 k_DEFAULT_CAPACITY = 1 * MEGABYTE;  // i.e. 1mb
 
 /*
@@ -70,11 +65,12 @@ public:
     ~SharedMemory();
 
     // writer creates or opens existing mapping and initializes header.
-    bool create_for_writer(const wchar_t* name = k_DEFAULT_MAP_NAME,
-                           UINT32 capacity = k_DEFAULT_CAPACITY);
+    bool create_for_writer(const wchar_t* map_name, const wchar_t* write_event_name,
+                           const wchar_t* read_event_name, UINT32 capacity = k_DEFAULT_CAPACITY);
 
     // reader opens existing mapping and maps view.
-    bool open_for_reader(const wchar_t* name = k_DEFAULT_MAP_NAME);
+    bool open_for_reader(const wchar_t* map_name, const wchar_t* write_event_name,
+                         const wchar_t* read_event_name);
 
     // state: EMPTY || CONSUMED -> FILLED
     // returns true if write success

@@ -12,31 +12,49 @@ struct GLFrameUnifs
     UINT32 payload_size = 0;  // bytes following this header
 };
 
+// Local keyword allows to stay per-session, Global requires elevated permissions
+// wchar_t is standard for file mapping names in windows (though can maybe switch with TCHAR*)
+constexpr const wchar_t* k_MAP_A = L"Local\\glRemix_Map_A";
+constexpr const wchar_t* k_WRITE_EVENT_A = L"Local\\glRemix_WriteEvent_A";
+constexpr const wchar_t* k_READ_EVENT_A = L"Local\\glRemix_ReadEvent_A";
+
+constexpr const wchar_t* k_MAP_B = L"Local\\glRemix_Map_B";
+constexpr const wchar_t* k_WRITE_EVENT_B = L"Local\\glRemix_WriteEvent_B";
+constexpr const wchar_t* k_READ_EVENT_B = L"Local\\glRemix_ReadEvent_B";
+
 // For now, a simple manager for `SharedMemory
 class IPCProtocol
 {
 public:
     // for shim
-    bool init_writer(const wchar_t* name = k_DEFAULT_MAP_NAME, UINT32 capacity = k_DEFAULT_CAPACITY);
-    bool send_frame(const void* data, UINT32 bytes) const;  // TODO: offset
+    void init_writer(UINT32 capacity = k_DEFAULT_CAPACITY);
+    void send_frame(const void* data, UINT32 bytes);
 
     // for renderer
-    bool init_reader(const wchar_t* name = k_DEFAULT_MAP_NAME);  // use same map name or else...
-    bool consume_frame(void* dst, UINT32 max_bytes, UINT32* out_bytes = nullptr);
+    void init_reader();
+    void consume_frame(void* dst, UINT32 max_bytes, UINT32* out_bytes = nullptr);
 
     UINT32 get_capacity() const
     {
-        return m_smem_A.get_capacity();
+        return m_slot_A.smem.get_capacity();
     }
 
 private:
+    struct MemorySlot
+    {
+        SharedMemory smem;
+        UINT32 frame_index = 0;  // each smem keeps track of their own frame index
+
+        bool operator<(const MemorySlot& other) const
+        {
+            return frame_index < other.frame_index;
+        }
+    };
+
     // double buffers
-    SharedMemory m_smem_A;
-    SharedMemory m_smem_B;
+    MemorySlot m_slot_A;
+    MemorySlot m_slot_B;
 
-    UINT32 g_frame_index;
-
-    SharedMemory* wait_for_write_buffer();
-    SharedMemory* wait_for_read_buffer();
+    UINT32 g_frame_index = 0;
 };
 }  // namespace glRemix

@@ -8,7 +8,9 @@ glRemix::SharedMemory::~SharedMemory()
 }
 
 // `CreateFileMapping`
-bool glRemix::SharedMemory::create_for_writer(const wchar_t* name, const UINT32 capacity)
+bool glRemix::SharedMemory::create_for_writer(const wchar_t* map_name,
+                                              const wchar_t* write_event_name,
+                                              const wchar_t* read_event_name, const UINT32 capacity)
 {
     close_all();
 
@@ -19,20 +21,19 @@ bool glRemix::SharedMemory::create_for_writer(const wchar_t* name, const UINT32 
                              PAGE_READWRITE,        // rw access
                              0,                     // maximum object size (high-order DWORD)
                              max_obj_size,          // maximum object size (low-order DWORD)
-                             name);                 // name of mapping object
+                             map_name);             // name of mapping object
 
     if (!h_map_file)
     {
-        std::ostringstream ss;
-        ss << "SharedMemory - Could not create file mapping of file. Error Code: " << GetLastError()
-           << "\n";
-        OutputDebugStringA(ss.str().c_str());
+        DBG_PRINT("SharedMemory.WRITER - `CreateFileMappingW()` failed. Error Code: %u",
+                  GetLastError());
         return false;
     }
 
     if (!map_common(h_map_file))
     {
-        // _map_common does its own error handling
+        DBG_PRINT("SharedMemory.WRITER - Could not map common view. Error Code: %u", GetLastError());
+
         CloseHandle(h_map_file);
         return false;
     }
@@ -46,36 +47,37 @@ bool glRemix::SharedMemory::create_for_writer(const wchar_t* name, const UINT32 
                         static_cast<LONG>(SharedState::EMPTY));
 
     // create named events
-    m_write_event = CreateEventW(nullptr, FALSE, FALSE, k_DEFAULT_WRITE_EVENT);
-    m_read_event = CreateEventW(nullptr, FALSE, FALSE, k_DEFAULT_READ_EVENT);
+    m_write_event = CreateEventW(nullptr, false, false, write_event_name);
+    m_read_event = CreateEventW(nullptr, false, true, read_event_name);
 
     return true;
 }
 
-bool glRemix::SharedMemory::open_for_reader(const wchar_t* name)
+bool glRemix::SharedMemory::open_for_reader(const wchar_t* map_name,
+                                            const wchar_t* write_event_name,
+                                            const wchar_t* read_event_name)
 {
     close_all();
 
-    HANDLE hMapFile = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, name);
-    if (!hMapFile)
+    HANDLE h_map_file = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, map_name);
+    if (!h_map_file)
     {
-        std::ostringstream ss;
-        ss << "SharedMemory - Could not open file mapping of file. Ensure external process has "
-              "created it. ";
-        ss << "Error Code: " << GetLastError() << "\n";
-        OutputDebugStringA(ss.str().c_str());
+        DBG_PRINT("SharedMemory.READER - `OpenFileMappingW()` failed. Error Code: %u",
+                  GetLastError());
         return false;
     }
 
-    if (!map_common(hMapFile))
+    if (!map_common(h_map_file))
     {
-        CloseHandle(hMapFile);
+        DBG_PRINT("SharedMemory.READER - Could not map common view. Error Code: %u", GetLastError());
+
+        CloseHandle(h_map_file);
         return false;
     }
 
     // Try to open events (safe if they don't exist yet)
-    m_write_event = OpenEventW(EVENT_ALL_ACCESS, FALSE, k_DEFAULT_WRITE_EVENT);
-    m_read_event = OpenEventW(EVENT_ALL_ACCESS, FALSE, k_DEFAULT_READ_EVENT);
+    m_write_event = OpenEventW(EVENT_ALL_ACCESS, FALSE, write_event_name);
+    m_read_event = OpenEventW(EVENT_ALL_ACCESS, FALSE, read_event_name);
 
     return true;
 }
@@ -206,10 +208,6 @@ bool glRemix::SharedMemory::map_common(const HANDLE h_map_file)
 
     if (m_view == nullptr)
     {
-        std::ostringstream ss;
-        ss << "SharedMemory - Could not map view of file. Error Code: " << GetLastError() << "\n";
-        OutputDebugStringA(ss.str().c_str());
-
         CloseHandle(h_map_file);
 
         return false;

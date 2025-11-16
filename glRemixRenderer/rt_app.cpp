@@ -253,22 +253,15 @@ void glRemix::glRemixRenderer::create()
 
 void glRemix::glRemixRenderer::read_gl_command_stream()
 {
-    // stall until initialized
-    while (!m_ipc.init_reader())
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(60));
-    }
+    // initialize IPC reader
+    m_ipc.init_reader();
 
     const UINT32 buf_capacity = m_ipc.get_capacity();  // ask shared mem for capacity
     std::vector<UINT8> ipc_buf(buf_capacity);          // decoupled local buffer here
 
-    // stall until frame data is grabbed
+    // consome frame from IPC buffer
     UINT32 bytes_read = 0;
-    while (!m_ipc.consume_frame(ipc_buf.data(), static_cast<UINT32>(ipc_buf.size()), &bytes_read))
-    {
-        OutputDebugStringA("No frame data available.\n");
-        std::this_thread::sleep_for(std::chrono::milliseconds(60));  // rest before next poll
-    }
+    m_ipc.consume_frame(ipc_buf.data(), static_cast<UINT32>(ipc_buf.size()), &bytes_read);
 
     const auto* frameHeader = reinterpret_cast<const GLFrameUnifs*>(ipc_buf.data());
 
