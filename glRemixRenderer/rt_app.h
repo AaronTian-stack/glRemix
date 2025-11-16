@@ -37,8 +37,6 @@ class glRemixRenderer : public Application
     dx::D3D12TLAS m_tlas{};
     dx::D3D12Descriptor m_tlas_descriptor{};
 
-    dx::D3D12Buffer m_meshes_buffer{};
-    dx::D3D12Buffer m_materials_buffer{};
     dx::D3D12Buffer m_lights_buffer{};
 
     // Shader table buffer for ray tracing pipeline (contains raygen, miss, and hit group)
@@ -68,9 +66,22 @@ class glRemixRenderer : public Application
         BufferAndDescriptor index_buffer;
     };
 
+    struct PendingGeometry
+    {
+        std::vector<Vertex> vertices;
+        std::vector<UINT32> indices;
+        UINT64 hash;
+        UINT32 mat_idx;
+        UINT32 mv_idx;
+    };
+    std::vector<PendingGeometry> m_pending_geometries;
+
     // BLAS, VB, IB per mesh
     // VB and IB have descriptors for SRV to be allocated from pager
     std::vector<MeshResources> m_mesh_resources;
+    // Materials per buffer
+    static constexpr UINT MATERIALS_PER_BUFFER = 256;
+    std::vector<BufferAndDescriptor> m_material_buffers;
 
     // matrix stack
     gl::glMatrixStack m_matrix_stack;
@@ -84,16 +95,20 @@ class glRemixRenderer : public Application
         = gl::GLMatrixMode::MODELVIEW;  // "The initial matrix mode is MODELVIEW" - glspec pg. 29
     gl::GLListMode list_mode_ = gl::GLListMode::COMPILE_AND_EXECUTE;
 
-    std::array<float, 4> m_color = { 1.0f, 1.0f, 1.0f,
-                                     1.0f };  // current color (may need to be tracked globally)
-    std::array<float, 3> m_normal = { 0.0f, 0.0f, 1.0f };  // global normal - default
-    Material m_material;                                   // global states that can be modified
+    // Global states
+    // Current color (may need to be tracked globally)
+    std::array<float, 4> m_color = { 1.0f, 1.0f, 1.0f, 1.0f };  
+    // Default according to spec
+    std::array<float, 3> m_normal = { 0.0f, 0.0f, 1.0f }; 
+    Material m_material;
 
+    BufferAndDescriptor m_light_buffer;
     std::array<Light, 8> m_lights{};
-    //std::vector<>
     std::vector<Material> m_materials;
 
     DebugWindow m_debug_window;
+
+    void create_material_buffer();
 
 protected:
     void create() override;
@@ -104,13 +119,21 @@ protected:
 
     void read_gl_command_stream();
     void read_ipc_buffer(std::vector<UINT8>& ipc_buf, size_t start_offset, UINT32 bytes_read,
-                         ID3D12GraphicsCommandList7* cmd_list, bool call_list = false);
+                         bool call_list = false);
     void read_geometry(std::vector<UINT8>& ipc_buf, size_t* offset, GLTopology topology,
-                       UINT32 bytes_read, ID3D12GraphicsCommandList7* cmd_list);
+                       UINT32 bytes_read);
+
+    struct BLASBuildInfo
+    {
+        const dx::D3D12Buffer* vertex_buffer;
+        const dx::D3D12Buffer* index_buffer;
+        dx::D3D12Buffer* blas;
+    };
 
     // acceleration structure builders
-    void build_mesh_blas(const dx::D3D12Buffer& vertex_buffer, const dx::D3D12Buffer& index_buffer,
-                        ID3D12GraphicsCommandList7* cmd_list, dx::D3D12Buffer* blas);
+    void build_mesh_blas_batch(const std::vector<BLASBuildInfo>& build_infos,
+                              ID3D12GraphicsCommandList7* cmd_list);
+    void build_pending_blas_buffers(ID3D12GraphicsCommandList7* cmd_list);
     void build_tlas(ID3D12GraphicsCommandList7* cmd_list);
 
 public:

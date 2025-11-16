@@ -1449,7 +1449,9 @@ void D3D12Context::emit_barriers(ID3D12GraphicsCommandList7* cmd_list, D3D12Buff
     assert(buffers || textures);
     const size_t total_count = buffer_count + texture_count;
 
-    std::array<Resource*, 16> resources{};
+    // TODO: Reduce size if possible
+    // Should the program be forced to emit multiple barrier groups instead?
+    std::array<Resource*, 64> resources{};
     assert(total_count <= resources.size());
 
     auto b_ptr = buffers;
