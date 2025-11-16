@@ -1,16 +1,19 @@
 #include "rt_app.h"
 
-#include "math_utils.h"
-#include "imgui.h"
-#include "dx/d3d12_barrier.h"
 #include <cstdio>
 #include <cmath>
 
 #include <thread>
 #include <chrono>
 #include <vector>
-
 #include <filesystem>
+
+#include <imgui.h>
+
+#include <shared/math_utils.h>
+#include <shared/gl_commands.h>
+
+#include "dx/d3d12_barrier.h"
 
 void glRemix::glRemixRenderer::create()
 {
@@ -754,8 +757,8 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
         mesh.index_id = m_index_pool.push_back(std::move(t_index_buffer));
 
         // create blas buffer
-        mesh.blas_id = build_mesh_blas(m_vertex_pool[mesh.vertex_id],
-                                      m_index_pool[mesh.index_id], cmd_list);
+        mesh.blas_id = build_mesh_blas(m_vertex_pool[mesh.vertex_id], m_index_pool[mesh.index_id],
+                                       cmd_list);
 
         m_mesh_map[hash] = mesh;
     }
