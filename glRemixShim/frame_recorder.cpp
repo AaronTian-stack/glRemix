@@ -69,7 +69,9 @@ UINT8* FrameRecorder::get_scratch_buffer(size_t requiredSize)
 {
     static thread_local std::vector<UINT8> scratch;
     if (scratch.size() < requiredSize)
+    {
         scratch.resize(requiredSize);
+    }
     return scratch.data();
 }
 

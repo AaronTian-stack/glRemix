@@ -236,10 +236,10 @@ struct GLTexImage2DCommand
 {
     UINT32 target;
     UINT32 level;
-    UINT32 internalFormat; // must be same as format.
+    UINT32 internalFormat;  // must be same as format.
     UINT32 width;
     UINT32 height;
-    UINT32 border; // the width of the border. must be either 0 or 1.
+    UINT32 border;  // the width of the border. must be either 0 or 1.
     UINT32 format;
     UINT32 type;
 

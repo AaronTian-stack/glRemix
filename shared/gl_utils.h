@@ -5,7 +5,8 @@
 namespace glRemix
 {
 
-/* Handled all cases specified here: https://learn.microsoft.com/en-us/windows/win32/opengl/glteximage2d */
+/* Handled all cases specified here:
+ * https://learn.microsoft.com/en-us/windows/win32/opengl/glteximage2d */
 static inline size_t _BytesPerComponent(GLenum type)
 {
     switch (type)
@@ -22,7 +23,8 @@ static inline size_t _BytesPerComponent(GLenum type)
     }
 }
 
-/* Handled all cases specified here: https://learn.microsoft.com/en-us/windows/win32/opengl/glteximage2d */
+/* Handled all cases specified here:
+ * https://learn.microsoft.com/en-us/windows/win32/opengl/glteximage2d */
 static inline size_t _ComponentsPerPixel(GLenum format)
 {
     switch (format)
