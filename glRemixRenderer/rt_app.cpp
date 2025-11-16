@@ -1,17 +1,19 @@
 #include "rt_app.h"
 
-#include "math_utils.h"
-#include "imgui.h"
-#include "dx/d3d12_barrier.h"
 #include <cstdio>
 #include <cmath>
 
 #include <thread>
 #include <chrono>
 #include <vector>
-
 #include <filesystem>
-#include <gl_commands.h>
+
+#include <imgui.h>
+
+#include <shared/math_utils.h>
+#include <shared/gl_commands.h>
+
+#include "dx/d3d12_barrier.h"
 
 void glRemix::glRemixRenderer::create_material_buffer()
 {
@@ -327,6 +329,8 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
         return;
     }
 
+    current_frame = frame_header->frame_index;
+
     m_meshes.clear();       // per frame meshes
     m_matrix_pool.clear();  // reset matrix pool each frame
     m_materials.clear();
@@ -334,6 +338,25 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
 
     // loop through data from frame
     read_ipc_buffer(ipc_buf, sizeof(GLFrameUnifs), bytes_read);
+
+    // garbage collect meshes
+    for (auto it = m_mesh_map.begin(); it != m_mesh_map.end();)
+    {
+        auto& mesh = it->second;
+
+        if (current_frame - mesh.last_frame > frame_leniency)
+        {
+            //m_blas_pool.free(mesh.blas_id);
+            //m_vertex_pool.free(mesh.vertex_id);
+            //m_index_pool.free(mesh.index_id);
+
+            it = m_mesh_map.erase(it);
+        }
+        else
+        {
+            it++;
+        }
+    }
 }
 
 void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf, const size_t start_offset,
@@ -739,7 +762,10 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
         m_material);  // store the current state of the material in the materials buffer
 
     mesh.mv_idx = static_cast<UINT32>(m_matrix_pool.size());
+
     m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
+
+    mesh.last_frame = current_frame;
 
     m_meshes.push_back(std::move(mesh));
 }

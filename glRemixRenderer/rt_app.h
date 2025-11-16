@@ -1,16 +1,19 @@
 #pragma once
 
+#include <tsl/robin_map.h>
+#include <DirectXMath.h>
+
+#include <shared/ipc_protocol.h>
+#include <shared/gl_commands.h>
+
 #include "application.h"
 #include "debug_window.h"
 #include "dx/d3d12_as.h"
+
 #include "descriptor_pager.h"
 #include "gl/gl_matrix_stack.h"
-#include <DirectXMath.h>
-#include <ipc_protocol.h>
 
-#include "gl_commands.h"
 #include "structs.h"
-#include "tsl/robin_map.h"
 
 namespace glRemix
 {
@@ -83,9 +86,15 @@ class glRemixRenderer : public Application
     static constexpr UINT MATERIALS_PER_BUFFER = 256;
     std::vector<BufferAndDescriptor> m_material_buffers;
 
+    //BufferPool m_blas_pool;
+    //BufferPool m_vertex_pool;
+    //BufferPool m_index_pool;
+
     // matrix stack
     gl::glMatrixStack m_matrix_stack;
-    std::vector<XMFLOAT4X4> m_matrix_pool;
+
+    std::vector<XMFLOAT4X4> m_matrix_pool;  // reset each frame
+    XMMATRIX inverse_view;
 
     // display lists
     tsl::robin_map<int, std::vector<UINT8>> m_display_lists;
@@ -109,6 +118,9 @@ class glRemixRenderer : public Application
     DebugWindow m_debug_window;
 
     void create_material_buffer();
+
+    uint32_t frame_leniency = 10;
+    uint32_t current_frame;
 
 protected:
     void create() override;

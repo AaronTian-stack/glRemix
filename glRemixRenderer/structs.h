@@ -56,8 +56,42 @@ struct MeshRecord
     UINT32 mesh_id;       // will eventually be hashed
 
     UINT32 blas_vb_ib_idx;
-    UINT32 mv_idx;        // index into model view array
+    UINT32 mv_idx;  // index into model view array
     UINT32 mat_idx;
+    
+    // garbage collection
+    uint32_t last_frame;  // last frame this mesh record was accessed
+};
+
+struct BufferPool
+{
+    std::vector<dx::D3D12Buffer> buffers;
+    std::vector<uint32_t> free_indices;
+
+    uint32_t push_back(dx::D3D12Buffer&& buffer)
+    {
+        if (!free_indices.empty())
+        {
+            uint32_t id = free_indices.back();
+            free_indices.pop_back();
+
+            buffers[id] = std::move(buffer);
+            return id;
+        }
+
+        buffers.push_back(std::move(buffer));
+        return static_cast<uint32_t>(buffers.size() - 1);
+    }
+
+    void free(uint32_t id)
+    {
+        free_indices.push_back(id);
+    }
+
+    dx::D3D12Buffer& operator[](uint32_t id)
+    {
+        return buffers[id];
+    }
 };
 
 struct GPUMeshRecord
