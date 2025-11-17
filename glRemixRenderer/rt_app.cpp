@@ -18,7 +18,7 @@
 void glRemix::glRemixRenderer::create_material_buffer()
 {
     BufferAndDescriptor bd;
-    const dx::BufferDesc desc{
+    constexpr dx::BufferDesc desc{
         .size = sizeof(Material) * MATERIALS_PER_BUFFER,
         .stride = sizeof(Material),
         .visibility = dx::CPU | dx::GPU,
@@ -89,8 +89,8 @@ void glRemix::glRemixRenderer::create()
 
     pipeline_desc.root_signature = m_root_signature.Get();
 
-    ComPtr<ID3D12ShaderReflection>
-        shader_reflection_interface;  // Needs to stay in scope until pipeline is created
+    // Needs to stay in scope until pipeline is created
+    ComPtr<ID3D12ShaderReflection> shader_reflection_interface;
     THROW_IF_FALSE(
         m_context.reflect_input_layout(vertex_shader.Get(), &pipeline_desc.input_layout, false,
                                        shader_reflection_interface.ReleaseAndGetAddressOf()));
@@ -266,7 +266,7 @@ void glRemix::glRemixRenderer::create()
     }
 
     dx::BufferDesc scratch_buffer_desc{
-        .size = 16u * MEGABYTE,
+        .size = 16ul * MEGABYTE,
         .stride = 0,
         .visibility = dx::GPU,
         .uav = true,  // Scratch space must be in UAV layout
@@ -274,9 +274,9 @@ void glRemix::glRemixRenderer::create()
     THROW_IF_FALSE(
         m_context.create_buffer(scratch_buffer_desc, &m_scratch_space, "BLAS scratch space"));
 
-    // Start out with 64 instances/meshes
+    // Start out with 128 instances/meshes
     dx::BufferDesc instance_buffer_desc{
-        .size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * 64,
+        .size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * 128,
         .stride = sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
         .visibility = dx::CPU | dx::GPU,
     };
@@ -605,11 +605,9 @@ void glRemix::glRemixRenderer::read_geometry(void* const ipc_buf, size_t* const 
             {
                 const auto* v = reinterpret_cast<const GLVertex3fCommand*>(ipc_p);
                 // TODO: We should not be discarding A component of color if we want to support alpha
-                Vertex vertex{
-                    .position = { v->x, v->y, v->z },
-                    .color = { m_color.x, m_color.y, m_color.z },
-                    .normal = m_normal
-                };
+                Vertex vertex{ .position = { v->x, v->y, v->z },
+                               .color = { m_color.x, m_color.y, m_color.z },
+                               .normal = m_normal };
                 t_vertices.push_back(vertex);
                 break;
             }
