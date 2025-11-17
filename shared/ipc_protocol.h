@@ -32,7 +32,7 @@ class IPCProtocol
 public:
     // for shim
     void init_writer();
-    void start_frame();
+    void start_frame_or_wait();  // uses `WaitForMultipleObjects` to stall thread here
 
     template<typename GLCommand>
     inline void write_command(GLCommandType type, const GLCommand& command, bool has_data = false,
@@ -43,11 +43,16 @@ public:
         this->write_command_base(type, command, command_bytes, has_data, data_ptr, data_bytes);
     }
 
+    /*
+     * Writes `GLFrameUnifs` at 0 offset of IPC file-mapped object.
+     * Signals write event when complete
+     */
     void end_frame();
 
     // for renderer
     void init_reader();
-    void consume_frame(void* payload, UINT32* payload_size, UINT32* frame_index);
+    // uses `WaitForMultipleObjects` to stall thread here. signals read event when complete.
+    void consume_frame_or_write(void* payload, UINT32* payload_size, UINT32* frame_index);
 
     inline UINT32 get_max_payload_size()
     {
@@ -60,7 +65,7 @@ private:
     struct MemorySlot
     {
         SharedMemory smem;
-        UINT32 frame_index = 0;  // each smem keeps track of their own frame index
+        UINT32 frame_index = 0;  // each smem keeps track of their own frame index for now
 
         inline bool operator<(const MemorySlot& other) const
         {

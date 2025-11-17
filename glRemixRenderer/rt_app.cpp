@@ -261,8 +261,8 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
 {
     UINT32 payload_size = 0;
 
-    // guaranteed consome frame from IPC buffer
-    m_ipc.consume_frame(m_ipc_buffer.data(), &payload_size, &current_frame);
+    // consume frame from IPC buffer
+    m_ipc.consume_frame_or_write(m_ipc_buffer.data(), &payload_size, &current_frame);
 
     if (payload_size == 0)
     {

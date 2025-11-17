@@ -28,7 +28,7 @@ void initialize()
     auto initialize_once_fn = []
     {
         g_ipc.init_writer();  // initialize shim as IPC writer
-        g_ipc.start_frame();
+        g_ipc.start_frame_or_wait();
 
         // Start the renderer as a subprocess
         // Get the DLL path then expect to find "glRemix_renderer.exe" alongside it

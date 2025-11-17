@@ -21,7 +21,7 @@ void glRemix::IPCProtocol::init_writer()
     }
 }
 
-void glRemix::IPCProtocol::start_frame()
+void glRemix::IPCProtocol::start_frame_or_wait()
 {
     {
         MemorySlot* oldest;  // shared memory that has the smaller recorded time frame
@@ -119,7 +119,8 @@ void glRemix::IPCProtocol::init_reader()
     throw std::runtime_error("IPCProtocol.READER - Timed out waiting for writer initialization.");
 }
 
-void glRemix::IPCProtocol::consume_frame(void* payload, UINT32* payload_size, UINT32* frame_index)
+void glRemix::IPCProtocol::consume_frame_or_write(void* payload, UINT32* payload_size,
+                                                  UINT32* frame_index)
 {
     {
         MemorySlot* oldest;  // shared memory that has the smaller recorded time frame

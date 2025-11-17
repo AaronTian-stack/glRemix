@@ -336,7 +336,7 @@ GLuint APIENTRY gl_gen_lists_ovr(GLsizei range)
 BOOL WINAPI swap_buffers_ovr(HDC)
 {
     g_ipc.end_frame();
-    g_ipc.start_frame();
+    g_ipc.start_frame_or_wait();
 
     return TRUE;
 }
