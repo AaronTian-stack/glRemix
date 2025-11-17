@@ -14,6 +14,7 @@
 #include "gl/gl_matrix_stack.h"
 
 #include "structs.h"
+#include <shared/containers/free_list_vector.h>
 
 namespace glRemix
 {
@@ -81,10 +82,10 @@ class glRemixRenderer : public Application
 
     // BLAS, VB, IB per mesh
     // VB and IB have descriptors for SRV to be allocated from pager
-    std::vector<MeshResources> m_mesh_resources;
+    FreeListVector<MeshResources> m_mesh_resources;
     // Materials per buffer
     static constexpr UINT MATERIALS_PER_BUFFER = 256;
-    std::vector<BufferAndDescriptor> m_material_buffers;
+    FreeListVector<BufferAndDescriptor> m_material_buffers;
 
     //BufferPool m_blas_pool;
     //BufferPool m_vertex_pool;

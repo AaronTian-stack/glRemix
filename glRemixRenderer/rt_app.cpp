@@ -324,7 +324,7 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     if (frame_header->payload_size == 0)
     {
         char buffer[256];
-        sprintf(buffer, "Frame %u: no new commands.\n", frame_header->frame_index);
+        sprintf_s(buffer, "Frame %u: no new commands.\n", frame_header->frame_index);
         OutputDebugStringA(buffer);
         return;
     }
@@ -346,15 +346,12 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
 
         if (current_frame - mesh.last_frame > frame_leniency)
         {
-            //m_blas_pool.free(mesh.blas_id);
-            //m_vertex_pool.free(mesh.vertex_id);
-            //m_index_pool.free(mesh.index_id);
-
+            m_mesh_resources.free(mesh.blas_vb_ib_idx);
             it = m_mesh_map.erase(it);
         }
         else
         {
-            it++;
+            ++it;
         }
     }
 }
@@ -733,16 +730,15 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
     // check if hash exists
     UINT64 hash = seed;
 
-    MeshRecord mesh;
-    mesh.mesh_id = hash;
-    
+    MeshRecord* mesh;
     if (m_mesh_map.contains(hash))
     {
-        // Retrieve cached geometry index
-        mesh.blas_vb_ib_idx = m_mesh_map[hash].blas_vb_ib_idx;
+        mesh = &m_mesh_map[hash];
     }
     else
     {
+        MeshRecord new_mesh;
+
         // Store pending geometry for deferred BLAS building
         PendingGeometry pending;
         pending.vertices = std::move(t_vertices);
@@ -751,23 +747,28 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
         pending.mat_idx = static_cast<UINT32>(m_materials.size());
         pending.mv_idx = static_cast<UINT32>(m_matrix_pool.size());
         
-        mesh.blas_vb_ib_idx = m_mesh_resources.size() + m_pending_geometries.size();
+        new_mesh.blas_vb_ib_idx = m_mesh_resources.size() + m_pending_geometries.size();
+
+        m_mesh_map.emplace(hash, new_mesh);
         
         m_pending_geometries.push_back(std::move(pending));
+
+        mesh = &m_mesh_map[hash];
     }
 
     // Assign per-instance data (not cached)
-    mesh.mat_idx = static_cast<UINT32>(m_materials.size());
+    mesh->mat_idx = static_cast<UINT32>(m_materials.size());
     m_materials.push_back(
         m_material);  // store the current state of the material in the materials buffer
 
-    mesh.mv_idx = static_cast<UINT32>(m_matrix_pool.size());
+    mesh->mv_idx = static_cast<UINT32>(m_matrix_pool.size());
 
     m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
 
-    mesh.last_frame = current_frame;
+    mesh->last_frame = current_frame;
 
-    m_meshes.push_back(std::move(mesh));
+    // This is ok because it is a small struct
+    m_meshes.push_back(*mesh);
 }
 
 void glRemix::glRemixRenderer::build_pending_blas_buffers(ID3D12GraphicsCommandList7* cmd_list)
@@ -778,7 +779,8 @@ void glRemix::glRemixRenderer::build_pending_blas_buffers(ID3D12GraphicsCommandL
     }
 
     const size_t start_idx = m_mesh_resources.size();
-    m_mesh_resources.resize(start_idx + m_pending_geometries.size());
+    // This is needed otherwise a reallocation inside the loop will invalidate pointers
+    m_mesh_resources.reserve(start_idx + m_pending_geometries.size());
 
     // TODO: Use static allocatoro get rid of this entirely
     static std::vector<BLASBuildInfo> build_infos;
@@ -788,8 +790,9 @@ void glRemix::glRemixRenderer::build_pending_blas_buffers(ID3D12GraphicsCommandL
     // Create all vertex and index buffers first
     for (size_t i = 0; i < m_pending_geometries.size(); ++i)
     {
+    
         auto& pending = m_pending_geometries[i];
-        MeshResources& resource = m_mesh_resources[start_idx + i];
+        MeshResources resource;
 
         // Create vertex buffer
         auto& vb = resource.vertex_buffer;
@@ -818,19 +821,23 @@ void glRemix::glRemixRenderer::build_pending_blas_buffers(ID3D12GraphicsCommandL
         memcpy(cpu_ptr, pending.indices.data(), index_buffer_desc.size);
         m_context.unmap_buffer(&ib.buffer);
 
-        // Add to build info list
-        build_infos.push_back(BLASBuildInfo{
-            .vertex_buffer = &vb.buffer,
-            .index_buffer = &ib.buffer,
-            .blas = &resource.blas,
-        });
-
         // Cache the geometry
         const UINT32 resource_idx = static_cast<UINT32>(start_idx + i);
         MeshRecord cached_mesh{};
         cached_mesh.mesh_id = pending.hash;
         cached_mesh.blas_vb_ib_idx = resource_idx;
         m_mesh_map[pending.hash] = cached_mesh;
+
+        auto index = m_mesh_resources.push_back(std::move(resource));
+        
+        auto& true_resource = m_mesh_resources[index];
+        
+        // Add to build info list
+        build_infos.push_back(BLASBuildInfo{
+            .vertex_buffer = &true_resource.vertex_buffer.buffer,
+            .index_buffer = &true_resource.index_buffer.buffer,
+            .blas = &true_resource.blas,
+        });
     }
 
     // Build all BLAS in a single batch
