@@ -25,6 +25,7 @@
 #pragma comment(linker, "/export:wglUseFontBitmapsW=_glRemix_wglUseFontBitmapsW@16")
 #pragma comment(linker, "/export:wglUseFontOutlinesA=_glRemix_wglUseFontOutlinesA@32")
 #pragma comment(linker, "/export:wglUseFontOutlinesW=_glRemix_wglUseFontOutlinesW@32")
+#pragma comment(linker, "/export:wglSwapIntervalEXT=_glRemix_wglSwapIntervalEXT@4")
 #else
 #pragma comment(linker, "/export:wglChoosePixelFormat=glRemix_wglChoosePixelFormat")
 #pragma comment(linker, "/export:wglCopyContext=glRemix_wglCopyContext")
@@ -51,4 +52,5 @@
 #pragma comment(linker, "/export:wglUseFontBitmapsW=glRemix_wglUseFontBitmapsW")
 #pragma comment(linker, "/export:wglUseFontOutlinesA=glRemix_wglUseFontOutlinesA")
 #pragma comment(linker, "/export:wglUseFontOutlinesW=glRemix_wglUseFontOutlinesW")
+#pragma comment(linker, "/export:wglSwapIntervalEXT=glRemix_wglSwapIntervalEXT")
 #endif

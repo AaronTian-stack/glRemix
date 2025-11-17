@@ -452,6 +452,11 @@ BOOL WINAPI share_lists_ovr(HGLRC, HGLRC)
     return TRUE;
 }
 
+BOOL WINAPI swap_interval_EXT_ovr(int interval)
+{
+    return TRUE;
+}
+
 std::once_flag g_install_flag;
 
 void install_overrides()
@@ -513,6 +518,7 @@ void install_overrides()
         gl::register_hook("wglGetCurrentDC", reinterpret_cast<PROC>(&get_current_dc_ovr));
         gl::register_hook("wglMakeCurrent", reinterpret_cast<PROC>(&make_current_ovr));
         gl::register_hook("wglShareLists", reinterpret_cast<PROC>(&share_lists_ovr));
+        gl::register_hook("wglSwapIntervalEXT", reinterpret_cast<PROC>(&swap_interval_EXT_ovr));
     };
 
     std::call_once(g_install_flag, register_all_hooks_once_fn);
