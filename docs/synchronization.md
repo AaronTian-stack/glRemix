@@ -16,16 +16,19 @@ IPC Milestone 2 Deliverables:
 
 ### GLXGears
 
-|         | Baseline | Original | Milestone 1 | Milestone 2 |
-| ------- | -------- | -------- | ----------- | ----------- |
-| Debug   | 1926.2   |          |             | 492.7       |
-| Release | 1980.5   |          |             | 785.5       |
+|         | Original App | No Sync or Stalling  | Milestone 1 | Milestone 2 |
+| ------- | ------------ | -------------------- | ----------- | ----------- |
+| Debug   | 1926.2       | 8076.7 (ImGUI ~500)  | 486.5       | 492.7       |
+| Release | 1980.5       | 39774.3 (ImGUI ~800) | 774.4       | 785.5       |
 
 ## Refactor Milestones
 
-### Milestone 1
+### Milestone 1 - Host-to-glRemixRenderer Framerate Synchronization
 
-Commit URL: TBD
+Commit Hash: `b98f4ad9e0a61e7b4c88534022232a694e2d3fc5`
+
+This milestone involves forcing synchronization of the host app and glRemix's DX12 renderer.
+This connotes that the host app is not allowed to move to a new frame until the renderer has read from shared memory.
 
 Refactor `IPCProtocol::send_frame` so that it does not allow progression of the thread until it has successfully written to shared memory.
 
@@ -38,3 +41,7 @@ DWORD dw_wait_result = WaitForSingleObject(m_smem.get_read_event(), INFINITE);
 Shown below is the (rudimentary) debug log from the renderer with incrementing, non-skipping frames.
 
 ![debug log - incrementing frames](assets/debugLog_incrementingFrames.png)
+
+### Milestone 2 - Double-buffered IPC
+
+Commit Hash: `cba21d9bd1efaf8763b9a1a52323b5993a5110b3`
