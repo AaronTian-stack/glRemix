@@ -772,13 +772,10 @@ void glRemix::glRemixRenderer::build_pending_blas_buffers(ID3D12GraphicsCommandL
     }
 
     const size_t start_idx = m_mesh_resources.size();
-    // This is needed otherwise a reallocation inside the loop will invalidate pointers
-    m_mesh_resources.reserve(start_idx + m_pending_geometries.size());
 
-    // TODO: Use static allocatoro get rid of this entirely
+    // TODO: Use static allocator get rid of this entirely
     static std::vector<BLASBuildInfo> build_infos;
     build_infos.clear();
-    build_infos.reserve(m_pending_geometries.size());
 
     // Create all vertex and index buffers first
     for (size_t i = 0; i < m_pending_geometries.size(); ++i)
@@ -820,15 +817,16 @@ void glRemix::glRemixRenderer::build_pending_blas_buffers(ID3D12GraphicsCommandL
         cached_mesh.blas_vb_ib_idx = resource_idx;
         m_mesh_map[pending.hash] = cached_mesh;
 
-        auto index = m_mesh_resources.push_back(std::move(resource));
+        m_mesh_resources.push_back(std::move(resource));
+    }
 
-        auto& true_resource = m_mesh_resources[index];
-
-        // Add to build info list
+    for (size_t i = 0; i < m_pending_geometries.size(); ++i)
+    {
+        auto& resource = m_mesh_resources[start_idx + i];
         build_infos.push_back(BLASBuildInfo{
-            .vertex_buffer = &true_resource.vertex_buffer.buffer,
-            .index_buffer = &true_resource.index_buffer.buffer,
-            .blas = &true_resource.blas,
+            .vertex_buffer = &resource.vertex_buffer.buffer,
+            .index_buffer = &resource.index_buffer.buffer,
+            .blas = &resource.blas,
         });
     }
 
