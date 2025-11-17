@@ -23,7 +23,7 @@ void glRemix::glRemixRenderer::create_material_buffer()
         .stride = sizeof(Material),
         .visibility = dx::CPU | dx::GPU,
     };
-    m_context.create_buffer(desc, &bd.buffer);
+    m_context.create_buffer(desc, &bd.buffer, "material buffer");
 
     bd.page_index = m_descriptor_pager.allocate_descriptor(m_context,
                                                            dx::DescriptorPager::MATERIALS,
@@ -823,9 +823,11 @@ void glRemix::glRemixRenderer::build_pending_blas_buffers(ID3D12GraphicsCommandL
         vb.page_index = m_descriptor_pager.allocate_descriptor(m_context,
                                                                dx::DescriptorPager::VB_IB,
                                                                &vb.descriptor);
+        m_context.create_shader_resource_view(vb.buffer, vb.descriptor);
         ib.page_index = m_descriptor_pager.allocate_descriptor(m_context,
                                                                dx::DescriptorPager::VB_IB,
                                                                &ib.descriptor);
+        m_context.create_shader_resource_view(ib.buffer, ib.descriptor);
 
         // Cache the geometry
         const UINT32 resource_idx = static_cast<UINT32>(start_idx + i);

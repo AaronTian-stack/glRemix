@@ -24,6 +24,10 @@ UINT glRemix::dx::DescriptorPager::allocate_descriptor(const D3D12Context& conte
     auto& pages = m_pages[type];
     const UINT descriptors_per_page = m_descriptors_per_page[type];
 
+    // Mark this type dirty so it gets copied to the GPU heap
+    // TODO: Finer grained update based off specific page index instead of whole type
+    m_dirty_index = std::min(type, m_dirty_index);
+
     // Try to allocate from current pages
     for (UINT i = 0; i < pages.size(); i++)
     {
@@ -42,9 +46,6 @@ UINT glRemix::dx::DescriptorPager::allocate_descriptor(const D3D12Context& conte
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
     };
     context.create_descriptor_heap(desc, &pages.back());
-
-    // TODO: Finer grained update based off specific page index instead of whole type
-    m_dirty_index = std::min(type, m_dirty_index);
 
     pages.back().allocate(descriptor);
 
@@ -65,6 +66,7 @@ void glRemix::dx::DescriptorPager::free_descriptor(const PageType type, D3D12Des
         // Check if descriptor belongs to this page
         if (descriptor->heap == &page)
         {
+            m_dirty_index = type;
             page.deallocate(descriptor);
             return;
         }
