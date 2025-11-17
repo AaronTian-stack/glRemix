@@ -17,13 +17,13 @@ namespace glRemix
 {
 class DebugWindow
 {
-
     float m_fps = 0.0f;
 
     std::vector<MeshRecord> m_meshes;
     uint64_t m_meshID_to_replace = -1;
     std::string m_new_asset_path;
-    std::function<void(uint64_t meshID, const std::string& asset_path)> m_replace_mesh_callback; // replace_mesh function from rt_app
+    std::function<void(uint64_t meshID, const std::string& asset_path)>
+        m_replace_mesh_callback;  // replace_mesh function from rt_app
 
     void render_performance_stats();
     void render_settings();
@@ -35,8 +35,6 @@ public:
 
     void set_mesh_buffer(std::vector<MeshRecord> meshes);
     void set_replace_mesh_callback(
-        std::function<void(uint64_t meshID, const std::string& asset_path)> callback
-    );
-
+        std::function<void(uint64_t meshID, const std::string& asset_path)> callback);
 };
 }  // namespace glRemix

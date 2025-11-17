@@ -1,7 +1,7 @@
 #include "debug_window.h"
 #include "imgui.h"
-//#include "structs.h"
-//#include <cstdio>
+// #include "structs.h"
+// #include <cstdio>
 
 using namespace glRemix;
 
@@ -55,7 +55,6 @@ void DebugWindow::set_replace_mesh_callback(
     m_replace_mesh_callback = callback;
 }
 
-
 void DebugWindow::render_mesh_ids()
 {
     ImGui::Text("Asset Replacement");
@@ -98,9 +97,7 @@ void DebugWindow::render_mesh_ids()
             }
         }
     }
-
 }
-
 
 void DebugWindow::render_performance_stats()
 {

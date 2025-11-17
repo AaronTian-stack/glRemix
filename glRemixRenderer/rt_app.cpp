@@ -9,7 +9,7 @@
 #include <filesystem>
 
 #include <imgui.h>
-//#include <core.hpp>
+// #include <core.hpp>
 
 #include <shared/math_utils.h>
 #include <shared/gl_commands.h>
@@ -872,7 +872,8 @@ static D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const XMFLOAT4X4& mv)
     return desc;
 }
 
-uint64_t glRemix::glRemixRenderer::create_hash(std::vector<Vertex> vertices, std::vector<UINT32> indices)
+uint64_t glRemix::glRemixRenderer::create_hash(std::vector<Vertex> vertices,
+                                               std::vector<UINT32> indices)
 {
     // hashing - logic from boost::hash_combine
     size_t seed = 0;
@@ -939,20 +940,19 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
     // put new mesh into replacement map
     uint64_t new_mesh_hash = create_hash(new_vertices, new_indices);
     add_to_replacement_map(new_mesh_hash, new_vertices, new_indices);
-
 }
 
 void glRemix::glRemixRenderer::add_to_replacement_map(uint64_t meshID,
                                                       std::vector<Vertex>& new_vertices,
                                                       std::vector<uint32_t>& new_indices)
 {
-    //MeshRecord* mesh = nullptr;
+    // MeshRecord* mesh = nullptr;
 
     MeshRecord new_mesh = {};
     new_mesh.mesh_id = meshID;
     new_mesh.vertex_count = new_vertices.size();
     new_mesh.index_count = new_indices.size();
-    //new_mesh.last_frame = current_frame;
+    // new_mesh.last_frame = current_frame;
 
     // create vertex buffer
     dx::D3D12Buffer t_vertex_buffer;
@@ -994,15 +994,13 @@ void glRemix::glRemixRenderer::add_to_replacement_map(uint64_t meshID,
     /*mesh = &m_mesh_map[meshID];
     mesh->last_frame = current_frame;
     m_meshes.push_back(std::move(*mesh));*/
-
 }
 
 bool glRemix::glRemixRenderer::load_mesh_from_path(const std::string& asset_path,
                                                    std::vector<Vertex>& out_vertices,
                                                    std::vector<uint32_t>& out_indices)
 {
-    /* 
-    fastgltf::Parser parser;
+    /*fastgltf::Parser parser;
 
     auto data = fastgltf::GltfDataBuffer::FromPath(asset_path);
     if (data.error() != fastgltf::Error::None)
@@ -1076,12 +1074,10 @@ bool glRemix::glRemixRenderer::load_mesh_from_path(const std::string& asset_path
                 }
             );
         }
-    }
-    */
+    }*/
+
     return true;
-} 
-
-
+}
 
 // builds top level acceleration structure with blas buffer (can be called each frame likely)
 void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
@@ -1445,7 +1441,7 @@ void glRemix::glRemixRenderer::destroy()
 {
     m_context.destroy_imgui();
     m_rt_descriptor_heap.deallocate(&m_rt_descriptors);
-}   
+}
 
 void glRemix::glRemixRenderer::create_uav_rt()
 {
