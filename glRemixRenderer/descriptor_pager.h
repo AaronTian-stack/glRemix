@@ -47,16 +47,19 @@ private:
     // All pages including and following that index are dirty and need to be re-uploaded to GPU heap
     PageType m_dirty_index = END;
 
-    inline UINT calculate_global_offset(PageType type, UINT page_index) const;
-
 public:
     // Returns page index
     UINT allocate_descriptor(const D3D12Context& context, PageType type,
                              D3D12Descriptor* descriptor);
-    // Need global index when updating descriptor indices in structures like MeshRecord
-    UINT calculate_global_index(PageType type, UINT page_index,
-                                const D3D12Descriptor& descriptor) const;
-    // This should only called once per frame
+
+    void free_descriptor(PageType type, D3D12Descriptor* descriptor);
+
+    // Calculates global offset of page.
+    // For example if type=VB_IB and page_index = 1 this would return (number of pages for
+    // MATERIALS) * (MATERIALS page size) + (VB_IB page size * 1)
+    UINT calculate_global_offset(PageType type, UINT page_index) const;
+
+    // This should only be called once per frame
     void copy_pages_to_gpu(const D3D12Context& context, D3D12DescriptorHeap* gpu_heap, UINT offset);
 };
 }  // namespace glRemix::dx

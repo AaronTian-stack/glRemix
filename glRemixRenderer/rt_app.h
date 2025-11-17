@@ -56,13 +56,17 @@ class glRemixRenderer : public Application
 
     // mesh resources
     tsl::robin_map<UINT64, MeshRecord> m_mesh_map;
+
     std::vector<MeshRecord> m_meshes;
 
     struct BufferAndDescriptor
     {
         dx::D3D12Buffer buffer;
         dx::D3D12Descriptor descriptor;
+        UINT page_index = -1;
     };
+
+    BufferAndDescriptor m_gpu_mesh_record;
 
     struct MeshResources
     {
@@ -80,6 +84,7 @@ class glRemixRenderer : public Application
         UINT32 mv_idx;
     };
 
+    // Geometry to be built in current frame (mesh resource)
     std::vector<PendingGeometry> m_pending_geometries;
 
     // BLAS, VB, IB per mesh
@@ -93,7 +98,6 @@ class glRemixRenderer : public Application
     gl::glMatrixStack m_matrix_stack;
 
     std::vector<XMFLOAT4X4> m_matrix_pool;  // reset each frame
-    XMMATRIX inverse_view;
 
     // display lists
     tsl::robin_map<int, std::vector<UINT8>> m_display_lists;

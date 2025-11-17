@@ -64,7 +64,11 @@ struct MeshRecord
 
 struct GPUMeshRecord
 {
-    UINT32 vb_id_idx;
+    UINT32 vb_idx;
+    UINT32 ib_idx;
+    // Buffer index (since materials are multiple structured buffers)
+    UINT32 mat_buffer_idx;
+    // Index within that buffer
     UINT32 mat_idx;
 };
 

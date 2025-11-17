@@ -49,7 +49,7 @@ RaytracingAccelerationStructure scene : register(t0);
 RWTexture2D<float4> render_target : register(u0);
 ConstantBuffer<RayGenConstantBuffer> g_raygen_cb : register(b0);
 
-StructuredBuffer<MeshRecord> meshes[] : register(t1);
+StructuredBuffer<MeshRecord> meshes : register(t1);
 
 // https://learn.microsoft.com/en-us/windows/win32/direct3d12/intersection-attributes
 typedef BuiltInTriangleIntersectionAttributes TriAttributes;

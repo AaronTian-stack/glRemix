@@ -25,11 +25,13 @@ void glRemix::glRemixRenderer::create_material_buffer()
     };
     m_context.create_buffer(desc, &bd.buffer);
 
-    m_descriptor_pager.allocate_descriptor(m_context, dx::DescriptorPager::MATERIALS,
-                                           &bd.descriptor);
+    bd.page_index = m_descriptor_pager.allocate_descriptor(m_context,
+                                                           dx::DescriptorPager::MATERIALS,
+                                                           &bd.descriptor);
 
     m_context.create_shader_resource_view(bd.buffer, bd.descriptor);
 
+    // TODO: When this material is freed, free descriptor from pager
     m_material_buffers.push_back(std::move(bd));
 }
 
@@ -130,7 +132,7 @@ void glRemix::glRemixRenderer::create()
         D3D12_DESCRIPTOR_RANGE mesh_record_range{
 
             .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-            .NumDescriptors = UINT_MAX,
+            .NumDescriptors = 1,
             .BaseShaderRegister = 1,  // t1
             .RegisterSpace = 0,
             .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
@@ -144,7 +146,7 @@ void glRemix::glRemixRenderer::create()
         root_parameters[0].DescriptorTable.NumDescriptorRanges = 3;
         root_parameters[0].DescriptorTable.pDescriptorRanges = descriptor_ranges.data();
 
-        // Separate table to bind, as MeshRecords are last thing to be copied to the descriptor heap
+        // Separate table to bind
         root_parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
         root_parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
         root_parameters[1].DescriptorTable.NumDescriptorRanges = 1;
@@ -294,6 +296,13 @@ void glRemix::glRemixRenderer::create()
                                .stride = sizeof(Light),
                                .visibility = dx::CPU | dx::GPU };
     m_context.create_buffer(light_desc, &m_light_buffer.buffer, "light buffer");
+
+    // TODO: Allocate in slab fashion like materials
+    // This should be managed by pager
+    dx::BufferDesc mesh_record_desc{ .size = sizeof(GPUMeshRecord) * 128,
+                                     .stride = sizeof(GPUMeshRecord),
+                                     .visibility = dx::CPU | dx::GPU };
+    m_context.create_buffer(mesh_record_desc, &m_gpu_mesh_record.buffer, "mesh record buffer");
 }
 
 void glRemix::glRemixRenderer::read_gl_command_stream()
@@ -751,8 +760,9 @@ void glRemix::glRemixRenderer::read_geometry(void* const ipc_buf, size_t* const 
 
     // Assign per-instance data (not cached)
     mesh->mat_idx = static_cast<UINT32>(m_materials.size());
-    m_materials.push_back(
-        m_material);  // store the current state of the material in the materials buffer
+    // Store the current state of the material in the materials buffer
+    // TODO: Modifying materials?
+    m_materials.push_back(m_material);
 
     mesh->mv_idx = static_cast<UINT32>(m_matrix_pool.size());
 
@@ -809,6 +819,13 @@ void glRemix::glRemixRenderer::build_pending_blas_buffers(ID3D12GraphicsCommandL
         THROW_IF_FALSE(m_context.map_buffer(&ib.buffer, &cpu_ptr));
         memcpy(cpu_ptr, pending.indices.data(), index_buffer_desc.size);
         m_context.unmap_buffer(&ib.buffer);
+
+        vb.page_index = m_descriptor_pager.allocate_descriptor(m_context,
+                                                               dx::DescriptorPager::VB_IB,
+                                                               &vb.descriptor);
+        ib.page_index = m_descriptor_pager.allocate_descriptor(m_context,
+                                                               dx::DescriptorPager::VB_IB,
+                                                               &ib.descriptor);
 
         // Cache the geometry
         const UINT32 resource_idx = static_cast<UINT32>(start_idx + i);
@@ -1129,21 +1146,41 @@ void glRemix::glRemixRenderer::render()
     read_gl_command_stream();
 
     // Update material
-    if (m_materials.size() > m_material_buffers.size() * MATERIALS_PER_BUFFER)
+    UINT created_material_buffers = 0;
+    const auto old_mat_size = m_material_buffers.size();
+    while (m_materials.size() > m_material_buffers.size() * MATERIALS_PER_BUFFER)
     {
         // TODO: Issue huge warning when this happens
         create_material_buffer();
+        created_material_buffers++;
+    }
+    // Update material buffer but only the portion that has been added this frame
+    // TODO: Update changed materials as well?
+    {
+        for (auto i = old_mat_size; i < m_material_buffers.size(); i++)
+        {
+            // TODO: Update material texture indices
+            // This will be tough since we don't want to do it in place
+            // Perhaps just add separate members for global index
+
+            const auto& mat_buffer = m_material_buffers[i];
+            void* mat_ptr;
+            THROW_IF_FALSE(m_context.map_buffer(&mat_buffer.buffer, &mat_ptr));
+            const auto start_idx = i * MATERIALS_PER_BUFFER;
+            const auto end_idx = std::min(start_idx + MATERIALS_PER_BUFFER, m_materials.size());
+            const auto mat_count = end_idx - start_idx;
+            memcpy(mat_ptr, m_materials.data() + start_idx, sizeof(Material) * mat_count);
+            m_context.unmap_buffer(&mat_buffer.buffer);
+        }
     }
 
     // Update light buffer
-    void* light_ptr;
-    THROW_IF_FALSE(m_context.map_buffer(&m_light_buffer.buffer, &light_ptr));
-    memcpy(light_ptr, m_lights.data(), sizeof(Light) * m_lights.size());
-    m_context.unmap_buffer(&m_light_buffer.buffer);
-
-    // Update mesh records
-
-    // m_descriptor_pager.copy_pages_to_gpu(m_context, &m_GPU_descriptor_heap, 3);
+    {
+        void* light_ptr;
+        THROW_IF_FALSE(m_context.map_buffer(&m_light_buffer.buffer, &light_ptr));
+        memcpy(light_ptr, m_lights.data(), sizeof(Light) * m_lights.size());
+        m_context.unmap_buffer(&m_light_buffer.buffer);
+    }
 
     m_context.start_imgui_frame();
 
@@ -1180,8 +1217,60 @@ void glRemix::glRemixRenderer::render()
     cmd_list->RSSetViewports(1, &viewport);
     cmd_list->RSSetScissorRects(1, &scissor_rect);
 
-    // Build all pending BLAS buffers from geometry collected in read_gl_command_stream
+    // Build all pending buffers from geometry collected in read_gl_command_stream
     build_pending_blas_buffers(cmd_list.Get());
+
+    // Currently reserve TLAS, 1 UAV RT, 1 CBV, and (for now) 1 MeshRecord buffer per frame
+    constexpr auto reserved_descriptor_offset = 4;
+    // Update mesh records vector with global indices based off current paging status
+    // This is done in place on the per frame vector of MeshRecords
+    static std::vector<GPUMeshRecord> gpu_mesh_records_to_copy;
+    gpu_mesh_records_to_copy.clear();
+    for (auto& mesh : m_meshes)
+    {
+        // InstanceID will be used to access GPUMeshRecord in shader
+        GPUMeshRecord gpu_mesh;
+        // Materials
+        {
+            auto buffer_index = mesh.mat_idx / MATERIALS_PER_BUFFER;
+            const auto& material_buffer = m_material_buffers[buffer_index];
+            auto page_index = material_buffer.page_index;
+            auto offset = m_descriptor_pager.calculate_global_offset(dx::DescriptorPager::MATERIALS,
+                                                                     page_index);
+            // Offset in page + global page offset + reserved descriptors
+            gpu_mesh.mat_buffer_idx = material_buffer.descriptor.offset + offset
+                                      + reserved_descriptor_offset;
+            gpu_mesh.mat_idx = mesh.mat_idx % MATERIALS_PER_BUFFER;
+        }
+        // VB and IB
+        {
+            auto vb_page_index = m_mesh_resources[mesh.blas_vb_ib_idx].vertex_buffer.page_index;
+            auto ib_page_index = m_mesh_resources[mesh.blas_vb_ib_idx].index_buffer.page_index;
+            auto vb_offset = m_descriptor_pager.calculate_global_offset(dx::DescriptorPager::VB_IB,
+                                                                        vb_page_index);
+            auto ib_offset = m_descriptor_pager.calculate_global_offset(dx::DescriptorPager::VB_IB,
+                                                                        ib_page_index);
+            const auto& vb_ib_blas = m_mesh_resources[mesh.blas_vb_ib_idx];
+            gpu_mesh.vb_idx = vb_ib_blas.vertex_buffer.descriptor.offset + vb_offset
+                              + reserved_descriptor_offset;
+            gpu_mesh.ib_idx = vb_ib_blas.index_buffer.descriptor.offset + ib_offset
+                              + reserved_descriptor_offset;
+        }
+        gpu_mesh_records_to_copy.push_back(gpu_mesh);
+    }
+    {
+        // TODO: Allocate in slab fashion like materials
+        assert(m_gpu_mesh_record.buffer.desc.size / m_gpu_mesh_record.buffer.desc.stride
+               > gpu_mesh_records_to_copy.size());
+        void* mesh_record_ptr;
+        THROW_IF_FALSE(m_context.map_buffer(&m_gpu_mesh_record.buffer, &mesh_record_ptr));
+        memcpy(mesh_record_ptr, gpu_mesh_records_to_copy.data(),
+               sizeof(GPUMeshRecord) * gpu_mesh_records_to_copy.size());
+        m_context.unmap_buffer(&m_gpu_mesh_record.buffer);
+    }
+
+    m_descriptor_pager.copy_pages_to_gpu(m_context, &m_GPU_descriptor_heap,
+                                         reserved_descriptor_offset);
 
     // Build TLAS
     build_tlas(cmd_list.Get());
@@ -1238,7 +1327,11 @@ void glRemix::glRemixRenderer::render()
 
         D3D12_GPU_DESCRIPTOR_HANDLE descriptor_table_handle{};
         m_GPU_descriptor_heap.get_gpu_descriptor(&descriptor_table_handle, 0);
+        // RT is compute
         cmd_list->SetComputeRootDescriptorTable(0, descriptor_table_handle);
+        m_GPU_descriptor_heap.get_gpu_descriptor(&descriptor_table_handle,
+                                                 reserved_descriptor_offset);
+        cmd_list->SetComputeRootDescriptorTable(1, descriptor_table_handle);
 
         D3D12_GPU_VIRTUAL_ADDRESS shader_table_base_address = m_shader_table.get_gpu_address();
 
