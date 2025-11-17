@@ -28,7 +28,10 @@ public:
     const T& operator[](unsigned id) const;
 
     // Includes both used and freed elements
-    size_t size() const { return m_elements.size(); }
+    size_t size() const
+    {
+        return m_elements.size();
+    }
 
     // Reserve capacity by growing the vector based on difference between requested length and free slots
     void reserve(size_t desired_size)
@@ -36,7 +39,7 @@ public:
         const size_t current_capacity = m_elements.size();
         const size_t free_count = m_free_indices.size();
         const size_t used_count = current_capacity - free_count;
-        
+
         if (desired_size > used_count)
         {
             const size_t needed = desired_size - used_count;

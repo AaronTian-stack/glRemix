@@ -53,12 +53,12 @@ struct Material
 
 struct MeshRecord
 {
-    UINT32 mesh_id;         // will eventually be hashed
+    UINT32 mesh_id;  // will eventually be hashed
 
     UINT32 blas_vb_ib_idx;
-    UINT32 mv_idx;          // index into model view array
+    UINT32 mv_idx;  // index into model view array
     UINT32 mat_idx;
-    
+
     // For garbage collection, last frame this mesh record was accessed
     UINT32 last_frame;
 };

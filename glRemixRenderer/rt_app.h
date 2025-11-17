@@ -63,6 +63,7 @@ class glRemixRenderer : public Application
         dx::D3D12Buffer buffer;
         dx::D3D12Descriptor descriptor;
     };
+
     struct MeshResources
     {
         dx::D3D12Buffer blas;
@@ -78,6 +79,7 @@ class glRemixRenderer : public Application
         UINT32 mat_idx;
         UINT32 mv_idx;
     };
+
     std::vector<PendingGeometry> m_pending_geometries;
 
     // BLAS, VB, IB per mesh
@@ -86,10 +88,6 @@ class glRemixRenderer : public Application
     // Materials per buffer
     static constexpr UINT MATERIALS_PER_BUFFER = 256;
     FreeListVector<BufferAndDescriptor> m_material_buffers;
-
-    //BufferPool m_blas_pool;
-    //BufferPool m_vertex_pool;
-    //BufferPool m_index_pool;
 
     // matrix stack
     gl::glMatrixStack m_matrix_stack;
@@ -107,9 +105,9 @@ class glRemixRenderer : public Application
 
     // Global states
     // Current color (may need to be tracked globally)
-    std::array<float, 4> m_color = { 1.0f, 1.0f, 1.0f, 1.0f };  
+    std::array<float, 4> m_color = { 1.0f, 1.0f, 1.0f, 1.0f };
     // Default according to spec
-    std::array<float, 3> m_normal = { 0.0f, 0.0f, 1.0f }; 
+    std::array<float, 3> m_normal = { 0.0f, 0.0f, 1.0f };
     Material m_material;
 
     BufferAndDescriptor m_light_buffer;
@@ -145,7 +143,7 @@ protected:
 
     // acceleration structure builders
     void build_mesh_blas_batch(const std::vector<BLASBuildInfo>& build_infos,
-                              ID3D12GraphicsCommandList7* cmd_list);
+                               ID3D12GraphicsCommandList7* cmd_list);
     void build_pending_blas_buffers(ID3D12GraphicsCommandList7* cmd_list);
     void build_tlas(ID3D12GraphicsCommandList7* cmd_list);
 

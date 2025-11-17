@@ -179,8 +179,9 @@ bool D3D12Context::create(const bool enable_debug_layer)
         return false;
     }
 
-    D3D12_FEATURE_DATA_D3D12_OPTIONS options{}; // For Tier 2 Descriptor Heaps
-    if (FAILED(m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options))))
+    D3D12_FEATURE_DATA_D3D12_OPTIONS options{};  // For Tier 2 Descriptor Heaps
+    if (FAILED(
+            m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options))))
     {
         OutputDebugStringA("D3D12 ERROR: Failed to query D3D12 options");
         return false;
@@ -920,7 +921,7 @@ void D3D12Context::create_constant_buffer_view(const D3D12Buffer* buffer,
 }
 
 void D3D12Context::create_shader_resource_view(const D3D12Buffer& buffer,
-    const D3D12Descriptor& descriptor) const
+                                               const D3D12Descriptor& descriptor) const
 {
     D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
     assert(!u64_overflows_u32(buffer.desc.stride));
@@ -940,7 +941,7 @@ void D3D12Context::create_shader_resource_view(const D3D12Buffer& buffer,
 }
 
 void D3D12Context::create_shader_resource_view_raw(const D3D12Buffer& buffer,
-    const D3D12Descriptor& descriptor) const
+                                                   const D3D12Descriptor& descriptor) const
 {
     assert(is_multiple_of_power_of_two(buffer.desc.size, 4));
     const auto num_elements = buffer.desc.size / 4;
@@ -962,7 +963,8 @@ void D3D12Context::create_shader_resource_view_raw(const D3D12Buffer& buffer,
 }
 
 void D3D12Context::create_shader_resource_view_typed(const D3D12Buffer& buffer,
-    const DXGI_FORMAT format, const D3D12Descriptor& descriptor) const
+                                                     const DXGI_FORMAT format,
+                                                     const D3D12Descriptor& descriptor) const
 {
     const auto num_elements = buffer.desc.size / buffer.desc.stride;
     assert(!u64_overflows_u32(num_elements));
@@ -1021,7 +1023,8 @@ void D3D12Context::create_unordered_access_view_texture(const D3D12Texture& text
                                         cpu_handle);
 }
 
-void D3D12Context::copy_descriptors(const D3D12Descriptor& dest_start, const D3D12Descriptor& src_start, UINT count) const
+void D3D12Context::copy_descriptors(const D3D12Descriptor& dest_start,
+                                    const D3D12Descriptor& src_start, UINT count) const
 {
     D3D12_CPU_DESCRIPTOR_HANDLE dest_handle;
     dest_start.heap->get_cpu_descriptor(&dest_handle, dest_start.offset);
@@ -1029,8 +1032,7 @@ void D3D12Context::copy_descriptors(const D3D12Descriptor& dest_start, const D3D
     D3D12_CPU_DESCRIPTOR_HANDLE src_handle;
     src_start.heap->get_cpu_descriptor(&src_handle, src_start.offset);
 
-    m_device->CopyDescriptorsSimple(count, dest_handle, src_handle,
-                                    dest_start.heap->desc.Type);
+    m_device->CopyDescriptorsSimple(count, dest_handle, src_handle, dest_start.heap->desc.Type);
 }
 
 bool D3D12Context::create_root_signature(const D3D12_ROOT_SIGNATURE_DESC& desc,

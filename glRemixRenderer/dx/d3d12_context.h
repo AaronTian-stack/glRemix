@@ -62,8 +62,7 @@ public:
     bool get_window_dimensions(XMUINT2* dims);
 
     bool create_swapchain(HWND window, D3D12Queue* queue, UINT* frame_index);
-    bool create_swapchain_descriptors(D3D12Descriptor* descriptors,
-                                      D3D12DescriptorHeap* rtv_heap);
+    bool create_swapchain_descriptors(D3D12Descriptor* descriptors, D3D12DescriptorHeap* rtv_heap);
     UINT get_swapchain_index() const;
     bool present();
 
@@ -89,15 +88,16 @@ public:
     void create_shader_resource_view(const D3D12Buffer& buffer,
                                      const D3D12Descriptor& descriptor) const;
     void create_shader_resource_view_raw(const D3D12Buffer& buffer,
-                                     const D3D12Descriptor& descriptor) const;
+                                         const D3D12Descriptor& descriptor) const;
     void create_shader_resource_view_typed(const D3D12Buffer& buffer, DXGI_FORMAT format,
                                            const D3D12Descriptor& descriptor) const;
-    void create_shader_resource_view_acceleration_structure(
-        const D3D12Buffer& tlas, const D3D12Descriptor& descriptor) const;
+    void create_shader_resource_view_acceleration_structure(const D3D12Buffer& tlas,
+                                                            const D3D12Descriptor& descriptor) const;
     void create_unordered_access_view_texture(const D3D12Texture& texture, DXGI_FORMAT format,
                                               const D3D12Descriptor& descriptor) const;
 
-    void copy_descriptors(const D3D12Descriptor& dest_start, const D3D12Descriptor& src_start, UINT count) const;
+    void copy_descriptors(const D3D12Descriptor& dest_start, const D3D12Descriptor& src_start,
+                          UINT count) const;
 
     bool create_texture(const TextureDesc& desc, D3D12_BARRIER_LAYOUT init_layout,
                         D3D12Texture* texture, D3D12_CLEAR_VALUE* clear_value,

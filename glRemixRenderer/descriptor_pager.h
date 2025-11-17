@@ -24,6 +24,7 @@ public:
 
         END,
     };
+
 private:
     // CPU descriptor heaps
     std::array<std::vector<D3D12DescriptorHeap>, END> m_pages{};
@@ -31,10 +32,10 @@ private:
 #define PAGE_CATEGORIES 4
 
     const std::array<UINT, PAGE_CATEGORIES> m_descriptors_per_page{
-        64,   // MATERIALS
-        64,   // VB_IB
-        64,   // TEXTURES
-        64,   // MESH_RECORDS
+        64,  // MATERIALS
+        64,  // VB_IB
+        64,  // TEXTURES
+        64,  // MESH_RECORDS
     };
 
     static_assert(END == PAGE_CATEGORIES);
@@ -50,9 +51,11 @@ private:
 
 public:
     // Returns page index
-    UINT allocate_descriptor(const D3D12Context& context, PageType type, D3D12Descriptor* descriptor);
+    UINT allocate_descriptor(const D3D12Context& context, PageType type,
+                             D3D12Descriptor* descriptor);
     // Need global index when updating descriptor indices in structures like MeshRecord
-    UINT calculate_global_index(PageType type, UINT page_index, const D3D12Descriptor& descriptor) const;
+    UINT calculate_global_index(PageType type, UINT page_index,
+                                const D3D12Descriptor& descriptor) const;
     // This should only called once per frame
     void copy_pages_to_gpu(const D3D12Context& context, D3D12DescriptorHeap* gpu_heap, UINT offset);
 };

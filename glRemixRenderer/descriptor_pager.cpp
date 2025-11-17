@@ -3,7 +3,8 @@
 #include <cassert>
 #include <shared/math_utils.h>
 
-UINT glRemix::dx::DescriptorPager::calculate_global_offset(const PageType type, const UINT page_index) const
+UINT glRemix::dx::DescriptorPager::calculate_global_offset(const PageType type,
+                                                           const UINT page_index) const
 {
     UINT ret = 0;
     for (UINT8 i = 0; i < type; i++)
@@ -14,15 +15,16 @@ UINT glRemix::dx::DescriptorPager::calculate_global_offset(const PageType type, 
     return ret + page_index * m_descriptors_per_page[type];
 }
 
-UINT glRemix::dx::DescriptorPager::allocate_descriptor(
-    const D3D12Context& context, const PageType type, D3D12Descriptor* descriptor)
+UINT glRemix::dx::DescriptorPager::allocate_descriptor(const D3D12Context& context,
+                                                       const PageType type,
+                                                       D3D12Descriptor* descriptor)
 {
     assert(descriptor);
 
-	auto& pages = m_pages[type];
-	const UINT descriptors_per_page = m_descriptors_per_page[type];
-	
-	// Try to allocate from current pages
+    auto& pages = m_pages[type];
+    const UINT descriptors_per_page = m_descriptors_per_page[type];
+
+    // Try to allocate from current pages
     for (UINT i = 0; i < pages.size(); i++)
     {
         auto& page = pages[i];
@@ -34,8 +36,7 @@ UINT glRemix::dx::DescriptorPager::allocate_descriptor(
 
     // Need a new page
     pages.emplace_back();
-    const D3D12_DESCRIPTOR_HEAP_DESC desc
-    {
+    const D3D12_DESCRIPTOR_HEAP_DESC desc{
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
         .NumDescriptors = descriptors_per_page,
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
@@ -53,13 +54,16 @@ UINT glRemix::dx::DescriptorPager::allocate_descriptor(
     return static_cast<UINT>(pages.size() - 1);
 }
 
-UINT glRemix::dx::DescriptorPager::calculate_global_index(const PageType type, const UINT page_index,
-                                                               const D3D12Descriptor& descriptor) const
+UINT glRemix::dx::DescriptorPager::calculate_global_index(const PageType type,
+                                                          const UINT page_index,
+                                                          const D3D12Descriptor& descriptor) const
 {
     return calculate_global_offset(type, page_index) + descriptor.offset;
 }
 
-void glRemix::dx::DescriptorPager::copy_pages_to_gpu(const D3D12Context& context, D3D12DescriptorHeap* gpu_heap, const UINT offset)
+void glRemix::dx::DescriptorPager::copy_pages_to_gpu(const D3D12Context& context,
+                                                     D3D12DescriptorHeap* gpu_heap,
+                                                     const UINT offset)
 {
     assert(gpu_heap);
     assert(gpu_heap->desc.Type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -81,26 +85,22 @@ void glRemix::dx::DescriptorPager::copy_pages_to_gpu(const D3D12Context& context
         const UINT descriptors_per_page = m_descriptors_per_page[type];
         for (UINT page_index = 0; page_index < pages.size(); page_index++)
         {
-            const UINT dst_offset = offset + calculate_global_offset(static_cast<PageType>(type), page_index);
+            const UINT dst_offset = offset
+                                    + calculate_global_offset(static_cast<PageType>(type),
+                                                              page_index);
 
-            //auto dest = gpu_heap->m_heap->GetCPUDescriptorHandleForHeapStart();
-            //dest.ptr += static_cast<unsigned long long>(dst_offset) * gpu_heap->m_descriptor_size;
+            // auto dest = gpu_heap->m_heap->GetCPUDescriptorHandleForHeapStart();
+            // dest.ptr += static_cast<unsigned long long>(dst_offset) * gpu_heap->m_descriptor_size;
 
-            //context->CopyDescriptorsSimple(
-            //    descriptors_per_page,
-            //    dest,
-            //    pages[page_index].m_heap->GetCPUDescriptorHandleForHeapStart(),
-            //    D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            // context->CopyDescriptorsSimple(
+            //     descriptors_per_page,
+            //     dest,
+            //     pages[page_index].m_heap->GetCPUDescriptorHandleForHeapStart(),
+            //     D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-            const D3D12Descriptor gpu{
-                .heap = gpu_heap,
-                .offset = dst_offset
-            };
+            const D3D12Descriptor gpu{ .heap = gpu_heap, .offset = dst_offset };
 
-            const D3D12Descriptor cpu{
-                .heap = &pages[page_index],
-                .offset = 0
-            };
+            const D3D12Descriptor cpu{ .heap = &pages[page_index], .offset = 0 };
 
             context.copy_descriptors(gpu, cpu, descriptors_per_page);
         }

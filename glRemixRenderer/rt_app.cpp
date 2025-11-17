@@ -128,7 +128,7 @@ void glRemix::glRemixRenderer::create()
 
         // Unbounded MeshRecords array
         D3D12_DESCRIPTOR_RANGE mesh_record_range{
-            
+
             .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
             .NumDescriptors = UINT_MAX,
             .BaseShaderRegister = 1,  // t1
@@ -144,7 +144,7 @@ void glRemix::glRemixRenderer::create()
         root_parameters[0].DescriptorTable.NumDescriptorRanges = 3;
         root_parameters[0].DescriptorTable.pDescriptorRanges = descriptor_ranges.data();
 
-        // Separate table to bind, as MeshRecords are last thing to be copied to the descriptor heap 
+        // Separate table to bind, as MeshRecords are last thing to be copied to the descriptor heap
         root_parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
         root_parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
         root_parameters[1].DescriptorTable.NumDescriptorRanges = 1;
@@ -184,7 +184,6 @@ void glRemix::glRemixRenderer::create()
         THROW_IF_FALSE(m_context.create_descriptor_heap(descriptor_heap_desc, &m_CPU_descriptor_heap,
                                                         "CPU descriptor heap"));
     }
-
 
     // Compile ray tracing pipeline
     ComPtr<IDxcBlobEncoding> raytracing_shaders;
@@ -287,14 +286,13 @@ void glRemix::glRemixRenderer::create()
     for (UINT i = 0; i < m_raygen_cbv_descriptors.size(); i++)
     {
         THROW_IF_FALSE(m_CPU_descriptor_heap.allocate(&m_raygen_cbv_descriptors[i]));
-        m_context.create_constant_buffer_view(&m_raygen_constant_buffers[i], m_raygen_cbv_descriptors[i]);
+        m_context.create_constant_buffer_view(&m_raygen_constant_buffers[i],
+                                              m_raygen_cbv_descriptors[i]);
     }
 
-    dx::BufferDesc light_desc{
-        .size = sizeof(Light) * m_lights.size(),
-        .stride = sizeof(Light),
-        .visibility = dx::CPU | dx::GPU
-    };
+    dx::BufferDesc light_desc{ .size = sizeof(Light) * m_lights.size(),
+                               .stride = sizeof(Light),
+                               .visibility = dx::CPU | dx::GPU };
     m_context.create_buffer(light_desc, &m_light_buffer.buffer, "light buffer");
 }
 
@@ -331,8 +329,8 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
 
     current_frame = frame_header->frame_index;
 
-    m_meshes.clear();       // per frame meshes
-    m_matrix_pool.clear();  // reset matrix pool each frame
+    m_meshes.clear();              // per frame meshes
+    m_matrix_pool.clear();         // reset matrix pool each frame
     m_materials.clear();
     m_pending_geometries.clear();  // clear pending geometry data
 
@@ -356,8 +354,8 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     }
 }
 
-void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf, const size_t start_offset,
-                                               const UINT32 bytes_read,
+void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
+                                               const size_t start_offset, const UINT32 bytes_read,
                                                const bool call_list)
 {
     // display list logic
@@ -380,8 +378,8 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf, cons
                 HWND hwnd;
                 memcpy(&hwnd, ipc_buf.data() + offset, sizeof(HWND));
                 THROW_IF_FALSE(m_context.create_swapchain(hwnd, &m_gfx_queue, &m_frame_index));
-                THROW_IF_FALSE(
-                    m_context.create_swapchain_descriptors(m_swapchain_descriptors.data(), &m_rtv_heap));
+                THROW_IF_FALSE(m_context.create_swapchain_descriptors(m_swapchain_descriptors.data(),
+                                                                      &m_rtv_heap));
                 THROW_IF_FALSE(m_context.init_imgui());
                 create_uav_rt();
             }
@@ -444,8 +442,7 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf, cons
                 offset += header->dataSize;    // we enter read geometry assuming first command
                                                // inbetween glbegin and end
                 advance = false;
-                read_geometry(
-                    ipc_buf, &offset, static_cast<GLTopology>(type->mode), bytes_read);
+                read_geometry(ipc_buf, &offset, static_cast<GLTopology>(type->mode), bytes_read);
                 break;
             }
             case GLCommandType::GLCMD_NORMAL3F:
@@ -642,7 +639,7 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
                 end_primitive = true;
                 break;
             }
-            default: // TODO: Log error
+            default:  // TODO: Log error
                 break;
         }
 
@@ -659,7 +656,7 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
     {
         const size_t quad_count = t_vertices.size() >= 4 ? (t_vertices.size() - 2) / 2 : 0;
         t_indices.reserve(quad_count * 6);
-        
+
         for (UINT32 k = 0; k + 3 < t_vertices.size(); k += 2)
         {
             UINT32 a = k + 0;
@@ -679,7 +676,7 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
     {
         const size_t quad_count = t_vertices.size() / 4;
         t_indices.reserve(quad_count * 6);
-        
+
         for (UINT32 k = 0; k + 3 < t_vertices.size(); k += 4)
         {
             UINT32 a = k + 0;
@@ -746,11 +743,11 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
         pending.hash = hash;
         pending.mat_idx = static_cast<UINT32>(m_materials.size());
         pending.mv_idx = static_cast<UINT32>(m_matrix_pool.size());
-        
+
         new_mesh.blas_vb_ib_idx = m_mesh_resources.size() + m_pending_geometries.size();
 
         m_mesh_map.emplace(hash, new_mesh);
-        
+
         m_pending_geometries.push_back(std::move(pending));
 
         mesh = &m_mesh_map[hash];
@@ -790,7 +787,6 @@ void glRemix::glRemixRenderer::build_pending_blas_buffers(ID3D12GraphicsCommandL
     // Create all vertex and index buffers first
     for (size_t i = 0; i < m_pending_geometries.size(); ++i)
     {
-    
         auto& pending = m_pending_geometries[i];
         MeshResources resource;
 
@@ -829,9 +825,9 @@ void glRemix::glRemixRenderer::build_pending_blas_buffers(ID3D12GraphicsCommandL
         m_mesh_map[pending.hash] = cached_mesh;
 
         auto index = m_mesh_resources.push_back(std::move(resource));
-        
+
         auto& true_resource = m_mesh_resources[index];
-        
+
         // Add to build info list
         build_infos.push_back(BLASBuildInfo{
             .vertex_buffer = &true_resource.vertex_buffer.buffer,
@@ -895,7 +891,8 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::vector<BLASBuild
         };
         blas_inputs.push_back(blas_input);
 
-        const auto blas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(blas_input);
+        const auto blas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(
+            blas_input);
         scratch_sizes.push_back(blas_prebuild_info.ScratchDataSizeInBytes);
 
         dx::BufferDesc blas_buffer_desc{
@@ -906,10 +903,9 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::vector<BLASBuild
         };
         THROW_IF_FALSE(m_context.create_buffer(blas_buffer_desc, info.blas, "BLAS buffer"));
 
-        const auto blas_build_desc = m_context.get_raytracing_acceleration_structure(blas_input,
-                                                                                     info.blas,
-                                                                                     nullptr,
-                                                                                     &m_scratch_space);
+        const auto blas_build_desc
+            = m_context.get_raytracing_acceleration_structure(blas_input, info.blas, nullptr,
+                                                              &m_scratch_space);
         blas_build_descs.push_back(blas_build_desc);
         blas_buffers.push_back(info.blas);
     }
@@ -936,7 +932,8 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::vector<BLASBuild
         for (size_t j = start_index; j < blas_build_descs.size(); ++j)
         {
             // Alignment requirement: 256 multiple needed between scratch regions
-            running_total = align_u64(running_total, D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
+            running_total = align_u64(running_total,
+                                      D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
             const UINT64 next_total = running_total + scratch_sizes[j];
             if (next_total <= m_scratch_space.desc.size)
             {
@@ -952,7 +949,7 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::vector<BLASBuild
 
         // At least one build per batch
         assert(batch_count > 0);
-        
+
         for (size_t k = 0; k < batch_count; k++)
         {
             const size_t idx = start_index + k;
@@ -970,16 +967,14 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::vector<BLASBuild
         // Insert a global UAV barrier between batches if more remain
         if (start_index < blas_build_descs.size())
         {
-            const D3D12_GLOBAL_BARRIER uav_barrier
-            {
+            const D3D12_GLOBAL_BARRIER uav_barrier{
                 .SyncBefore = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
                 .SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
                 .AccessBefore = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
                 .AccessAfter = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
             };
 
-            const D3D12_BARRIER_GROUP group
-            {
+            const D3D12_BARRIER_GROUP group{
                 .Type = D3D12_BARRIER_TYPE_GLOBAL,
                 .NumBarriers = 1,
                 .pGlobalBarriers = &uav_barrier,
@@ -1138,7 +1133,7 @@ void glRemix::glRemixRenderer::render()
 {
     // Read GL stream and set resources accordingly
     read_gl_command_stream();
-    
+
     // Update material
     if (m_materials.size() > m_material_buffers.size() * MATERIALS_PER_BUFFER)
     {
