@@ -16,10 +16,10 @@ IPC Milestone 2 Deliverables:
 
 ### GLXGears
 
-|         | Original App | No Sync or Stalling  | Milestone 1 | Milestone 2 |
-| ------- | ------------ | -------------------- | ----------- | ----------- |
-| Debug   | 1926.2       | 8076.7 (ImGUI ~500)  | 486.5       | 492.7       |
-| Release | 1980.5       | 39774.3 (ImGUI ~800) | 774.4       | 785.5       |
+|         | Original App | No Sync or Stalling  | Milestone 1 | Milestone 2 | Milestone 3 |
+| ------- | ------------ | -------------------- | ----------- | ----------- | ----------- |
+| Debug   | 1926.2       | 8076.7 (ImGUI ~500)  | 486.5       | 492.7       | 739.6       |
+| Release | 1980.5       | 39774.3 (ImGUI ~800) | 774.4       | 785.5       | 1390.8      |
 
 ## Refactor Milestones
 
@@ -45,3 +45,7 @@ Shown below is the (rudimentary) debug log from the renderer with incrementing, 
 ### Milestone 2 - Double-buffered IPC
 
 Commit Hash: `cba21d9bd1efaf8763b9a1a52323b5993a5110b3`
+
+### Milestone 3 - O(n) read and write data transfer on CPU
+
+Commit Hash: `199a198f822e66e848457b6688d961b93c0d477e`
