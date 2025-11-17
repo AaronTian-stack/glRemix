@@ -96,6 +96,10 @@ if(NOT TARGET ${PROJECT_NAME})
         "${REPO_ROOT}/external/robin-map-1.4.0/include"
         "${REPO_ROOT}"
     )
+
+    if(GLREMIX_AUTO_LAUNCH_RENDERER)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE GLREMIX_AUTO_LAUNCH_RENDERER)
+    endif()
 endif()
 
 add_dependencies(${PROJECT_NAME} glremix_generate_gl_wrappers)
