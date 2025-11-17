@@ -1,6 +1,5 @@
 #pragma once
 
-#include <array>
 #include <DirectXMath.h>
 
 using namespace DirectX;
@@ -17,21 +16,21 @@ struct RayGenConstantBuffer
 
 struct Vertex
 {
-    std::array<float, 3> position;
-    std::array<float, 3> color;
-    std::array<float, 3> normal;
+    XMFLOAT3 position;
+    XMFLOAT3 color;
+    XMFLOAT3 normal;
 };
 
 // TODO add more parameters (such as enabled) when encountered
 struct Light
 {
-    std::array<float, 4> ambient = { 0.f, 0.f, 0.f, 1.f };
-    std::array<float, 4> diffuse = { 1.f, 1.f, 1.f, 1.f };
-    std::array<float, 4> specular = { 1.f, 1.f, 1.f, 1.f };
+    XMFLOAT4 ambient = { 0.f, 0.f, 0.f, 1.f };
+    XMFLOAT4 diffuse = { 1.f, 1.f, 1.f, 1.f };
+    XMFLOAT4 specular = { 1.f, 1.f, 1.f, 1.f };
 
-    std::array<float, 4> position = { 0.f, 0.f, 1.f, 0.f };  // default head down
+    XMFLOAT4 position = { 0.f, 0.f, 1.f, 0.f };  // default head down
 
-    std::array<float, 3> spot_direction = { 0.f, 0.f, -1.f };
+    XMFLOAT3 spot_direction = { 0.f, 0.f, -1.f };
     float spot_exponent = 0.f;
     float spot_cutoff = 180.f;
 
@@ -43,10 +42,10 @@ struct Light
 // TODO add more parameters if encountered
 struct Material
 {
-    std::array<float, 4> ambient = { 1.f, 1.f, 1.f, 1.f };
-    std::array<float, 4> diffuse = { 1.f, 1.f, 1.f, 1.f };
-    std::array<float, 4> specular = { 0.f, 0.f, 0.f, 1.f };
-    std::array<float, 4> emission = { 0.f, 0.f, 0.f, 1.f };
+    XMFLOAT4 ambient = { 1.f, 1.f, 1.f, 1.f };
+    XMFLOAT4 diffuse = { 1.f, 1.f, 1.f, 1.f };
+    XMFLOAT4 specular = { 0.f, 0.f, 0.f, 1.f };
+    XMFLOAT4 emission = { 0.f, 0.f, 0.f, 1.f };
 
     float shininess = 0.f;
 };

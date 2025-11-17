@@ -105,9 +105,9 @@ class glRemixRenderer : public Application
 
     // Global states
     // Current color (may need to be tracked globally)
-    std::array<float, 4> m_color = { 1.0f, 1.0f, 1.0f, 1.0f };
+    XMFLOAT4 m_color = { 1.0f, 1.0f, 1.0f, 1.0f };
     // Default according to spec
-    std::array<float, 3> m_normal = { 0.0f, 0.0f, 1.0f };
+    XMFLOAT3 m_normal = { 0.0f, 0.0f, 1.0f };
     Material m_material;
 
     BufferAndDescriptor m_light_buffer;
@@ -131,8 +131,7 @@ protected:
     void read_gl_command_stream();
     void read_ipc_buffer(std::vector<UINT8>& ipc_buf, size_t start_offset, UINT32 bytes_read,
                          bool call_list = false);
-    void read_geometry(std::vector<UINT8>& ipc_buf, size_t* offset, GLTopology topology,
-                       UINT32 bytes_read);
+    void read_geometry(void* ipc_buf, size_t* offset, GLTopology topology, UINT32 bytes_read);
 
     struct BLASBuildInfo
     {

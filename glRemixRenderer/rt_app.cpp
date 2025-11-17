@@ -442,15 +442,14 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
                 offset += header->dataSize;    // we enter read geometry assuming first command
                                                // inbetween glbegin and end
                 advance = false;
-                read_geometry(ipc_buf, &offset, static_cast<GLTopology>(type->mode), bytes_read);
+                read_geometry(ipc_buf.data(), &offset, static_cast<GLTopology>(type->mode),
+                              bytes_read);
                 break;
             }
             case GLCommandType::GLCMD_NORMAL3F:
             {
                 const auto* n = reinterpret_cast<const GLNormal3fCommand*>(ipc_buf.data() + offset);
-                m_normal[0] = n->x;
-                m_normal[1] = n->y;
-                m_normal[2] = n->z;
+                m_normal = { n->x, n->y, n->z };
                 break;
             }
             case GLCommandType::GLCMD_MATERIALF:
@@ -580,9 +579,11 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
 }
 
 // adds to vertex and index buffers depending on topology type
-void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t* const offset,
-                                             GLTopology topology, UINT32 bytes_read)
+void glRemix::glRemixRenderer::read_geometry(void* const ipc_buf, size_t* const offset,
+                                             const GLTopology topology, const UINT32 bytes_read)
 {
+    const auto byte_p = static_cast<UINT8*>(ipc_buf);
+
     bool end_primitive = false;
 
     // we will first assess if this mesh has been encountered before
@@ -591,46 +592,43 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
 
     while (*offset + sizeof(GLCommandUnifs) <= bytes_read)
     {
-        const auto* header = reinterpret_cast<const GLCommandUnifs*>(
-            ipc_buf.data()  // get most recent header
-            + *offset);
+        // get most recent header
+        const auto* header = reinterpret_cast<const GLCommandUnifs*>(byte_p + *offset);
 
         *offset += sizeof(GLCommandUnifs);  // move into data payload
+
+        const auto* ipc_p = byte_p + *offset;
 
         switch (header->type)
         {
             case GLCommandType::GLCMD_VERTEX3F:
             {
-                const auto* v = reinterpret_cast<const GLVertex3fCommand*>(ipc_buf.data() + *offset);
-                Vertex vertex{ { v->x, v->y, v->z },
-                               { m_color[0], m_color[1], m_color[2] },
-                               { m_normal[0], m_normal[1], m_normal[2] } };
+                const auto* v = reinterpret_cast<const GLVertex3fCommand*>(ipc_p);
+                // TODO: We should not be discarding A component of color if we want to support alpha
+                Vertex vertex{
+                    .position = { v->x, v->y, v->z },
+                    .color = { m_color.x, m_color.y, m_color.z },
+                    .normal = m_normal
+                };
                 t_vertices.push_back(vertex);
                 break;
             }
             case GLCommandType::GLCMD_NORMAL3F:
             {
-                const auto* n = reinterpret_cast<const GLNormal3fCommand*>(ipc_buf.data() + *offset);
-                m_normal[0] = n->x;
-                m_normal[1] = n->y;
-                m_normal[2] = n->z;
+                const auto* n = reinterpret_cast<const GLNormal3fCommand*>(ipc_p);
+                m_normal = { n->x, n->y, n->z };
                 break;
             }
             case GLCommandType::GLCMD_COLOR3F:
             {
-                const auto* c = reinterpret_cast<const GLColor3fCommand*>(ipc_buf.data() + *offset);
-                m_color[0] = c->x;
-                m_color[1] = c->y;
-                m_color[2] = c->z;
+                const auto* c = reinterpret_cast<const GLColor3fCommand*>(ipc_p);
+                m_color = { c->x, c->y, c->z, m_color.w };
                 break;
             }
             case GLCommandType::GLCMD_COLOR4F:
             {
-                const auto* c = reinterpret_cast<const GLColor4fCommand*>(ipc_buf.data() + *offset);
-                m_color[0] = c->x;
-                m_color[1] = c->y;
-                m_color[2] = c->z;
-                m_color[3] = c->w;
+                const auto* c = reinterpret_cast<const GLColor4fCommand*>(ipc_p);
+                m_color = { c->x, c->y, c->z, c->w };
                 break;
             }
             case GLCommandType::GLCMD_END:  // read vertices until GL_END is encountered at
@@ -709,12 +707,12 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
     for (int i = 0; i < t_vertices.size(); ++i)
     {
         const Vertex& vertex = t_vertices[i];
-        hash_combine(quantize(vertex.position[0]));
-        hash_combine(quantize(vertex.position[1]));
-        hash_combine(quantize(vertex.position[2]));
-        hash_combine(quantize(vertex.color[0]));
-        hash_combine(quantize(vertex.color[1]));
-        hash_combine(quantize(vertex.color[2]));
+        hash_combine(quantize(vertex.position.x));
+        hash_combine(quantize(vertex.position.y));
+        hash_combine(quantize(vertex.position.z));
+        hash_combine(quantize(vertex.color.x));
+        hash_combine(quantize(vertex.color.y));
+        hash_combine(quantize(vertex.color.z));
     }
 
     // get index data to hash
