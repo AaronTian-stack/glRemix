@@ -10,17 +10,16 @@ glRemix::SharedMemory::~SharedMemory()
 // `CreateFileMapping`
 bool glRemix::SharedMemory::create_for_writer(const wchar_t* map_name,
                                               const wchar_t* write_event_name,
-                                              const wchar_t* read_event_name, const UINT32 capacity)
+                                              const wchar_t* read_event_name)
 {
     close_all();
 
-    const auto max_obj_size = static_cast<DWORD>(max_object_size(capacity));
     const auto h_map_file
         = CreateFileMappingW(INVALID_HANDLE_VALUE,  // use paging file
                              nullptr,               // default security
                              PAGE_READWRITE,        // rw access
                              0,                     // maximum object size (high-order DWORD)
-                             max_obj_size,          // maximum object size (low-order DWORD)
+                             max_object_size(),     // maximum object size (low-order DWORD)
                              map_name);             // name of mapping object
 
     if (!h_map_file)
@@ -37,14 +36,6 @@ bool glRemix::SharedMemory::create_for_writer(const wchar_t* map_name,
         CloseHandle(h_map_file);
         return false;
     }
-
-    // init header
-    m_header->capacity = capacity;
-    m_header->size = 0;
-
-    // InterlockedExchange to safely reset state to EMPTY now
-    InterlockedExchange(reinterpret_cast<volatile LONG*>(&m_header->state),
-                        static_cast<LONG>(SharedState::EMPTY));
 
     // create named events
     m_write_event = CreateEventW(nullptr, false, false, write_event_name);
@@ -82,129 +73,40 @@ bool glRemix::SharedMemory::open_for_reader(const wchar_t* map_name,
     return true;
 }
 
-bool glRemix::SharedMemory::write(const void* src, const UINT32 bytes, const UINT32 offset) const
+bool glRemix::SharedMemory::write(const void* src, const UINT32 offset, const UINT32 bytes_to_write)
 {
-    std::ostringstream ss;
-    if (!m_header || !src || bytes > m_header->capacity)
+    if (offset + bytes_to_write > this->get_capacity())
     {
-        ss << "SharedMemory - File not ready for writing, call `::create_for_writer` first."
-           << "\n";
-        OutputDebugStringA(ss.str().c_str());
+        DBG_PRINT("SharedMemory.WRITER - Writer has exceeded capacity of allocated memory space. "
+                  "Will not write.");
         return false;
     }
-
-    if (m_header->state == SharedState::CONSUMED)
-    {
-        InterlockedExchange(reinterpret_cast<volatile LONG*>(&m_header->state),
-                            static_cast<LONG>(SharedState::EMPTY));
-    }
-
-    // only write when EMPTY
-    if (m_header->state != SharedState::EMPTY)
-    {
-        ss << "SharedMemory - File state not consumed. Will skip writing." << "\n";
-        OutputDebugStringA(ss.str().c_str());
-        return false;
-    }
-
-    memcpy(m_payload + offset, src, bytes);
-    ss << "SharedMemory - Wrote " << bytes << " bytes." << "\n";
-    OutputDebugStringA(ss.str().c_str());
-    m_header->size = bytes;
-
-    // mark as FILLED so the reader knows data is ready
-    MemoryBarrier();  // ensure size/payload visible before state
-    InterlockedExchange(reinterpret_cast<volatile LONG*>(&m_header->state),
-                        static_cast<LONG>(SharedState::FILLED));
-
-    // signal write event
-    if (m_write_event)
-    {
-        SetEvent(m_write_event);
-    }
+    memcpy(m_payload + offset, src, bytes_to_write);
 
     return true;
 }
 
-bool glRemix::SharedMemory::read(void* dst, const UINT32 max_bytes, const UINT32 offset,
-                                 UINT32* out_bytes)
+UINT32 glRemix::SharedMemory::read(void* dst, const UINT32 offset, const UINT32 bytes_to_read) const
 {
-    std::ostringstream ss;
-    if (!m_header || !dst)
+    UINT32 bytes_read = bytes_to_read;
+    if (offset + bytes_to_read > this->get_capacity())
     {
-        ss << "SharedMemory - File not ready for reading, call `::open_for_reader` first." << "\n";
-        OutputDebugStringA(ss.str().c_str());
-
-        return false;
+        bytes_read = (this->get_capacity()
+                      - offset);  // error handle externally. for now just update bytes_read
     }
 
-    if (m_header->state != SharedState::FILLED)
-    {
-        ss << "SharedMemory - File state not filled. Nothing to read." << "\n";
-        OutputDebugStringA(ss.str().c_str());
-        return false;
-    }
+    memcpy(dst, m_payload + offset, bytes_read);
 
-    UINT32 n = m_header->size;
-    if (n > max_bytes)
-    {
-        ss << "SharedMemory - Header size greater than desired max bytes. Truncating..." << "\n";
-        OutputDebugStringA(ss.str().c_str());
+    signal_read_event();
 
-        n = max_bytes;
-    }
-
-    memcpy(dst, m_payload + offset, n);  // copy into payload
-
-    if (out_bytes)
-    {
-        *out_bytes = n;
-    }
-
-    // mark as CONSUMED
-    InterlockedExchange(reinterpret_cast<volatile LONG*>(&m_header->state),
-                        static_cast<LONG>(SharedState::CONSUMED));
-
-    // signal read event
-    if (m_read_event)
-    {
-        SetEvent(m_read_event);
-    }
-
-    return true;
-}
-
-bool glRemix::SharedMemory::peek(void* dst, const UINT32 max_bytes, const UINT32 offset,
-                                 UINT32* out_bytes) const
-{
-    if (!m_header || !dst)
-    {
-        return false;
-    }
-    if (m_header->state != SharedState::FILLED)
-    {
-        return false;
-    }
-
-    auto n = m_header->size;
-    if (offset + n > max_bytes)
-    {
-        n = max_bytes > offset ? max_bytes - offset : 0;
-    }
-    memcpy(dst, m_payload + offset, n);
-    if (out_bytes)
-    {
-        *out_bytes = n;
-    }
-    // no state change (remains FILLED)
-    return true;
+    return bytes_read;
 }
 
 bool glRemix::SharedMemory::map_common(const HANDLE h_map_file)
 {
-    m_view = static_cast<LPTSTR>(MapViewOfFile(h_map_file,           // handle to map object
-                                               FILE_MAP_ALL_ACCESS,  // rw permission
-                                               0, 0, 0));
+    m_view = MapViewOfFile(h_map_file,           // handle to map object
+                           FILE_MAP_ALL_ACCESS,  // rw permission
+                           0, 0, 0);
 
     if (m_view == nullptr)
     {
@@ -214,8 +116,7 @@ bool glRemix::SharedMemory::map_common(const HANDLE h_map_file)
     }
 
     m_map = h_map_file;
-    m_header = reinterpret_cast<SharedMemoryHeader*>(m_view);
-    m_payload = reinterpret_cast<UINT8*>(m_view) + sizeof(SharedMemoryHeader);
+    m_payload = reinterpret_cast<UINT8*>(m_view);
 
     return true;
 }
@@ -243,6 +144,6 @@ void glRemix::SharedMemory::close_all()
         m_read_event = nullptr;
     }
 
-    m_header = nullptr;  // host side buffers
+    // host side buffer
     m_payload = nullptr;
 }

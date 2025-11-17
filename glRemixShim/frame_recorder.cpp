@@ -60,7 +60,7 @@ void FrameRecorder::end_frame()
         }
     }
 
-    m_ipc.send_frame(m_buffer.data(), static_cast<UINT32>(m_buffer.size()));
+    // m_ipc.send_frame(m_buffer.data(), static_cast<UINT32>(m_buffer.size()));
 
     m_commands.clear();
     m_frame_unifs.payload_size = 0;

@@ -68,62 +68,67 @@ enum class GLCommandType : UINT32
 {
     // Basic OpenGL 1.x commands
     GLCMD_BEGIN = 1,
-    GLCMD_END = 2,
-    GLCMD_VERTEX2F = 3,
-    GLCMD_VERTEX3F = 4,
-    GLCMD_COLOR3F = 5,
-    GLCMD_COLOR4F = 6,
-    GLCMD_NORMAL3F = 7,
-    GLCMD_TEXCOORD2F = 8,
+    GLCMD_END,
+    GLCMD_VERTEX2F,
+    GLCMD_VERTEX3F,
+    GLCMD_COLOR3F,
+    GLCMD_COLOR4F,
+    GLCMD_NORMAL3F,
+    GLCMD_TEXCOORD2F,
 
     // Matrix operations
-    GLCMD_MATRIX_MODE = 9,
-    GLCMD_LOAD_IDENTITY = 10,
-    GLCMD_LOAD_MATRIX = 11,
-    GLCMD_MULT_MATRIX = 12,
-    GLCMD_PUSH_MATRIX = 13,
-    GLCMD_POP_MATRIX = 14,
-    GLCMD_TRANSLATE = 15,
-    GLCMD_ROTATE = 16,
-    GLCMD_SCALE = 17,
+    GLCMD_MATRIX_MODE,
+    GLCMD_LOAD_IDENTITY,
+    GLCMD_LOAD_MATRIX,
+    GLCMD_MULT_MATRIX,
+    GLCMD_PUSH_MATRIX,
+    GLCMD_POP_MATRIX,
+    GLCMD_TRANSLATE,
+    GLCMD_ROTATE,
+    GLCMD_SCALE,
 
     // Texture operations
-    GLCMD_BIND_TEXTURE = 18,
-    GLCMD_GEN_TEXTURES = 19,
-    GLCMD_DELETE_TEXTURES = 20,
-    GLCMD_TEX_IMAGE_2D = 21,
-    GLCMD_TEX_PARAMETER = 22,
+    GLCMD_BIND_TEXTURE,
+    GLCMD_GEN_TEXTURES,
+    GLCMD_DELETE_TEXTURES,
+    GLCMD_TEX_IMAGE_2D,
+    GLCMD_TEX_PARAMETER,
 
     // Lighting
-    GLCMD_ENABLE = 23,
-    GLCMD_DISABLE = 24,
-    GLCMD_LIGHT = 25,
-    GLCMD_LIGHTF = 26,
-    GLCMD_LIGHTFV = 27,
-    GLCMD_MATERIAL = 28,
-    GLCMD_MATERIALF = 29,
-    GLCMD_MATERIALFV = 30,
+    GLCMD_ENABLE,
+    GLCMD_DISABLE,
+    GLCMD_LIGHT,
+    GLCMD_LIGHTF,
+    GLCMD_LIGHTFV,
+    GLCMD_MATERIAL,
+    GLCMD_MATERIALF,
+    GLCMD_MATERIALFV,
 
     // Buffer operations
-    GLCMD_CLEAR = 31,
-    GLCMD_CLEAR_COLOR = 32,
-    GLCMD_FLUSH = 33,
-    GLCMD_FINISH = 34,
+    GLCMD_CLEAR,
+    GLCMD_CLEAR_COLOR,
+    GLCMD_FLUSH,
+    GLCMD_FINISH,
 
     // Viewport and projection
-    GLCMD_VIEWPORT = 35,
-    GLCMD_ORTHO = 36,
-    GLCMD_FRUSTUM = 37,
-    GLCMD_PERSPECTIVE = 38,
+    GLCMD_VIEWPORT,
+    GLCMD_ORTHO,
+    GLCMD_FRUSTUM,
+    GLCMD_PERSPECTIVE,
 
     // Other
-    GLCMD_CREATE = 39,
-    GLCMD_SHUTDOWN = 40,
+    GLCMD_CREATE,
+    GLCMD_SHUTDOWN,
 
     // Display Lists
-    GLCMD_CALL_LIST = 41,
-    GLCMD_NEW_LIST = 42,
-    GLCMD_END_LIST = 43,
+    GLCMD_CALL_LIST,
+    GLCMD_NEW_LIST,
+    GLCMD_END_LIST,
+
+    // Data Pointers
+    GLCMD_VERTEX_POINTER,
+
+    GLCMD_DRAW_ARRAYS,
 };
 
 struct GLVec2f
@@ -242,10 +247,6 @@ struct GLTexImage2DCommand
     UINT32 border;  // the width of the border. must be either 0 or 1.
     UINT32 format;
     UINT32 type;
-
-    // these two members are a bit repetitive but here for ease of parsing
-    UINT32 pixelDataSize;    // number of bytes of pixel data following this struct
-    UINT32 pixelDataOffset;  // byte offset from start of command (sizeof(GLTexImage2DCommand))
 };
 
 struct GLTexParameterCommand
@@ -346,4 +347,18 @@ struct GLNewListCommand
 
 using GLEndListCommand = GLEmptyCommand;
 
+// Data Pointers
+struct GLVertexPointerCommand
+{
+    UINT32 size;
+    UINT32 type;
+    UINT32 stride;
+};
+
+struct GLDrawArraysCommand
+{
+    UINT32 mode;
+    UINT32 first;
+    UINT32 count;
+};
 }  // namespace glRemix

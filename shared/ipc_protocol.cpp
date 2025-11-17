@@ -9,57 +9,74 @@
 
 #define FSTR(fmt, ...) std::format(fmt, __VA_ARGS__)
 
-void glRemix::IPCProtocol::init_writer(const UINT32 capacity)
+void glRemix::IPCProtocol::init_writer()
 {
-    if (!m_slot_A.smem.create_for_writer(k_MAP_A, k_WRITE_EVENT_A, k_READ_EVENT_A, capacity))
+    if (!m_slot_A.smem.create_for_writer(k_MAP_A, k_WRITE_EVENT_A, k_READ_EVENT_A))
     {
         throw std::runtime_error("IPCProtocol.WRITER - Failed to create SharedMemory A");
     }
-    if (!m_slot_B.smem.create_for_writer(k_MAP_B, k_WRITE_EVENT_B, k_READ_EVENT_B, capacity))
+    if (!m_slot_B.smem.create_for_writer(k_MAP_B, k_WRITE_EVENT_B, k_READ_EVENT_B))
     {
         throw std::runtime_error("IPCProtocol.WRITER - Failed to create SharedMemory B");
     }
 }
 
-void glRemix::IPCProtocol::send_frame(const void* data, const UINT32 bytes)
+void glRemix::IPCProtocol::start_frame()
 {
-    MemorySlot* oldest;  // shared memory that has the smaller recorded time frame
-    MemorySlot* latest;  // shared memory that has the larger recorded time frame
-    if (m_slot_A < m_slot_B)
     {
-        oldest = &m_slot_A;
-        latest = &m_slot_B;
+        MemorySlot* oldest;  // shared memory that has the smaller recorded time frame
+        MemorySlot* latest;  // shared memory that has the larger recorded time frame
+        if (m_slot_A < m_slot_B)
+        {
+            oldest = &m_slot_A;
+            latest = &m_slot_B;
+        }
+        else
+        {
+            oldest = &m_slot_B;
+            latest = &m_slot_A;
+        }
+
+        HANDLE tmp_events[2] = { oldest->smem.get_read_event(), latest->smem.get_read_event() };
+
+        DWORD dw_wait_result = WaitForMultipleObjects(2, tmp_events, false, INFINITE);
+
+        switch (dw_wait_result)
+        {
+            case WAIT_OBJECT_0:
+                m_curr_slot = oldest;
+                DBG_PRINT("IPCProtocol.WRITER - Oldest SharedMemory slot became available to write "
+                          "before latest.");  // theoretically should not occur
+                break;
+            case WAIT_OBJECT_0 + 1: m_curr_slot = latest; break;
+            default:
+                // this is a runtime_error as it is unpredictable to my knowledge
+                throw std::runtime_error(FSTR(
+                    "IPCProtocol.WRITER - WaitForMultipleObjects for writer failed. Error Code: {}",
+                    dw_wait_result));
+        }
     }
-    else
-    {
-        oldest = &m_slot_B;
-        latest = &m_slot_A;
-    }
-
-    HANDLE tmp_events[2] = { oldest->smem.get_read_event(), latest->smem.get_read_event() };
-
-    DWORD dw_wait_result = WaitForMultipleObjects(2, tmp_events, false, INFINITE);
-
-    MemorySlot* current;
-
-    switch (dw_wait_result)
-    {
-        case WAIT_OBJECT_0:
-            current = oldest;
-            DBG_PRINT("IPCProtocol.WRITER - Oldest SharedMemory slot became available to write "
-                      "before latest.");  // theoretically should not occur
-            break;
-        case WAIT_OBJECT_0 + 1: current = latest; break;
-        default:
-            throw std::runtime_error(FSTR(
-                "IPCProtocol.WRITER - WaitForMultipleObjects for writer failed. Error Code: {}",
-                dw_wait_result));
-    }
-
-    current->smem.write(data, bytes);
 
     g_frame_index++;
-    current->frame_index = g_frame_index;
+    m_curr_slot->frame_index = g_frame_index;
+
+    m_offset = sizeof(GLFrameUnifs);  // reset to just the size of GLFrameUnifs
+}
+
+void glRemix::IPCProtocol::end_frame()
+{
+    if (!m_curr_slot)
+    {
+        throw std::logic_error("IPCProtocol.WRITER - `m_curr_slot` is null at time of frame end.");
+    }
+
+    GLFrameUnifs unifs;
+    unifs.payload_size = m_offset - sizeof(GLFrameUnifs);
+    unifs.frame_index = m_curr_slot->frame_index;
+
+    m_curr_slot->smem.write(&unifs, 0, sizeof(GLFrameUnifs));
+
+    m_curr_slot->smem.signal_write_event();
 }
 
 void glRemix::IPCProtocol::init_reader()
@@ -75,6 +92,7 @@ void glRemix::IPCProtocol::init_reader()
 
         if (result_A && result_B)
         {
+            m_curr_slot = &m_slot_A;
             return;  // success
         }
         else
@@ -97,43 +115,88 @@ void glRemix::IPCProtocol::init_reader()
 
         elapsed += RETRY_MS;
     }
+    // this is a runtime_error as it should not happen if shim and renderer are correctly launched
     throw std::runtime_error("IPCProtocol.READER - Timed out waiting for writer initialization.");
 }
 
-void glRemix::IPCProtocol::consume_frame(void* dst, const UINT32 max_bytes, UINT32* out_bytes)
+void glRemix::IPCProtocol::consume_frame(void* payload, UINT32* payload_size, UINT32* frame_index)
 {
-    MemorySlot* oldest;  // shared memory that has the smaller recorded time frame
-    MemorySlot* latest;  // shared memory that has the larger recorded time frame
-    if (m_slot_A < m_slot_B)
     {
-        oldest = &m_slot_A;
-        latest = &m_slot_B;
+        MemorySlot* oldest;  // shared memory that has the smaller recorded time frame
+        MemorySlot* latest;  // shared memory that has the larger recorded time frame
+        if (m_slot_A < m_slot_B)
+        {
+            oldest = &m_slot_A;
+            latest = &m_slot_B;
+        }
+        else
+        {
+            oldest = &m_slot_B;
+            latest = &m_slot_A;
+        }
+
+        HANDLE tmp_events[2] = { oldest->smem.get_write_event(), latest->smem.get_write_event() };
+
+        DWORD dw_wait_result = WaitForMultipleObjects(2, tmp_events, false, INFINITE);
+
+        switch (dw_wait_result)
+        {
+            case WAIT_OBJECT_0: m_curr_slot = oldest; break;
+            case WAIT_OBJECT_0 + 1:
+                m_curr_slot = latest;
+                DBG_PRINT("IPCProtocol.READER - Latest SharedMemory slot became available to read "
+                          "before oldest.");
+                break;  // theoretically should not occur
+            default:
+                // this is a runtime_error as it is unpredictable to my knowledge
+                throw std::runtime_error(FSTR(
+                    "IPCProtocol.READER - WaitForMultipleObjects for reader failed. Error Code: {}",
+                    dw_wait_result));
+        }
     }
-    else
+
+    m_curr_slot->smem.read(payload_size, 0, 4);
+    m_curr_slot->smem.read(frame_index, 4, 4);
+
+    UINT32 payload_bytes_read = m_curr_slot->smem.read(payload, 8, *payload_size);
+
+    if (payload_bytes_read != *payload_size)
     {
-        oldest = &m_slot_B;
-        latest = &m_slot_A;
+        // this is a logic error as this should really never happen.
+        // if it occurs, my writer logic is incorrect
+        throw std::logic_error(FSTR("IPCProtocol.READER - Tried to read {} but only read {}",
+                                    *payload_size, payload_bytes_read));
     }
+}
 
-    HANDLE tmp_events[2] = { oldest->smem.get_write_event(), latest->smem.get_write_event() };
-
-    DWORD dw_wait_result = WaitForMultipleObjects(2, tmp_events, false, INFINITE);
-
-    MemorySlot* current;
-
-    switch (dw_wait_result)
+void glRemix::IPCProtocol::write_command_base(GLCommandType type, const auto& command,
+                                              const SIZE_T command_bytes, bool has_data,
+                                              const void* data_ptr, const SIZE_T data_bytes)
+{
+    if (!m_curr_slot)
     {
-        case WAIT_OBJECT_0: current = oldest; break;
-        case WAIT_OBJECT_0 + 1:
-            current = latest;
-            DBG_PRINT("IPCProtocol.READER - Latest SharedMemory slot became available to read "
-                      "before oldest.");
-            break;  // theoretically should not occur
-        default:
-            throw std::runtime_error(FSTR(
-                "IPCProtocol.READER - WaitForMultipleObjects for reader failed. Error Code: {}",
-                dw_wait_result));
+        throw std::logic_error("IPCProtocol.WRITER - `m_curr_slot` is null at time of writing.");
+    }
+    if (has_data && (!data_ptr || data_bytes == 0))
+    {
+        throw std::logic_error("IPCProtocol.WRITER - Incorrect usage of `write_command`.");
     }
 
-    current->smem.read(dst, max_bytes, 0, out_bytes);
+    constexpr const SIZE_T unifs_bytes = sizeof(GLCommandUnifs);
+    const SIZE_T payload_bytes = command_bytes + data_bytes;
+    // const SIZE_T total_bytes = unifs_bytes + payload_bytes;
+
+    GLCommandUnifs unifs = { type, payload_bytes };
+
+    m_curr_slot->smem.write(&unifs, m_offset, unifs_bytes);
+    m_offset += unifs_bytes;
+
+    m_curr_slot->smem.write(&command, m_offset, command_bytes);
+    m_offset += command_bytes;
+
+    if (has_data)
+    {
+        m_curr_slot->smem.write(data_ptr, m_offset, data_bytes);
+        m_offset += data_bytes;
+    }
 }

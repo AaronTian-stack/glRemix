@@ -192,9 +192,9 @@ void APIENTRY gl_tex_image_2d_ovr(GLenum target, GLint level, GLint internalForm
                                   GLsizei height, GLint border, GLenum format, GLenum type,
                                   const void* pixels)
 {
-    const SIZE_T pixels_bytes = ComputePixelDataSize(width, height, format, type);
+    // const SIZE_T pixels_bytes = ComputePixelDataSize(width, height, format, type);
     const SIZE_T cmd_bytes = sizeof(GLTexImage2DCommand);
-    const SIZE_T total_bytes = cmd_bytes + pixels_bytes;
+    const SIZE_T total_bytes = cmd_bytes;
 
     std::unique_ptr<UINT8[]> payload(new UINT8[total_bytes]);
     auto* cmd = reinterpret_cast<GLTexImage2DCommand*>(payload.get());
@@ -207,13 +207,6 @@ void APIENTRY gl_tex_image_2d_ovr(GLenum target, GLint level, GLint internalForm
     cmd->border = static_cast<UINT32>(border);
     cmd->format = static_cast<UINT32>(format);
     cmd->type = static_cast<UINT32>(type);
-    cmd->pixelDataSize = static_cast<UINT32>(pixels_bytes);
-    cmd->pixelDataOffset = static_cast<UINT32>(cmd_bytes);
-
-    if (pixels && pixels_bytes > 0)
-    {
-        memcpy(payload.get() + cmd_bytes, pixels, pixels_bytes);
-    }
 
     g_recorder.record(GLCommandType::GLCMD_TEX_IMAGE_2D, payload.get(),
                       static_cast<UINT32>(total_bytes));

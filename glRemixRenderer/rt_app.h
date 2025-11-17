@@ -47,6 +47,7 @@ class glRemixRenderer : public Application
     dx::D3D12Texture m_uav_render_target{};
 
     IPCProtocol m_ipc;
+    std::vector<UINT8> m_ipc_buffer;
 
     // mesh resources
     tsl::robin_map<UINT64, MeshRecord> m_mesh_map;
@@ -92,9 +93,9 @@ protected:
     void create_uav_rt();
 
     void read_gl_command_stream();
-    void read_ipc_buffer(std::vector<UINT8>& ipc_buf, size_t start_offset, UINT32 bytes_read,
+    void read_ipc_buffer(std::vector<UINT8>& buffer, size_t start_offset, UINT32 payload_size,
                          ID3D12GraphicsCommandList7* cmd_list, bool call_list = false);
-    void read_geometry(std::vector<UINT8>& ipc_buf, size_t* offset, GLTopology topology,
+    void read_geometry(std::vector<UINT8>& buffer, size_t* offset, GLTopology topology,
                        UINT32 bytes_read, ID3D12GraphicsCommandList7* cmd_list);
 
     // acceleration structure builders
