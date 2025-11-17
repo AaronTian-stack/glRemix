@@ -169,6 +169,11 @@ struct GLCommandUnifs
     UINT32 dataSize;
 };
 
+struct GLCreateCommand
+{
+    HWND hwnd;  // NOTE: 32-bit in x86 shim, 64-bit in x64 shim
+};
+
 // Specific command structures
 struct GLBeginCommand
 {

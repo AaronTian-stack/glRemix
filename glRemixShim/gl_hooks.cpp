@@ -61,272 +61,265 @@ FakePixelFormat create_default_pixel_format(const PIXELFORMATDESCRIPTOR* request
 void APIENTRY gl_begin_ovr(GLenum mode)
 {
     GLBeginCommand payload{ mode };
-    g_recorder.record(GLCommandType::GLCMD_BEGIN, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_BEGIN, payload);
 }
 
 void APIENTRY gl_end_ovr()
 {
     GLEmptyCommand payload{};  // init with default 0 value
-    g_recorder.record(GLCommandType::GLCMD_END, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_END, payload);
 }
 
 /* Basic Commands */
 void APIENTRY gl_vertex2f_ovr(GLfloat x, GLfloat y)
 {
     GLVertex2fCommand payload{ x, y };
-    g_recorder.record(GLCommandType::GLCMD_VERTEX2F, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_VERTEX2F, payload);
 }
 
 void APIENTRY gl_vertex3f_ovr(GLfloat x, GLfloat y, GLfloat z)
 {
-    GLVertex3fCommand payload({ x, y, z });
-    g_recorder.record(GLCommandType::GLCMD_VERTEX3F, &payload, sizeof(payload));
+    GLVertex3fCommand payload{ x, y, z };
+    g_ipc.write_command(GLCommandType::GLCMD_VERTEX3F, payload);
 }
 
 void APIENTRY gl_color3f_ovr(GLfloat r, GLfloat g, GLfloat b)
 {
     GLColor3fCommand payload{ r, g, b };
-    g_recorder.record(GLCommandType::GLCMD_COLOR3F, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_COLOR3F, payload);
 }
 
 void APIENTRY gl_color4f_ovr(GLfloat r, GLfloat g, GLfloat b, GLfloat a)
 {
     GLColor4fCommand payload{ r, g, b, a };
-    g_recorder.record(GLCommandType::GLCMD_COLOR4F, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_COLOR4F, payload);
 }
 
 void APIENTRY gl_normal3f_ovr(GLfloat nx, GLfloat ny, GLfloat nz)
 {
     GLNormal3fCommand payload{ nx, ny, nz };
-    g_recorder.record(GLCommandType::GLCMD_NORMAL3F, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_NORMAL3F, payload);
 }
 
 void APIENTRY gl_tex_coord2f_ovr(GLfloat s, GLfloat t)
 {
     GLTexCoord2fCommand payload{ s, t };
-    g_recorder.record(GLCommandType::GLCMD_TEXCOORD2F, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_TEXCOORD2F, payload);
 }
 
 /* Matrix Operations */
 void APIENTRY gl_matrix_mode_ovr(GLenum mode)
 {
     GLMatrixModeCommand payload{ mode };
-    g_recorder.record(GLCommandType::GLCMD_MATRIX_MODE, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_MATRIX_MODE, payload);
 }
 
 void APIENTRY gl_load_identity_ovr()
 {
     GLLoadIdentityCommand payload{};
-    g_recorder.record(GLCommandType::GLCMD_LOAD_IDENTITY, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_LOAD_IDENTITY, payload);
 }
 
 void APIENTRY gl_load_matrixf_ovr(const GLfloat* m)
 {
     GLLoadMatrixCommand payload{};
     memcpy(payload.m, m, sizeof(payload.m));
-    g_recorder.record(GLCommandType::GLCMD_LOAD_MATRIX, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_LOAD_MATRIX, payload);
 }
 
 void APIENTRY gl_mult_matrixf_ovr(const GLfloat* m)
 {
     GLMultMatrixCommand payload{};
     memcpy(payload.m, m, sizeof(payload.m));
-    g_recorder.record(GLCommandType::GLCMD_MULT_MATRIX, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_MULT_MATRIX, payload);
 }
 
 void APIENTRY gl_push_matrix_ovr()
 {
     GLPushMatrixCommand payload{};
-    g_recorder.record(GLCommandType::GLCMD_PUSH_MATRIX, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_PUSH_MATRIX, payload);
 }
 
 void APIENTRY gl_pop_matrix_ovr()
 {
     GLPopMatrixCommand payload{};
-    g_recorder.record(GLCommandType::GLCMD_POP_MATRIX, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_POP_MATRIX, payload);
 }
 
 void APIENTRY gl_translatef_ovr(GLfloat x, GLfloat y, GLfloat z)
 {
     GLTranslateCommand payload{ { x, y, z } };
-    g_recorder.record(GLCommandType::GLCMD_TRANSLATE, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_TRANSLATE, payload);
 }
 
 void APIENTRY gl_rotatef_ovr(GLfloat angle, GLfloat x, GLfloat y, GLfloat z)
 {
     GLRotateCommand payload{ angle, { x, y, z } };
-    g_recorder.record(GLCommandType::GLCMD_ROTATE, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_ROTATE, payload);
 }
 
 void APIENTRY gl_scalef_ovr(GLfloat x, GLfloat y, GLfloat z)
 {
     GLScaleCommand payload{ { x, y, z } };
-    g_recorder.record(GLCommandType::GLCMD_SCALE, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_SCALE, payload);
 }
 
 /* Texture Operations */
 void APIENTRY gl_bind_texture_ovr(GLenum target, GLuint texture)
 {
     GLBindTextureCommand payload{ target, texture };
-    g_recorder.record(GLCommandType::GLCMD_BIND_TEXTURE, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_BIND_TEXTURE, payload);
 }
 
 void APIENTRY gl_gen_textures_ovr(GLsizei n, GLuint*)
 {
     GLGenTexturesCommand payload{ static_cast<UINT32>(n) };
-    g_recorder.record(GLCommandType::GLCMD_GEN_TEXTURES, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_GEN_TEXTURES, payload);
 }
 
 void APIENTRY gl_delete_textures_ovr(GLsizei n, const GLuint*)
 {
     GLDeleteTexturesCommand payload{ static_cast<UINT32>(n) };
-    g_recorder.record(GLCommandType::GLCMD_DELETE_TEXTURES, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_DELETE_TEXTURES, payload);
 }
 
-/* This override is slightly unique. We will record most of the parameters as usual.
- * However, since the `pixels` pointer means nothing in the renderer process context, we also do
- * O(n) `memcpy` raw image bytes into the command payload. The renderer can subsequently then handle
- * this special-case command cleanly.
+/*
+ *   - Declare struct normally
+ *   - Copy pixel blob through IPCProtocol::write_command(..., true, pixels, bytes)
  */
 void APIENTRY gl_tex_image_2d_ovr(GLenum target, GLint level, GLint internalFormat, GLsizei width,
                                   GLsizei height, GLint border, GLenum format, GLenum type,
                                   const void* pixels)
 {
-    // const SIZE_T pixels_bytes = ComputePixelDataSize(width, height, format, type);
-    const SIZE_T cmd_bytes = sizeof(GLTexImage2DCommand);
-    const SIZE_T total_bytes = cmd_bytes;
+    GLTexImage2DCommand payload{};
+    payload.target = target;
+    payload.level = level;
+    payload.internalFormat = internalFormat;
+    payload.width = width;
+    payload.height = height;
+    payload.border = border;
+    payload.format = format;
+    payload.type = type;
 
-    std::unique_ptr<UINT8[]> payload(new UINT8[total_bytes]);
-    auto* cmd = reinterpret_cast<GLTexImage2DCommand*>(payload.get());
+    const SIZE_T pixels_bytes = ComputePixelDataSize(width, height, format, type);
 
-    cmd->target = static_cast<UINT32>(target);
-    cmd->level = static_cast<UINT32>(level);
-    cmd->internalFormat = static_cast<UINT32>(internalFormat);
-    cmd->width = static_cast<UINT32>(width);
-    cmd->height = static_cast<UINT32>(height);
-    cmd->border = static_cast<UINT32>(border);
-    cmd->format = static_cast<UINT32>(format);
-    cmd->type = static_cast<UINT32>(type);
-
-    g_recorder.record(GLCommandType::GLCMD_TEX_IMAGE_2D, payload.get(),
-                      static_cast<UINT32>(total_bytes));
+    g_ipc.write_command(GLCommandType::GLCMD_TEX_IMAGE_2D, payload, pixels != nullptr, pixels,
+                        pixels_bytes);
 }
 
 void APIENTRY gl_tex_parameterf_ovr(GLenum target, GLenum pname, GLfloat param)
 {
     GLTexParameterCommand payload{ target, pname, param };
-    g_recorder.record(GLCommandType::GLCMD_TEX_PARAMETER, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_TEX_PARAMETER, payload);
 }
 
 /* Lighting */
 void APIENTRY gl_enable_ovr(GLenum cap)
 {
     GLEnableCommand payload{ cap };
-    g_recorder.record(GLCommandType::GLCMD_ENABLE, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_ENABLE, payload);
 }
 
 void APIENTRY gl_disable_ovr(GLenum cap)
 {
     GLDisableCommand payload{ cap };
-    g_recorder.record(GLCommandType::GLCMD_DISABLE, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_DISABLE, payload);
 }
 
 void APIENTRY gl_lightf_ovr(GLenum light, GLenum pname, GLfloat param)
 {
     GLLightCommand payload{ light, pname, param };
-    g_recorder.record(GLCommandType::GLCMD_LIGHTF, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_LIGHTF, payload);
 }
 
 void APIENTRY gl_lightfv_ovr(GLenum light, GLenum pname, const GLfloat* params)
 {
     GLLightfvCommand payload{ light, pname, { params[0], params[1], params[2], params[3] } };
-    g_recorder.record(GLCommandType::GLCMD_LIGHTFV, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_LIGHTFV, payload);
 }
 
 void APIENTRY gl_materialf_ovr(GLenum face, GLenum pname, GLfloat param)
 {
     GLMaterialCommand payload{ face, pname, param };
-    g_recorder.record(GLCommandType::GLCMD_MATERIALF, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_MATERIALF, payload);
 }
 
 void APIENTRY gl_materialfv_ovr(GLenum face, GLenum pname, const GLfloat* params)
 {
     GLMaterialfvCommand payload{ face, pname, { params[0], params[1], params[2], params[3] } };
-    g_recorder.record(GLCommandType::GLCMD_MATERIALFV, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_MATERIALFV, payload);
 }
 
 /* Buffer Operations */
 void APIENTRY gl_clear_ovr(GLbitfield mask)
 {
     GLClearCommand payload{ mask };
-    g_recorder.record(GLCommandType::GLCMD_CLEAR, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_CLEAR, payload);
 }
 
 void APIENTRY gl_clear_color_ovr(GLfloat r, GLfloat g, GLfloat b, GLfloat a)
 {
     GLClearColorCommand payload{ { r, g, b, a } };
-    g_recorder.record(GLCommandType::GLCMD_CLEAR_COLOR, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_CLEAR_COLOR, payload);
 }
 
 void APIENTRY gl_flush_ovr()
 {
     GLFlushCommand payload{};
-    g_recorder.record(GLCommandType::GLCMD_FLUSH, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_FLUSH, payload);
 }
 
 void APIENTRY gl_finish_ovr()
 {
     GLFinishCommand payload{};
-    g_recorder.record(GLCommandType::GLCMD_FINISH, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_FINISH, payload);
 }
 
 /* Viewport & Projection */
 void APIENTRY gl_viewport_ovr(GLint x, GLint y, GLsizei width, GLsizei height)
 {
     GLViewportCommand payload{ x, y, width, height };
-    g_recorder.record(GLCommandType::GLCMD_VIEWPORT, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_VIEWPORT, payload);
 }
 
 void APIENTRY gl_ortho_ovr(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top,
                            GLdouble zNear, GLdouble zFar)
 {
     GLOrthoCommand payload{ left, right, bottom, top, zNear, zFar };
-    g_recorder.record(GLCommandType::GLCMD_ORTHO, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_ORTHO, payload);
 }
 
 void APIENTRY gl_frustum_ovr(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top,
                              GLdouble zNear, GLdouble zFar)
 {
     GLFrustumCommand payload{ left, right, bottom, top, zNear, zFar };
-    g_recorder.record(GLCommandType::GLCMD_FRUSTUM, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_FRUSTUM, payload);
 }
 
 /* Other */
-
 void APIENTRY gl_shutdown_ovr()
 {
     GLShutdownCommand payload{};
-    g_recorder.record(GLCommandType::GLCMD_SHUTDOWN, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_SHUTDOWN, payload);
 }
 
 /* Display Lists */
-
 void APIENTRY gl_call_list_ovr(GLuint list)
 {
     GLCallListCommand payload{ list };
-    g_recorder.record(GLCommandType::GLCMD_CALL_LIST, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_CALL_LIST, payload);
 }
 
 void APIENTRY gl_new_list_ovr(GLuint list, GLenum mode)
 {
     GLNewListCommand payload{ list, mode };
-    g_recorder.record(GLCommandType::GLCMD_NEW_LIST, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_NEW_LIST, payload);
 }
 
 void APIENTRY gl_end_list_ovr()
 {
     GLEndListCommand payload{};
-    g_recorder.record(GLCommandType::GLCMD_END_LIST, &payload, sizeof(payload));
+    g_ipc.write_command(GLCommandType::GLCMD_END_LIST, payload);
 }
 
 GLuint APIENTRY gl_gen_lists_ovr(GLsizei range)
@@ -342,8 +335,8 @@ GLuint APIENTRY gl_gen_lists_ovr(GLsizei range)
 
 BOOL WINAPI swap_buffers_ovr(HDC)
 {
-    g_recorder.end_frame();
-    g_recorder.start_frame();
+    g_ipc.end_frame();
+    g_ipc.start_frame();
 
     return TRUE;
 }
@@ -414,7 +407,9 @@ HGLRC WINAPI create_context_ovr(HDC dc)
     HWND hwnd = WindowFromDC(dc);
     assert(hwnd);
 
-    g_recorder.record(GLCommandType::GLCMD_CREATE, &hwnd, sizeof(HWND));
+    GLCreateCommand payload{ hwnd };
+
+    g_ipc.write_command(GLCommandType::GLCMD_CREATE, payload);
 
     return reinterpret_cast<HGLRC>(static_cast<UINT_PTR>(0xDEADBEEF));  // Dummy context handle
 }

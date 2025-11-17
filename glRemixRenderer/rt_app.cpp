@@ -342,7 +342,11 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer, size_
             case GLCommandType::GLCMD_CREATE:
             {
                 HWND hwnd;
-                memcpy(&hwnd, buffer.data() + offset, sizeof(HWND));
+
+                // `header->dataSize` maintains compatibility when building 64-bit shim
+                memcpy(&hwnd, buffer.data() + offset, header->dataSize);
+
+                // hwnd = reinterpret_cast<HWND>(hwnd_ptr);
                 THROW_IF_FALSE(m_context.create_swapchain(hwnd, &m_gfx_queue, &m_frame_index));
                 THROW_IF_FALSE(
                     m_context.create_swapchain_descriptors(&m_swapchain_descriptors, &m_rtv_heap));
@@ -352,6 +356,7 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer, size_
                 m_context.create_unordered_access_view_texture(&m_uav_render_target,
                                                                m_uav_render_target.desc.format,
                                                                &m_rt_descriptors, 1);
+                break;
             }
             case GLCommandType::GLCMD_NEW_LIST:
             {

@@ -4,10 +4,12 @@
 #include <string>
 #include <tsl/robin_map.h>
 
-#include "frame_recorder.h"
+#include <shared/ipc_protocol.h>
 
 namespace glRemix
 {
+glRemix::IPCProtocol g_ipc;
+
 namespace gl
 {
 // Both WGL and OpenGL functions may be called from multiple threads hence the mutex
@@ -25,15 +27,8 @@ void initialize()
     // create lambda function for `std::call_once`
     auto initialize_once_fn = []
     {
-        if (!g_recorder.initialize())
-        {
-            OutputDebugStringA("glRemix: Recorder init failed.\n");
-        }
-        else
-        {
-            OutputDebugStringA("glRemix: Recorder ready.\n");
-        }
-        g_recorder.start_frame();
+        g_ipc.init_writer();  // initialize shim as IPC writer
+        g_ipc.start_frame();
 
         // Start the renderer as a subprocess
         // Get the DLL path then expect to find "glRemix_renderer.exe" alongside it

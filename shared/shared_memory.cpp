@@ -97,8 +97,6 @@ UINT32 glRemix::SharedMemory::read(void* dst, const UINT32 offset, const UINT32 
 
     memcpy(dst, m_payload + offset, bytes_read);
 
-    signal_read_event();
-
     return bytes_read;
 }
 
