@@ -52,6 +52,8 @@ class glRemixRenderer : public Application
     tsl::robin_map<UINT64, MeshRecord> m_mesh_map;
     std::vector<MeshRecord> m_meshes;
 
+    std::unordered_map<UINT64, MeshRecord> m_replacement_map; // check: should this be robin_map
+
     BufferPool m_blas_pool;
     BufferPool m_vertex_pool;
     BufferPool m_index_pool;
@@ -108,6 +110,8 @@ protected:
     bool load_mesh_from_path(const std::string& asset_path,
                              std::vector<Vertex>& out_vertices,
                              std::vector<uint32_t>& out_indices);
+    void add_to_replacement_map(uint64_t meshID, std::vector<Vertex>& out_vertices,
+                                std::vector<uint32_t>& out_indices);
 
 public:
     glRemixRenderer() = default;

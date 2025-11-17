@@ -9,6 +9,7 @@
 #include <filesystem>
 
 #include <imgui.h>
+//#include <core.hpp>
 
 #include <shared/math_utils.h>
 #include <shared/gl_commands.h>
@@ -297,25 +298,6 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     // loop through data from frame
     read_ipc_buffer(ipc_buf, sizeof(GLFrameUnifs), bytes_read, cmd_list.Get());
 
-    // garbage collect meshes
-    for (auto it = m_mesh_map.begin(); it != m_mesh_map.end();)
-    {
-        auto& mesh = it->second;
-
-        if (current_frame - mesh.last_frame > frame_leniency)
-        {
-            m_blas_pool.free(mesh.blas_id);
-            m_vertex_pool.free(mesh.vertex_id);
-            m_index_pool.free(mesh.index_id);
-
-            it = m_mesh_map.erase(it);
-        }
-        else
-        {
-            it++;
-        }
-    }
-
     THROW_IF_FALSE(SUCCEEDED(cmd_list->Close()));
     const std::array<ID3D12CommandList*, 1> lists = { cmd_list.Get() };
     m_gfx_queue.queue->ExecuteCommandLists(1, lists.data());
@@ -334,11 +316,38 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
 
     THROW_IF_FALSE(m_context.wait_fences(wait_info));  // Block CPU until done
 
-    // asset replacement: register callback
-    m_debug_window.set_replace_mesh_callback([this](uint64_t meshID, const std::string& asset_path) 
-        { 
-            this->replace_mesh(meshID, asset_path); 
-        });
+    // inject replacement meshes into meshes to be rendererd
+    for (auto& [mesh_id, replacement_mesh] : m_replacement_map)
+    {
+        if (replacement_mesh.blas_id == -1)
+        {
+            replacement_mesh.blas_id = build_mesh_blas(m_vertex_pool[replacement_mesh.vertex_id],
+                                                       m_index_pool[replacement_mesh.index_id],
+                                                       cmd_list.Get());
+        }
+        replacement_mesh.last_frame = current_frame;
+
+        m_meshes.push_back(replacement_mesh);
+    }
+
+    // garbage collect meshes
+    for (auto it = m_mesh_map.begin(); it != m_mesh_map.end();)
+    {
+        auto& mesh = it->second;
+
+        if (current_frame - mesh.last_frame > frame_leniency)
+        {
+            m_blas_pool.free(mesh.blas_id);
+            m_vertex_pool.free(mesh.vertex_id);
+            m_index_pool.free(mesh.index_id);
+
+            it = m_mesh_map.erase(it);
+        }
+        else
+        {
+            it++;
+        }
+    }
 }
 
 void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf, size_t start_offset,
@@ -719,17 +728,17 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
     // check if hash exists
     UINT64 hash = create_hash(t_vertices, t_indices);
 
-    MeshRecord mesh;
-    m_mesh_map.find(hash);
+    MeshRecord* mesh = nullptr;
     if (m_mesh_map.contains(hash))
     {
-        mesh = m_mesh_map[hash];
+        mesh = &m_mesh_map[hash];
     }
     else
     {
-        mesh.vertex_count = t_vertices.size();
-        mesh.index_count = t_indices.size();
-        mesh.mesh_id = hash;  // set hash to meshID
+        MeshRecord new_mesh{};
+        new_mesh.vertex_count = t_vertices.size();
+        new_mesh.index_count = t_indices.size();
+        new_mesh.mesh_id = hash;
 
         // create vertex buffer
         dx::D3D12Buffer t_vertex_buffer;
@@ -740,14 +749,14 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
             .stride = sizeof(Vertex),
             .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
         };
-        void* cpu_ptr;
+
+        void* cpu_ptr = nullptr;
         THROW_IF_FALSE(
             m_context.create_buffer(vertex_buffer_desc, &t_vertex_buffer, "vertex buffer"));
-
         THROW_IF_FALSE(m_context.map_buffer(&t_vertex_buffer, &cpu_ptr));
         memcpy(cpu_ptr, t_vertices.data(), vertex_buffer_desc.size);
         m_context.unmap_buffer(&t_vertex_buffer);
-        mesh.vertex_id = m_vertex_pool.push_back(std::move(t_vertex_buffer));
+        new_mesh.vertex_id = m_vertex_pool.push_back(std::move(t_vertex_buffer));
 
         // create index buffer
         dx::BufferDesc index_buffer_desc{
@@ -755,31 +764,32 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
             .stride = sizeof(UINT),
             .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
         };
-        THROW_IF_FALSE(m_context.create_buffer(index_buffer_desc, &t_index_buffer, "index buffer"));
 
+        THROW_IF_FALSE(m_context.create_buffer(index_buffer_desc, &t_index_buffer, "index buffer"));
         THROW_IF_FALSE(m_context.map_buffer(&t_index_buffer, &cpu_ptr));
         memcpy(cpu_ptr, t_indices.data(), index_buffer_desc.size);
         m_context.unmap_buffer(&t_index_buffer);
-        mesh.index_id = m_index_pool.push_back(std::move(t_index_buffer));
+        new_mesh.index_id = m_index_pool.push_back(std::move(t_index_buffer));
 
-        // create blas buffer
-        mesh.blas_id = build_mesh_blas(m_vertex_pool[mesh.vertex_id], m_index_pool[mesh.index_id],
-                                       cmd_list);
+        // create BLAS
+        new_mesh.blas_id = build_mesh_blas(m_vertex_pool[new_mesh.vertex_id],
+                                           m_index_pool[new_mesh.index_id], cmd_list);
 
-        m_mesh_map[hash] = mesh;
+        m_mesh_map.emplace(hash, std::move(new_mesh));
+        mesh = &m_mesh_map[hash];
     }
 
     // we assign materials here
-    mesh.mat_id = static_cast<UINT32>(m_materials.size());
+    mesh->mat_id = static_cast<UINT32>(m_materials.size());
     m_materials.push_back(
         m_material);  // store the current state of the material in the materials buffer
 
-    mesh.mv_id = static_cast<UINT32>(m_matrix_pool.size());
+    mesh->mv_id = static_cast<UINT32>(m_matrix_pool.size());
     m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
 
-    mesh.last_frame = current_frame;
+    mesh->last_frame = current_frame;
 
-    m_meshes.push_back(std::move(mesh));
+    m_meshes.push_back(std::move(*mesh));
 }
 
 int glRemix::glRemixRenderer::build_mesh_blas(const dx::D3D12Buffer& vertex_buffer,
@@ -901,33 +911,89 @@ uint64_t glRemix::glRemixRenderer::create_hash(std::vector<Vertex> vertices, std
 // replaces asset in scene based on file provided by user in ImGui
 void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& new_asset_path)
 {
-    // get current mesh that needs to be replaced
-    MeshRecord* old_mesh;
-    for (int i = 0; i < m_meshes.size(); ++i)
+    // erase mesh that needs to be replaced
+    for (auto it = m_mesh_map.begin(); it != m_mesh_map.end();)
     {
-        if (m_meshes[i].mesh_id == meshID)
+        auto& mesh = it->second;
+
+        if (mesh.mesh_id == meshID)
         {
-            old_mesh = &m_meshes[i];
+            m_blas_pool.free(mesh.blas_id);
+            m_vertex_pool.free(mesh.vertex_id);
+            m_index_pool.free(mesh.index_id);
+
+            it = m_mesh_map.erase(it);
             break;
         }
+        else
+        {
+            ++it;
+        }
     }
-    //assert(old_mesh != nullptr);
 
     // load new asset from given file path
     std::vector<Vertex> new_vertices;
     std::vector<uint32_t> new_indices;
     THROW_IF_FALSE(load_mesh_from_path(new_asset_path, new_vertices, new_indices));
 
-    // TODO-AR: resize and copy new vertex and index data into buffers
+    // put new mesh into replacement map
+    uint64_t new_mesh_hash = create_hash(new_vertices, new_indices);
+    add_to_replacement_map(new_mesh_hash, new_vertices, new_indices);
 
-    // TODO-AR: rebuild blas for new mesh
+}
 
-    // update mesh record
-    old_mesh->mesh_id = create_hash(new_vertices, new_indices);
-    old_mesh->vertex_count = new_vertices.size();
-    old_mesh->index_count = new_indices.size();
+void glRemix::glRemixRenderer::add_to_replacement_map(uint64_t meshID,
+                                                      std::vector<Vertex>& new_vertices,
+                                                      std::vector<uint32_t>& new_indices)
+{
+    //MeshRecord* mesh = nullptr;
 
-    // TODO-AR: change vertexID and indexID of subsequent meshes in buffer
+    MeshRecord new_mesh = {};
+    new_mesh.mesh_id = meshID;
+    new_mesh.vertex_count = new_vertices.size();
+    new_mesh.index_count = new_indices.size();
+    //new_mesh.last_frame = current_frame;
+
+    // create vertex buffer
+    dx::D3D12Buffer t_vertex_buffer;
+    dx::D3D12Buffer t_index_buffer;
+
+    dx::BufferDesc vertex_buffer_desc{
+        .size = sizeof(Vertex) * new_vertices.size(),
+        .stride = sizeof(Vertex),
+        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+    };
+
+    void* cpu_ptr = nullptr;
+    THROW_IF_FALSE(m_context.create_buffer(vertex_buffer_desc, &t_vertex_buffer, "vertex buffer"));
+    THROW_IF_FALSE(m_context.map_buffer(&t_vertex_buffer, &cpu_ptr));
+    memcpy(cpu_ptr, new_vertices.data(), vertex_buffer_desc.size);
+    m_context.unmap_buffer(&t_vertex_buffer);
+    new_mesh.vertex_id = m_vertex_pool.push_back(std::move(t_vertex_buffer));
+
+    // create index buffer
+    dx::BufferDesc index_buffer_desc{
+        .size = sizeof(UINT) * new_indices.size(),
+        .stride = sizeof(UINT),
+        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+    };
+
+    THROW_IF_FALSE(m_context.create_buffer(index_buffer_desc, &t_index_buffer, "index buffer"));
+    THROW_IF_FALSE(m_context.map_buffer(&t_index_buffer, &cpu_ptr));
+    memcpy(cpu_ptr, new_indices.data(), index_buffer_desc.size);
+    m_context.unmap_buffer(&t_index_buffer);
+    new_mesh.index_id = m_index_pool.push_back(std::move(t_index_buffer));
+
+    // cannot create BLAS here since we don't have cmd_list
+    new_mesh.blas_id = -1;
+
+    // also not assigning material or mv here
+
+    m_replacement_map[meshID] = std::move(new_mesh);
+
+    /*mesh = &m_mesh_map[meshID];
+    mesh->last_frame = current_frame;
+    m_meshes.push_back(std::move(*mesh));*/
 
 }
 
@@ -935,9 +1001,87 @@ bool glRemix::glRemixRenderer::load_mesh_from_path(const std::string& asset_path
                                                    std::vector<Vertex>& out_vertices,
                                                    std::vector<uint32_t>& out_indices)
 {
-    // TODO-AR: fill in function
+    /* 
+    fastgltf::Parser parser;
+
+    auto data = fastgltf::GltfDataBuffer::FromPath(asset_path);
+    if (data.error() != fastgltf::Error::None)
+    {
+        return false;
+    }
+
+    auto asset = parser.loadGltf(data.get(), path.parent_path(), fastgltf::Options::None);
+    if (auto error = asset.error(); error != fastgltf::Error::None)
+    {
+        return false;
+    }
+
+    fastgltf::validate(asset.get());
+
+    // get first mesh only for now
+    auto& mesh = asset->meshes[0];
+
+    // loop through primitives and put all data into a single MeshRecord mesh
+    for (auto& primitive : mesh.primitives)
+    {
+        // get indices
+        const auto& index_acc = asset.accessors[primitive.indicesAccessor.value()];
+        size_t index_offset = index_acc.count;
+        out_indices.resize(index_offset + index_acc.count());
+        if (index_acc.componentType == fastgltf::ComponentType::UnsignedByte
+            || index_acc.componentType == fastgltf::ComponentType::UnsignedShort)
+        {
+            // handle u16 values
+            std::vector<uint16_t> temp(index_acc.count);
+            fastgltf::copyFromAccessor<uint16_t>(asset.get(), index_acc, temp.data());
+
+            for (size_t i = 0; i < index_acc.count; i++)
+            {
+                out_indices[index_offset + i] = static_cast<uint32_t>(temp[i]);
+            }
+        }
+        else
+        {
+            // u32 values
+            fastgltf::copyFromAccessor<uint32_t>(asset.get(), index_acc, &out_indices[index_offset]);
+        }
+
+        // get vertices
+        const auto& position_acc = asset.accessors[primitive.attributes.at("POSITION")];
+        size_t vertex_offset = out_vertices.size();
+        out_vertices.resize(vertex_offset + position_acc.count());
+        for (int i = 0; i < position_acc.count(); ++i)
+        {
+            // initialize vertex data
+            Vertex& vertex = out_vertices[vertex_offset + i];
+            out_vertices[vertex_offset + i].position = { 0, 0, 0 };
+            out_vertices[vertex_offset + i].color = {1, 1, 1};
+            out_vertices[vertex_offset + i].normal = { 0, 1, 0 };
+        }
+        fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(
+            asset.get(), position_acc, [&](fastgltf::math::fvec3 p, size_t idx)
+            {
+                out_vertices[vertex_offset + idx].position = { p.x(), p.y(), p.z() };
+            }
+        );
+
+        // get normals if they exist
+        if (primitive.attributes.contains("NORMAL"))
+        {
+            const auto& normal_acc = asset.accessors[primitive.attributes.at("NORMAL")];
+            fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(
+                asset.get(), normal_acc, [&](fastgltf::math::fvec3 n, size_t idx)
+                {
+                    out_vertices[vertex_offset + idx].normal = { n.x(), n.y(), n.z() };
+                }
+            );
+        }
+    }
+    */
     return true;
-}
+} 
+
+
 
 // builds top level acceleration structure with blas buffer (can be called each frame likely)
 void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
@@ -1301,7 +1445,7 @@ void glRemix::glRemixRenderer::destroy()
 {
     m_context.destroy_imgui();
     m_rt_descriptor_heap.deallocate(&m_rt_descriptors);
-}
+}   
 
 void glRemix::glRemixRenderer::create_uav_rt()
 {

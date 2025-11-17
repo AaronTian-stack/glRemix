@@ -9,9 +9,7 @@
 #include "dx/d3d12_as.h"
 #include "gl/gl_matrix_stack.h"
 #include <DirectXMath.h>
-#include <ipc_protocol.h>
 
-#include "gl_commands.h"
 #include "structs.h"
 #include "tsl/robin_map.h"
 
