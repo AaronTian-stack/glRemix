@@ -264,7 +264,7 @@ bool D3D12Context::create_swapchain(const HWND window, D3D12Queue* const queue,
                                                 .Scaling = DXGI_SCALING_STRETCH,
                                                 .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
                                                 .AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED,
-                                                .Flags = 0 };
+                                                .Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING };
 
     ComPtr<IDXGISwapChain1> swapchain1;
     if (FAILED(m_dxgi_factory->CreateSwapChainForHwnd(queue->queue.Get(),  // Force flush
