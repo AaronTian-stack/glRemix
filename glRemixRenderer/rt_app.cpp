@@ -162,7 +162,7 @@ void glRemix::glRemixRenderer::create()
         root_sig_desc.pStaticSamplers = nullptr;
         root_sig_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
         //| D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED; // Add samplers if needed, note
-        //you have to bind a sampler heap when this flag is enabled
+        // you have to bind a sampler heap when this flag is enabled
 
         THROW_IF_FALSE(
             m_context.create_root_signature(root_sig_desc,
@@ -478,9 +478,26 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
                 const auto* mat = reinterpret_cast<const GLMaterialCommand*>(
                     ipc_buf.data() + offset);  // reach into data payload
 
-                // TODO: when material f is encountered, edit the current m_material based on the
-                // param and value
-
+                // Ignore face parameter for now
+                auto set_xmfloat4 = [&](const float v) { return XMFLOAT4{ v, v, v, 1.0f }; };
+                switch (static_cast<GLLight>(mat->pname))
+                {
+                    case GLLight::GL_AMBIENT: m_material.ambient = set_xmfloat4(mat->param); break;
+                    case GLLight::GL_DIFFUSE: m_material.diffuse = set_xmfloat4(mat->param); break;
+                    case GLLight::GL_SPECULAR:
+                        m_material.specular = set_xmfloat4(mat->param);
+                        break;
+                    default:
+                        switch (static_cast<GLMaterial>(mat->pname))
+                        {
+                            case GLMaterial::GL_EMISSION:
+                                m_material.emission = set_xmfloat4(mat->param);
+                                break;
+                            case GLMaterial::GL_SHININESS: m_material.shininess = mat->param; break;
+                            default: break;
+                        }
+                        break;
+                }
                 break;
             }
             case GLCommandType::GLCMD_MATERIALFV:
@@ -488,8 +505,34 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
                 const auto* mat = reinterpret_cast<const GLMaterialfvCommand*>(
                     ipc_buf.data() + offset);  // reach into data payload
 
-                // TODO: when material fv is encountered, edit the current m_material based on the
-                // param and value
+                // Ignore face parameter for now
+                auto set_xmfloat4 = [&](const GLVec4f& v)
+                { return XMFLOAT4{ v.x, v.y, v.z, v.w }; };
+
+                switch (static_cast<GLLight>(mat->pname))
+                {
+                    case GLLight::GL_AMBIENT: m_material.ambient = set_xmfloat4(mat->params); break;
+                    case GLLight::GL_DIFFUSE: m_material.diffuse = set_xmfloat4(mat->params); break;
+                    case GLLight::GL_SPECULAR:
+                        m_material.specular = set_xmfloat4(mat->params);
+                        break;
+                    default:
+                        switch (static_cast<GLMaterial>(mat->pname))
+                        {
+                            case GLMaterial::GL_EMISSION:
+                                m_material.emission = set_xmfloat4(mat->params);
+                                break;
+                            case GLMaterial::GL_SHININESS:
+                                m_material.shininess = mat->params.x;
+                                break;
+                            case GLMaterial::GL_AMBIENT_AND_DIFFUSE:
+                                m_material.ambient = set_xmfloat4(mat->params);
+                                m_material.diffuse = set_xmfloat4(mat->params);
+                                break;
+                            default: break;
+                        }
+                        break;
+                }
 
                 break;
             }
