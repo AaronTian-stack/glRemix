@@ -7,18 +7,8 @@ ConstantBuffer<RayGenConstantBuffer> g_raygen_cb : register(b0);
 
 StructuredBuffer<GPUMeshRecord> meshes : register(t1);
 
-typedef Vertex GPUVertex;
-
 // https://learn.microsoft.com/en-us/windows/win32/direct3d12/intersection-attributes
 typedef BuiltInTriangleIntersectionAttributes TriAttributes;
-
-struct RayPayload
-{
-    float4 color;
-    float3 normal;
-    bool hit;
-    float3 hit_pos;
-};
 
 // helper functions
 float rand(inout uint seed)
@@ -30,7 +20,7 @@ float rand(inout uint seed)
 float3 cosine_sample_hemisphere(float2 xi)
 {
     float r = sqrt(xi.x);
-    float theta = 2.0f * 3.14159265f * xi.y;
+    float theta = 2.0f * 3.14159265 * xi.y;
     float x = r * cos(theta);
     float y = r * sin(theta);
     float z = sqrt(max(0.0, 1.0 - xi.x));
@@ -111,13 +101,13 @@ float3 transform_to_world(float3 local_dir, float3 N)
     // RenderTarget[DispatchRaysIndex().xy] = float4(ray_dir * 0.5 + 0.5, 1.0);
 }
 
-    [shader("closesthit")] void ClosestHitMain(inout RayPayload payload, in TriAttributes attr)
+[shader("closesthit")] void ClosestHitMain(inout RayPayload payload, in TriAttributes attr)
 {
     // Fetch mesh record for this instance; indices are into the global SRV heap
     const GPUMeshRecord mesh = meshes[InstanceID()];
 
     // Bindless fetch of vertex and index buffers from the global SRV heap
-    StructuredBuffer<GPUVertex> vb = ResourceDescriptorHeap[NonUniformResourceIndex(mesh.vb_idx)];
+    StructuredBuffer<Vertex> vb = ResourceDescriptorHeap[NonUniformResourceIndex(mesh.vb_idx)];
     StructuredBuffer<uint> ib = ResourceDescriptorHeap[NonUniformResourceIndex(mesh.ib_idx)];
 
     // Triangle indices for this primitive
@@ -127,9 +117,9 @@ float3 transform_to_world(float3 local_dir, float3 N)
     const uint i2 = ib[tri * 3 + 2];
 
     // Vertex fetch
-    const GPUVertex v0 = vb[i0];
-    const GPUVertex v1 = vb[i1];
-    const GPUVertex v2 = vb[i2];
+    const Vertex v0 = vb[i0];
+    const Vertex v1 = vb[i1];
+    const Vertex v2 = vb[i2];
 
     //// DEBUG
     // payload.color = float4(v0.position, 1.0); payload.hit = true; return;

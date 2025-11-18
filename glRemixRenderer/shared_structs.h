@@ -53,3 +53,11 @@ struct GPUMeshRecord
     UINT32 mat_buffer_idx;
     UINT32 mat_idx;
 };
+
+struct RayPayload
+{
+    XMFLOAT4 color;
+    XMFLOAT3 normal;
+    BOOL hit;
+    XMFLOAT3 hit_pos;
+};

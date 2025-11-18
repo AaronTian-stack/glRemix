@@ -1,10 +1,4 @@
-struct RayGenConstantBuffer
-{
-    float4x4 view_proj;
-    float4x4 inv_view_proj;
-    float width;
-    float height;
-};
+#include "shared_structs.h"
 
 struct VSInput
 {

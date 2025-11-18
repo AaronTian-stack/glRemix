@@ -221,7 +221,7 @@ void glRemix::glRemixRenderer::create()
     rt_desc.global_root_signature = m_rt_global_root_signature.Get();
     rt_desc.max_recursion_depth = 1;
     // Make sure these match in the shader
-    rt_desc.payload_size = sizeof(float) * (4 + 3 + 1 + 3);
+    rt_desc.payload_size = sizeof(RayPayload);
     rt_desc.attribute_size = sizeof(float) * 2;
     THROW_IF_FALSE(m_context.create_raytracing_pipeline(rt_desc, raytracing_shaders.Get(),
                                                         m_rt_pipeline.ReleaseAndGetAddressOf(),
