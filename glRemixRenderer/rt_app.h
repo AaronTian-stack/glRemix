@@ -106,8 +106,9 @@ class glRemixRenderer : public Application
 
     void create_material_buffer();
 
-    uint32_t frame_leniency = 10;
-    uint32_t current_frame;
+    // TODO: Expose this parameter in debug window?
+    static constexpr UINT FRAME_LENIENCY = 10;
+    UINT m_current_frame = 0;
 
     void create_uav_rt();
 

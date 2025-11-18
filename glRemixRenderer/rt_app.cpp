@@ -364,7 +364,7 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
         return;
     }
 
-    current_frame = frame_header->frame_index;
+    m_current_frame = frame_header->frame_index;
 
     m_meshes.clear();              // per frame meshes
     m_matrix_pool.clear();         // reset matrix pool each frame
@@ -379,7 +379,7 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     {
         auto& mesh = it->second;
 
-        if (current_frame - mesh.last_frame > frame_leniency)
+        if (m_current_frame - mesh.last_frame > FRAME_LENIENCY)
         {
             m_mesh_resources.free(mesh.blas_vb_ib_idx);
             it = m_mesh_map.erase(it);
@@ -840,7 +840,7 @@ void glRemix::glRemixRenderer::read_geometry(void* const ipc_buf, size_t* const 
 
     m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
 
-    mesh->last_frame = current_frame;
+    mesh->last_frame = m_current_frame;
 
     // Temporary fix?
     // TODO: Proper fix to consider display list compilation modes
