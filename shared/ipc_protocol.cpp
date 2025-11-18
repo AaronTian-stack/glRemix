@@ -120,7 +120,7 @@ void glRemix::IPCProtocol::init_reader()
 }
 
 void glRemix::IPCProtocol::consume_frame_or_wait(void* payload, UINT32* payload_size,
-                                                  UINT32* frame_index)
+                                                 UINT32* frame_index)
 {
     {
         MemorySlot* oldest;  // shared memory that has the smaller recorded time frame
