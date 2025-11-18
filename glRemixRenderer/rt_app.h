@@ -2,6 +2,7 @@
 
 #include <tsl/robin_map.h>
 #include <DirectXMath.h>
+#include <span>
 
 #include <shared/ipc_protocol.h>
 #include <shared/gl_commands.h>
@@ -152,9 +153,9 @@ protected:
     };
 
     // acceleration structure builders
-    void build_mesh_blas_batch(const std::vector<BLASBuildInfo>& build_infos,
+    void build_mesh_blas_batch(std::span<BLASBuildInfo> build_infos,
                                ID3D12GraphicsCommandList7* cmd_list);
-    void build_pending_blas_buffers(ID3D12GraphicsCommandList7* cmd_list);
+    void create_pending_buffers(ID3D12GraphicsCommandList7* cmd_list);
     void build_tlas(ID3D12GraphicsCommandList7* cmd_list);
 
 public:

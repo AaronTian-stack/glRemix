@@ -161,8 +161,8 @@ void glRemix::glRemixRenderer::create()
         root_sig_desc.NumStaticSamplers = 0;
         root_sig_desc.pStaticSamplers = nullptr;
         root_sig_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
-        //| D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED; // Add samplers if needed, note
-        // you have to bind a sampler heap when this flag is enabled
+        // Add samplers if needed, note you have to bind a sampler heap when this flag is enabled
+        // | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED; 
 
         THROW_IF_FALSE(
             m_context.create_root_signature(root_sig_desc,
@@ -835,7 +835,7 @@ void glRemix::glRemixRenderer::read_geometry(void* const ipc_buf, size_t* const 
     }
 }
 
-void glRemix::glRemixRenderer::build_pending_blas_buffers(ID3D12GraphicsCommandList7* cmd_list)
+void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7* cmd_list)
 {
     if (m_pending_geometries.empty())
     {
@@ -911,12 +911,12 @@ void glRemix::glRemixRenderer::build_pending_blas_buffers(ID3D12GraphicsCommandL
     }
 
     // Build all BLAS in a single batch
-    build_mesh_blas_batch(build_infos, cmd_list);
+    build_mesh_blas_batch(std::span(build_infos), cmd_list);
 
     m_pending_geometries.clear();
 }
 
-void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::vector<BLASBuildInfo>& build_infos,
+void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::span<BLASBuildInfo> build_infos,
                                                      ID3D12GraphicsCommandList7* cmd_list)
 {
     if (build_infos.empty())
@@ -924,33 +924,32 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::vector<BLASBuild
         return;
     }
 
+    const size_t count = build_infos.size();
+
     // TODO: Use static allocator this is terrible
     // Or break up the batches. Put a hard cap on number of BLAS built at once
+    // Can call this function recursively for remaining builds
     static std::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometry_descs;
-    static std::vector<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC> blas_build_descs;
-    static std::vector<dx::D3D12Buffer*> blas_buffers;
     static std::vector<UINT64> scratch_sizes;
     static std::vector<UINT64> scratch_offsets;
 
     geometry_descs.clear();
-    blas_build_descs.clear();
-    blas_buffers.clear();
     scratch_sizes.clear();
     scratch_offsets.clear();
 
-    geometry_descs.reserve(build_infos.size());
-    blas_build_descs.reserve(build_infos.size());
-    blas_buffers.reserve(build_infos.size());
-    scratch_sizes.reserve(build_infos.size());
-    scratch_offsets.reserve(build_infos.size());
+    geometry_descs.reserve(count);
+    scratch_sizes.reserve(count);
+    scratch_offsets.reserve(count);
 
-    // Create all BLAS buffers and prepare build descriptors
+    // Create all BLAS buffers and compute scratch sizes
     for (const auto& info : build_infos)
     {
+        // TODO: combine multiple geometries BLAS into one buffer?
         D3D12_RAYTRACING_GEOMETRY_DESC tri_desc{
             .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
             .Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
-            .Triangles = m_context.get_buffer_rt_description(info.vertex_buffer, info.index_buffer),
+            .Triangles = m_context.get_buffer_rt_description(info.vertex_buffer,
+                                                             info.index_buffer),
         };
         geometry_descs.push_back(tri_desc);
 
@@ -973,34 +972,38 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::vector<BLASBuild
             .acceleration_structure = true,
         };
         THROW_IF_FALSE(m_context.create_buffer(blas_buffer_desc, info.blas, "BLAS buffer"));
-
-        const auto blas_build_desc
-            = m_context.get_raytracing_acceleration_structure(blas_input, info.blas, nullptr,
-                                                              &m_scratch_space);
-        blas_build_descs.push_back(blas_build_desc);
-        blas_buffers.push_back(info.blas);
     }
 
     // Mark all resources for BLAS build
     m_context.mark_use(&m_scratch_space, dx::Usage::UAV_COMPUTE);
-    for (auto* blas : blas_buffers)
+    for (const auto& info : build_infos)
     {
-        m_context.mark_use(blas, dx::Usage::AS_WRITE);
+        m_context.mark_use(info.blas, dx::Usage::AS_WRITE);
     }
-    std::array scratch_array = { &m_scratch_space };
+    const std::array scratch_array = { &m_scratch_space };
     m_context.emit_barriers(cmd_list, scratch_array.data(), scratch_array.size(), nullptr, 0);
-    m_context.emit_barriers(cmd_list, blas_buffers.data(), blas_buffers.size(), nullptr, 0);
+    
+    // Emit barriers for all BLAS buffers
+    // TODO: Get rid of this and replace with static allocator
+    static std::vector<dx::D3D12Buffer*> blas_barrier_ptrs;
+    blas_barrier_ptrs.clear();
+    blas_barrier_ptrs.reserve(count);
+    for (const auto& info : build_infos)
+    {
+        blas_barrier_ptrs.push_back(info.blas);
+    }
+    m_context.emit_barriers(cmd_list, blas_barrier_ptrs.data(), blas_barrier_ptrs.size(), nullptr, 0);
 
     // Build all BLAS in repeated partial batches
-    size_t start_index = 0;
-    while (start_index < blas_build_descs.size())
+    size_t build_start = 0;
+    while (build_start < count)
     {
         scratch_offsets.clear();
         UINT64 running_total = 0;
         size_t batch_count = 0;
 
         // Compute how many builds fit this batch and their offsets
-        for (size_t j = start_index; j < blas_build_descs.size(); ++j)
+        for (size_t j = build_start; j < count; j++)
         {
             // Alignment requirement: 256 multiple needed between scratch regions
             running_total = align_u64(running_total,
@@ -1021,22 +1024,34 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::vector<BLASBuild
         // At least one build per batch
         assert(batch_count > 0);
 
+        // Build each BLAS in the batch
         for (size_t k = 0; k < batch_count; k++)
         {
-            const size_t idx = start_index + k;
-            auto& desc = blas_build_descs[idx];
+            const size_t idx = build_start + k;
+            const auto& info = build_infos[idx];
+
+            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS blas_input{
+                .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
+                .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
+                .NumDescs = 1,
+                .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+                .pGeometryDescs = &geometry_descs[idx],
+            };
+
+            auto blas_build_desc = m_context.get_raytracing_acceleration_structure(
+                blas_input, info.blas, nullptr, &m_scratch_space);
 
             // Assign disjoint scratch offsets for this batch
-            desc.ScratchAccelerationStructureData += scratch_offsets[k];
+            blas_build_desc.ScratchAccelerationStructureData += scratch_offsets[k];
 
-            // Build batch
-            cmd_list->BuildRaytracingAccelerationStructure(&desc, 0, nullptr);
+            // Build
+            cmd_list->BuildRaytracingAccelerationStructure(&blas_build_desc, 0, nullptr);
         }
 
-        start_index += batch_count;
+        build_start += batch_count;
 
         // Insert a global UAV barrier between batches if more remain
-        if (start_index < blas_build_descs.size())
+        if (build_start < count)
         {
             const D3D12_GLOBAL_BARRIER uav_barrier{
                 .SyncBefore = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
@@ -1054,12 +1069,12 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::vector<BLASBuild
         }
     }
 
-    // Transition all BLAS to read state with single barrier
-    for (auto* blas : blas_buffers)
+    // Transition all BLAS to read state
+    for (const auto& info : build_infos)
     {
-        m_context.mark_use(blas, dx::Usage::AS_READ);
+        m_context.mark_use(info.blas, dx::Usage::AS_READ);
     }
-    m_context.emit_barriers(cmd_list, blas_buffers.data(), blas_buffers.size(), nullptr, 0);
+    m_context.emit_barriers(cmd_list, blas_barrier_ptrs.data(), blas_barrier_ptrs.size(), nullptr, 0);
 }
 
 static D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const XMFLOAT4X4& mv)
@@ -1274,7 +1289,7 @@ void glRemix::glRemixRenderer::render()
     cmd_list->RSSetScissorRects(1, &scissor_rect);
 
     // Build all pending buffers from geometry collected in read_gl_command_stream
-    build_pending_blas_buffers(cmd_list.Get());
+    create_pending_buffers(cmd_list.Get());
 
     // Currently reserve TLAS, 1 UAV RT, 1 CBV, and (for now) 1 MeshRecord buffer per frame
     constexpr auto reserved_descriptor_offset = 4;
