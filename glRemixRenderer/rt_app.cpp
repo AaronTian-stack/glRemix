@@ -111,25 +111,31 @@ void glRemix::glRemixRenderer::create()
         std::array<D3D12_DESCRIPTOR_RANGE, 3> descriptor_ranges{};
 
         // TLAS at t0
-        descriptor_ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-        descriptor_ranges[0].NumDescriptors = 1;
-        descriptor_ranges[0].BaseShaderRegister = 0;
-        descriptor_ranges[0].RegisterSpace = 0;
-        descriptor_ranges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+        descriptor_ranges[0] = {
+            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+            .NumDescriptors = 1,
+            .BaseShaderRegister = 0,
+            .RegisterSpace = 0,
+            .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND
+        };
 
         // Output UAV at u0
-        descriptor_ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-        descriptor_ranges[1].NumDescriptors = 1;
-        descriptor_ranges[1].BaseShaderRegister = 0;
-        descriptor_ranges[1].RegisterSpace = 0;
-        descriptor_ranges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+        descriptor_ranges[1] = {
+            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+            .NumDescriptors = 1,
+            .BaseShaderRegister = 0,
+            .RegisterSpace = 0,
+            .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND
+        };
 
         // Constant buffer at b0
-        descriptor_ranges[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-        descriptor_ranges[2].NumDescriptors = 1;
-        descriptor_ranges[2].BaseShaderRegister = 0;
-        descriptor_ranges[2].RegisterSpace = 0;
-        descriptor_ranges[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+        descriptor_ranges[2] = {
+            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV,
+            .NumDescriptors = 1,
+            .BaseShaderRegister = 0,
+            .RegisterSpace = 0,
+            .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND
+        };
 
         // Unbounded MeshRecords array
         D3D12_DESCRIPTOR_RANGE mesh_record_range{
@@ -144,16 +150,26 @@ void glRemix::glRemixRenderer::create()
         std::array<D3D12_ROOT_PARAMETER, 2> root_parameters{};
 
         // Single table for everything except for MeshRecords
-        root_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        root_parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-        root_parameters[0].DescriptorTable.NumDescriptorRanges = 3;
-        root_parameters[0].DescriptorTable.pDescriptorRanges = descriptor_ranges.data();
+        root_parameters[0] = 
+        {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+            .DescriptorTable = {
+                .NumDescriptorRanges = 3,
+                .pDescriptorRanges = descriptor_ranges.data(),
+            },
+            .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+        };
 
-        // Separate table to bind
-        root_parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        root_parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-        root_parameters[1].DescriptorTable.NumDescriptorRanges = 1;
-        root_parameters[1].DescriptorTable.pDescriptorRanges = &mesh_record_range;
+        // Separate table to bind MeshRecords
+        root_parameters[1] = 
+        {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+            .DescriptorTable = {
+                .NumDescriptorRanges = 1,
+                .pDescriptorRanges = &mesh_record_range,
+            },
+            .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+        };
 
         D3D12_ROOT_SIGNATURE_DESC root_sig_desc{};
         root_sig_desc.NumParameters = static_cast<UINT>(root_parameters.size());
@@ -162,7 +178,7 @@ void glRemix::glRemixRenderer::create()
         root_sig_desc.pStaticSamplers = nullptr;
         root_sig_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
         // Add samplers if needed, note you have to bind a sampler heap when this flag is enabled
-        // | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED; 
+        // | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED;
 
         THROW_IF_FALSE(
             m_context.create_root_signature(root_sig_desc,
@@ -948,8 +964,7 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::span<BLASBuildIn
         D3D12_RAYTRACING_GEOMETRY_DESC tri_desc{
             .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
             .Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
-            .Triangles = m_context.get_buffer_rt_description(info.vertex_buffer,
-                                                             info.index_buffer),
+            .Triangles = m_context.get_buffer_rt_description(info.vertex_buffer, info.index_buffer),
         };
         geometry_descs.push_back(tri_desc);
 
@@ -982,7 +997,7 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::span<BLASBuildIn
     }
     const std::array scratch_array = { &m_scratch_space };
     m_context.emit_barriers(cmd_list, scratch_array.data(), scratch_array.size(), nullptr, 0);
-    
+
     // Emit barriers for all BLAS buffers
     // TODO: Get rid of this and replace with static allocator
     static std::vector<dx::D3D12Buffer*> blas_barrier_ptrs;
@@ -992,7 +1007,8 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::span<BLASBuildIn
     {
         blas_barrier_ptrs.push_back(info.blas);
     }
-    m_context.emit_barriers(cmd_list, blas_barrier_ptrs.data(), blas_barrier_ptrs.size(), nullptr, 0);
+    m_context.emit_barriers(cmd_list, blas_barrier_ptrs.data(), blas_barrier_ptrs.size(), nullptr,
+                            0);
 
     // Build all BLAS in repeated partial batches
     size_t build_start = 0;
@@ -1022,7 +1038,7 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::span<BLASBuildIn
         }
 
         // At least one build per batch
-        assert(batch_count > 0);
+        THROW_IF_FALSE(batch_count > 0);
 
         // Build each BLAS in the batch
         for (size_t k = 0; k < batch_count; k++)
@@ -1038,13 +1054,14 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::span<BLASBuildIn
                 .pGeometryDescs = &geometry_descs[idx],
             };
 
-            auto blas_build_desc = m_context.get_raytracing_acceleration_structure(
-                blas_input, info.blas, nullptr, &m_scratch_space);
+            auto blas_build_desc = m_context.get_raytracing_acceleration_structure(blas_input,
+                                                                                   info.blas,
+                                                                                   nullptr,
+                                                                                   &m_scratch_space);
 
             // Assign disjoint scratch offsets for this batch
             blas_build_desc.ScratchAccelerationStructureData += scratch_offsets[k];
 
-            // Build
             cmd_list->BuildRaytracingAccelerationStructure(&blas_build_desc, 0, nullptr);
         }
 
@@ -1074,7 +1091,8 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::span<BLASBuildIn
     {
         m_context.mark_use(info.blas, dx::Usage::AS_READ);
     }
-    m_context.emit_barriers(cmd_list, blas_barrier_ptrs.data(), blas_barrier_ptrs.size(), nullptr, 0);
+    m_context.emit_barriers(cmd_list, blas_barrier_ptrs.data(), blas_barrier_ptrs.size(), nullptr,
+                            0);
 }
 
 static D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const XMFLOAT4X4& mv)
