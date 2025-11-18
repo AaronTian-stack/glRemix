@@ -1012,7 +1012,8 @@ bool glRemix::glRemixRenderer::load_mesh_from_path(std::filesystem::path asset_p
         return false;
     }
 
-    auto asset = parser.loadGltf(data.get(), asset_path.parent_path(), fastgltf::Options::None);
+    auto asset = parser.loadGltf(data.get(), asset_path.parent_path(),
+                                 fastgltf::Options::LoadExternalBuffers);
     if (auto error = asset.error(); error != fastgltf::Error::None)
     {
         return false;
@@ -1028,6 +1029,11 @@ bool glRemix::glRemixRenderer::load_mesh_from_path(std::filesystem::path asset_p
     {
         // get indices
         const auto& index_acc = asset->accessors[primitive.indicesAccessor.value()];
+        if (!index_acc.bufferViewIndex.has_value())
+        {
+            return false;
+        }
+
         size_t index_offset = out_indices.size();
         out_indices.resize(index_offset + index_acc.count);
         if (index_acc.componentType == fastgltf::ComponentType::UnsignedByte
@@ -1190,6 +1196,10 @@ void glRemix::glRemixRenderer::render()
     read_gl_command_stream();
 
     m_context.start_imgui_frame();
+
+    // set asset replacement callback
+    m_debug_window.set_replace_mesh_callback([this](uint32_t meshID, const std::string& path)
+                                             { this->replace_mesh(meshID, path); });
 
     m_debug_window.set_mesh_buffer(m_meshes);
     m_debug_window.render();

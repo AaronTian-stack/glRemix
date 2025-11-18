@@ -444,7 +444,7 @@ FASTGLTF_EXPORT struct DefaultBufferDataAdapter {
 
 		const auto data = std::visit(visitor {
 			[](auto&) -> span<const std::byte> {
-				assert(false && "Tried accessing a buffer with no data, likely because no buffers were loaded. Perhaps you forgot to specify the LoadExternalBuffers option?");
+ 				assert(false && "Tried accessing a buffer with no data, likely because no buffers were loaded. Perhaps you forgot to specify the LoadExternalBuffers option?");
 				return {};
 			},
 			[](const sources::Fallback&) -> span<const std::byte> {
