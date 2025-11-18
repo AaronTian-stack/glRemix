@@ -36,9 +36,9 @@ public:
 
     template<typename GLCommand>
     inline void write_command(GLCommandType type, const GLCommand& command, bool has_data = false,
-                              const void* data_ptr = nullptr, const SIZE_T data_bytes = 0)
+                              const void* data_ptr = nullptr, const UINT32 data_bytes = 0)
     {
-        const SIZE_T command_bytes = sizeof(GLCommand);
+        const uint32_t command_bytes = sizeof(GLCommand);
 
         this->write_command_base(type, command, command_bytes, has_data, data_ptr, data_bytes);
     }
@@ -52,7 +52,7 @@ public:
     // for renderer
     void init_reader();
     // uses `WaitForMultipleObjects` to stall thread here. signals read event when complete.
-    void consume_frame_or_write(void* payload, UINT32* payload_size, UINT32* frame_index);
+    void consume_frame_or_wait(void* payload, UINT32* payload_size, UINT32* frame_index);
 
     inline UINT32 get_max_payload_size()
     {

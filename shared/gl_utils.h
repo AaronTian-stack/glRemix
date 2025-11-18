@@ -7,7 +7,7 @@ namespace glRemix
 
 /* Handled all cases specified here:
  * https://learn.microsoft.com/en-us/windows/win32/opengl/glteximage2d */
-static inline size_t _BytesPerComponent(GLenum type)
+static inline UINT32 _BytesPerComponent(GLenum type)
 {
     switch (type)
     {
@@ -25,7 +25,7 @@ static inline size_t _BytesPerComponent(GLenum type)
 
 /* Handled all cases specified here:
  * https://learn.microsoft.com/en-us/windows/win32/opengl/glteximage2d */
-static inline size_t _ComponentsPerPixel(GLenum format)
+static inline UINT32 _ComponentsPerPixel(GLenum format)
 {
     switch (format)
     {
@@ -41,9 +41,9 @@ static inline size_t _ComponentsPerPixel(GLenum format)
     }
 }
 
-inline size_t ComputePixelDataSize(GLsizei width, GLsizei height, GLenum format, GLenum type)
+inline UINT32 ComputePixelDataSize(GLsizei width, GLsizei height, GLenum format, GLenum type)
 {
-    return static_cast<size_t>(width) * static_cast<size_t>(height) * _ComponentsPerPixel(format)
+    return static_cast<UINT32>(width) * static_cast<UINT32>(height) * _ComponentsPerPixel(format)
            * _BytesPerComponent(type);
 }
 

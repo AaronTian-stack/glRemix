@@ -119,7 +119,7 @@ void glRemix::IPCProtocol::init_reader()
     throw std::runtime_error("IPCProtocol.READER - Timed out waiting for writer initialization.");
 }
 
-void glRemix::IPCProtocol::consume_frame_or_write(void* payload, UINT32* payload_size,
+void glRemix::IPCProtocol::consume_frame_or_wait(void* payload, UINT32* payload_size,
                                                   UINT32* frame_index)
 {
     {

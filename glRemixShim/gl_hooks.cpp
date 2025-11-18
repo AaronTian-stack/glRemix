@@ -201,7 +201,7 @@ void APIENTRY gl_tex_image_2d_ovr(GLenum target, GLint level, GLint internalForm
     payload.format = format;
     payload.type = type;
 
-    const SIZE_T pixels_bytes = ComputePixelDataSize(width, height, format, type);
+    const UINT32 pixels_bytes = ComputePixelDataSize(width, height, format, type);
 
     g_ipc.write_command(GLCommandType::GLCMD_TEX_IMAGE_2D, payload, pixels != nullptr, pixels,
                         pixels_bytes);
