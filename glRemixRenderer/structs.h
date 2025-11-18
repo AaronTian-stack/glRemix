@@ -6,49 +6,7 @@ using namespace DirectX;
 
 namespace glRemix
 {
-struct RayGenConstantBuffer
-{
-    XMFLOAT4X4 projection_matrix;
-    XMFLOAT4X4 inv_projection_matrix;
-    float width;
-    float height;
-};
-
-struct Vertex
-{
-    XMFLOAT3 position;
-    XMFLOAT3 color;
-    XMFLOAT3 normal;
-};
-
-// TODO add more parameters (such as enabled) when encountered
-struct Light
-{
-    XMFLOAT4 ambient = { 0.f, 0.f, 0.f, 1.f };
-    XMFLOAT4 diffuse = { 1.f, 1.f, 1.f, 1.f };
-    XMFLOAT4 specular = { 1.f, 1.f, 1.f, 1.f };
-
-    XMFLOAT4 position = { 0.f, 0.f, 1.f, 0.f };  // default head down
-
-    XMFLOAT3 spot_direction = { 0.f, 0.f, -1.f };
-    float spot_exponent = 0.f;
-    float spot_cutoff = 180.f;
-
-    float constant_attenuation = 1.f;
-    float linear_attenuation = 0.f;
-    float quadratic_attenuation = 0.f;
-};
-
-// TODO add more parameters if encountered
-struct Material
-{
-    XMFLOAT4 ambient = { 1.f, 1.f, 1.f, 1.f };
-    XMFLOAT4 diffuse = { 1.f, 1.f, 1.f, 1.f };
-    XMFLOAT4 specular = { 0.f, 0.f, 0.f, 1.f };
-    XMFLOAT4 emission = { 0.f, 0.f, 0.f, 1.f };
-
-    float shininess = 0.f;
-};
+#include "shared_structs.h"
 
 struct MeshRecord
 {
@@ -62,15 +20,26 @@ struct MeshRecord
     UINT32 last_frame;
 };
 
-// TODO: Move this to some kind of shared header with shader
-struct GPUMeshRecord
+struct BufferAndDescriptor
 {
-    UINT32 vb_idx;
-    UINT32 ib_idx;
-    // Buffer index (since materials are multiple structured buffers)
-    UINT32 mat_buffer_idx;
-    // Index within that buffer
-    UINT32 mat_idx;
+    dx::D3D12Buffer buffer;
+    dx::D3D12Descriptor descriptor;
+    UINT page_index = -1;
 };
 
+struct MeshResources
+{
+    dx::D3D12Buffer blas;
+    BufferAndDescriptor vertex_buffer;
+    BufferAndDescriptor index_buffer;
+};
+
+struct PendingGeometry
+{
+    std::vector<Vertex> vertices;
+    std::vector<UINT32> indices;
+    UINT64 hash;
+    UINT32 mat_idx;
+    UINT32 mv_idx;
+};
 }  // namespace glRemix

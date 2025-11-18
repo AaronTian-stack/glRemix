@@ -1364,9 +1364,8 @@ void glRemix::glRemixRenderer::render()
             .width = static_cast<float>(win_dims.x),
             .height = static_cast<float>(win_dims.y),
         };
-        XMStoreFloat4x4(&raygen_cb.projection_matrix, XMMatrixTranspose(view_proj));
-        XMStoreFloat4x4(&raygen_cb.inv_projection_matrix,
-                        XMMatrixTranspose(inverse_view_projection));
+        XMStoreFloat4x4(&raygen_cb.view_proj, XMMatrixTranspose(view_proj));
+        XMStoreFloat4x4(&raygen_cb.inv_view_proj, XMMatrixTranspose(inverse_view_projection));
 
         // Copy constant buffer to GPU
         auto raygen_cb_ptr = &m_raygen_constant_buffers[get_frame_index()];

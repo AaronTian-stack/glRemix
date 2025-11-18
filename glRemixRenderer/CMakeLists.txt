@@ -47,6 +47,8 @@ set(RENDERER_HEADERS
     "${gl_dir}/gl_matrix_stack.h"
 
     "structs.h"
+    "shared_structs.h"
+    "hlsl_compat.h"
 
     "application.h"
     "rt_app.h"
@@ -166,10 +168,9 @@ if(TARGET ${_GLREMIX_SHIM_TARGET_X64})
     add_dependencies(${PROJECT_NAME} ${_GLREMIX_SHIM_TARGET_X64})
 endif()
 
-# Compile shaders using SXC.exe
 add_custom_target(CompileShaders ALL
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/shaders
-    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/shaders/SXC.exe -c ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shaders.config -sm 6_6 -out ${CMAKE_CURRENT_BINARY_DIR}/shaders
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/shaders/SXC.exe -c ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shaders.config -sm 6_6 -i ${CMAKE_CURRENT_SOURCE_DIR} -out ${CMAKE_CURRENT_BINARY_DIR}/shaders
     COMMENT "Compiling shaders with SXC.exe"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )

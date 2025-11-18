@@ -60,30 +60,7 @@ class glRemixRenderer : public Application
 
     std::vector<MeshRecord> m_meshes;
 
-    struct BufferAndDescriptor
-    {
-        dx::D3D12Buffer buffer;
-        dx::D3D12Descriptor descriptor;
-        UINT page_index = -1;
-    };
-
     BufferAndDescriptor m_gpu_mesh_record;
-
-    struct MeshResources
-    {
-        dx::D3D12Buffer blas;
-        BufferAndDescriptor vertex_buffer;
-        BufferAndDescriptor index_buffer;
-    };
-
-    struct PendingGeometry
-    {
-        std::vector<Vertex> vertices;
-        std::vector<UINT32> indices;
-        UINT64 hash;
-        UINT32 mat_idx;
-        UINT32 mv_idx;
-    };
 
     // Geometry to be built in current frame (mesh resource)
     std::vector<PendingGeometry> m_pending_geometries;

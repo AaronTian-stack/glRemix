@@ -1,50 +1,4 @@
-struct RayGenConstantBuffer
-{
-    float4x4 view_proj;
-    float4x4 inv_view_proj;
-    float width;
-    float height;
-};
-
-// Other stuff matches C layout
-// TODO: Make shared file for these structs
-
-struct GPUMeshRecord
-{
-    uint vb_idx;
-    uint ib_idx;
-    // Buffer index (since materials are multiple structured buffers)
-    uint mat_buffer_idx;
-    // Index within that buffer
-    uint mat_idx;
-};
-
-struct Material
-{
-    float4 ambient;
-    float4 diffuse;
-    float4 specular;
-    float4 emission;
-
-    float shininess;
-};
-
-struct Light
-{
-    float4 ambient;
-    float4 diffuse;
-    float4 specular;
-
-    float4 position;
-
-    float3 spot_direction;
-    float spot_exponent;
-    float spot_cutoff;
-
-    float constant_attenuation;
-    float linear_attenuation;
-    float quadratic_attenuation;
-};
+#include "shared_structs.h"
 
 RaytracingAccelerationStructure scene : register(t0);
 
@@ -53,12 +7,7 @@ ConstantBuffer<RayGenConstantBuffer> g_raygen_cb : register(b0);
 
 StructuredBuffer<GPUMeshRecord> meshes : register(t1);
 
-struct GPUVertex
-{
-    float3 position;
-    float3 color;
-    float3 normal;
-};
+typedef Vertex GPUVertex;
 
 // https://learn.microsoft.com/en-us/windows/win32/direct3d12/intersection-attributes
 typedef BuiltInTriangleIntersectionAttributes TriAttributes;
