@@ -9,7 +9,8 @@
 #include <filesystem>
 
 #include <imgui.h>
-// #include <core.hpp>
+#include <fastgltf/core.hpp>
+#include <fastgltf/tools.hpp>
 
 #include <shared/math_utils.h>
 #include <shared/gl_commands.h>
@@ -932,10 +933,13 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
         }
     }
 
+    // convert path to filesystem path
+    std::filesystem::path new_asset_path_fs = std::filesystem::path(new_asset_path);
+
     // load new asset from given file path
     std::vector<Vertex> new_vertices;
     std::vector<uint32_t> new_indices;
-    THROW_IF_FALSE(load_mesh_from_path(new_asset_path, new_vertices, new_indices));
+    THROW_IF_FALSE(load_mesh_from_path(new_asset_path_fs, new_vertices, new_indices));
 
     // put new mesh into replacement map
     uint64_t new_mesh_hash = create_hash(new_vertices, new_indices);
@@ -996,11 +1000,11 @@ void glRemix::glRemixRenderer::add_to_replacement_map(uint64_t meshID,
     m_meshes.push_back(std::move(*mesh));*/
 }
 
-bool glRemix::glRemixRenderer::load_mesh_from_path(const std::string& asset_path,
+bool glRemix::glRemixRenderer::load_mesh_from_path(std::filesystem::path asset_path,
                                                    std::vector<Vertex>& out_vertices,
                                                    std::vector<uint32_t>& out_indices)
 {
-    /*fastgltf::Parser parser;
+    fastgltf::Parser parser;
 
     auto data = fastgltf::GltfDataBuffer::FromPath(asset_path);
     if (data.error() != fastgltf::Error::None)
@@ -1008,13 +1012,13 @@ bool glRemix::glRemixRenderer::load_mesh_from_path(const std::string& asset_path
         return false;
     }
 
-    auto asset = parser.loadGltf(data.get(), path.parent_path(), fastgltf::Options::None);
+    auto asset = parser.loadGltf(data.get(), asset_path.parent_path(), fastgltf::Options::None);
     if (auto error = asset.error(); error != fastgltf::Error::None)
     {
         return false;
     }
 
-    fastgltf::validate(asset.get());
+    // fastgltf::validate(asset.get());
 
     // get first mesh only for now
     auto& mesh = asset->meshes[0];
@@ -1023,9 +1027,9 @@ bool glRemix::glRemixRenderer::load_mesh_from_path(const std::string& asset_path
     for (auto& primitive : mesh.primitives)
     {
         // get indices
-        const auto& index_acc = asset.accessors[primitive.indicesAccessor.value()];
-        size_t index_offset = index_acc.count;
-        out_indices.resize(index_offset + index_acc.count());
+        const auto& index_acc = asset->accessors[primitive.indicesAccessor.value()];
+        size_t index_offset = out_indices.size();
+        out_indices.resize(index_offset + index_acc.count);
         if (index_acc.componentType == fastgltf::ComponentType::UnsignedByte
             || index_acc.componentType == fastgltf::ComponentType::UnsignedShort)
         {
@@ -1045,36 +1049,32 @@ bool glRemix::glRemixRenderer::load_mesh_from_path(const std::string& asset_path
         }
 
         // get vertices
-        const auto& position_acc = asset.accessors[primitive.attributes.at("POSITION")];
+        const auto& position_acc
+            = asset->accessors[primitive.findAttribute("POSITION")->accessorIndex];
         size_t vertex_offset = out_vertices.size();
-        out_vertices.resize(vertex_offset + position_acc.count());
-        for (int i = 0; i < position_acc.count(); ++i)
+        out_vertices.resize(vertex_offset + position_acc.count);
+        for (int i = 0; i < position_acc.count; ++i)
         {
             // initialize vertex data
             Vertex& vertex = out_vertices[vertex_offset + i];
             out_vertices[vertex_offset + i].position = { 0, 0, 0 };
-            out_vertices[vertex_offset + i].color = {1, 1, 1};
+            out_vertices[vertex_offset + i].color = { 1, 1, 1 };
             out_vertices[vertex_offset + i].normal = { 0, 1, 0 };
         }
         fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(
             asset.get(), position_acc, [&](fastgltf::math::fvec3 p, size_t idx)
-            {
-                out_vertices[vertex_offset + idx].position = { p.x(), p.y(), p.z() };
-            }
-        );
+            { out_vertices[vertex_offset + idx].position = { p.x(), p.y(), p.z() }; });
 
         // get normals if they exist
-        if (primitive.attributes.contains("NORMAL"))
+        const auto* normal_it = primitive.findAttribute("NORMAL");
+        if (normal_it != primitive.attributes.end())
         {
-            const auto& normal_acc = asset.accessors[primitive.attributes.at("NORMAL")];
+            const auto& normal_acc = asset->accessors[normal_it->accessorIndex];
             fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(
                 asset.get(), normal_acc, [&](fastgltf::math::fvec3 n, size_t idx)
-                {
-                    out_vertices[vertex_offset + idx].normal = { n.x(), n.y(), n.z() };
-                }
-            );
+                { out_vertices[vertex_offset + idx].normal = { n.x(), n.y(), n.z() }; });
         }
-    }*/
+    }
 
     return true;
 }

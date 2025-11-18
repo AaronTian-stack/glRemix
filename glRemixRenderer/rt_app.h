@@ -12,6 +12,8 @@
 #include "structs.h"
 #include "gl/gl_matrix_stack.h"
 
+#include <filesystem>
+
 namespace glRemix
 {
 class glRemixRenderer : public Application
@@ -107,7 +109,7 @@ protected:
 
     // asset replacement
     void replace_mesh(uint64_t meshID, const std::string& new_asset_path);
-    bool load_mesh_from_path(const std::string& asset_path, std::vector<Vertex>& out_vertices,
+    bool load_mesh_from_path(std::filesystem::path asset_path, std::vector<Vertex>& out_vertices,
                              std::vector<uint32_t>& out_indices);
     void add_to_replacement_map(uint64_t meshID, std::vector<Vertex>& out_vertices,
                                 std::vector<uint32_t>& out_indices);
