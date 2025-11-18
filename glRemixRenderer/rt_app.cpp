@@ -860,10 +860,6 @@ void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7
 
     const size_t start_idx = m_mesh_resources.size();
 
-    // TODO: Use static allocator get rid of this entirely
-    static std::vector<BLASBuildInfo> build_infos;
-    build_infos.clear();
-
     // Create all vertex and index buffers first
     for (size_t i = 0; i < m_pending_geometries.size(); ++i)
     {
@@ -916,31 +912,19 @@ void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7
         m_mesh_resources.push_back(std::move(resource));
     }
 
-    for (size_t i = 0; i < m_pending_geometries.size(); ++i)
-    {
-        auto& resource = m_mesh_resources[start_idx + i];
-        build_infos.push_back(BLASBuildInfo{
-            .vertex_buffer = &resource.vertex_buffer.buffer,
-            .index_buffer = &resource.index_buffer.buffer,
-            .blas = &resource.blas,
-        });
-    }
-
     // Build all BLAS in a single batch
-    build_mesh_blas_batch(std::span(build_infos), cmd_list);
+    build_mesh_blas_batch(start_idx, m_pending_geometries.size(), cmd_list);
 
     m_pending_geometries.clear();
 }
 
-void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::span<BLASBuildInfo> build_infos,
+void glRemix::glRemixRenderer::build_mesh_blas_batch(const size_t start_idx, const size_t count,
                                                      ID3D12GraphicsCommandList7* cmd_list)
 {
-    if (build_infos.empty())
+    if (count == 0)
     {
         return;
     }
-
-    const size_t count = build_infos.size();
 
     // TODO: Use static allocator this is terrible
     // Or break up the batches. Put a hard cap on number of BLAS built at once
@@ -958,13 +942,16 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::span<BLASBuildIn
     scratch_offsets.reserve(count);
 
     // Create all BLAS buffers and compute scratch sizes
-    for (const auto& info : build_infos)
+    for (size_t i = 0; i < count; i++)
     {
+        auto& info = m_mesh_resources[start_idx + i];
+
         // TODO: combine multiple geometries BLAS into one buffer?
         D3D12_RAYTRACING_GEOMETRY_DESC tri_desc{
             .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
             .Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
-            .Triangles = m_context.get_buffer_rt_description(info.vertex_buffer, info.index_buffer),
+            .Triangles = m_context.get_buffer_rt_description(&info.vertex_buffer.buffer,
+                                                             &info.index_buffer.buffer),
         };
         geometry_descs.push_back(tri_desc);
 
@@ -986,14 +973,14 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::span<BLASBuildIn
             .visibility = dx::GPU,
             .acceleration_structure = true,
         };
-        THROW_IF_FALSE(m_context.create_buffer(blas_buffer_desc, info.blas, "BLAS buffer"));
+        THROW_IF_FALSE(m_context.create_buffer(blas_buffer_desc, &info.blas, "BLAS buffer"));
     }
 
     // Mark all resources for BLAS build
     m_context.mark_use(&m_scratch_space, dx::Usage::UAV_COMPUTE);
-    for (const auto& info : build_infos)
+    for (size_t i = 0; i < count; i++)
     {
-        m_context.mark_use(info.blas, dx::Usage::AS_WRITE);
+        m_context.mark_use(&m_mesh_resources[start_idx + i].blas, dx::Usage::AS_WRITE);
     }
     const std::array scratch_array = { &m_scratch_space };
     m_context.emit_barriers(cmd_list, scratch_array.data(), scratch_array.size(), nullptr, 0);
@@ -1002,10 +989,9 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::span<BLASBuildIn
     // TODO: Get rid of this and replace with static allocator
     static std::vector<dx::D3D12Buffer*> blas_barrier_ptrs;
     blas_barrier_ptrs.clear();
-    blas_barrier_ptrs.reserve(count);
-    for (const auto& info : build_infos)
+    for (size_t i = 0; i < count; i++)
     {
-        blas_barrier_ptrs.push_back(info.blas);
+        blas_barrier_ptrs.push_back(&m_mesh_resources[start_idx + i].blas);
     }
     m_context.emit_barriers(cmd_list, blas_barrier_ptrs.data(), blas_barrier_ptrs.size(), nullptr,
                             0);
@@ -1044,7 +1030,7 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::span<BLASBuildIn
         for (size_t k = 0; k < batch_count; k++)
         {
             const size_t idx = build_start + k;
-            const auto& info = build_infos[idx];
+            auto& info = m_mesh_resources[start_idx + idx];
 
             D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS blas_input{
                 .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
@@ -1055,7 +1041,7 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::span<BLASBuildIn
             };
 
             auto blas_build_desc = m_context.get_raytracing_acceleration_structure(blas_input,
-                                                                                   info.blas,
+                                                                                   &info.blas,
                                                                                    nullptr,
                                                                                    &m_scratch_space);
 
@@ -1087,9 +1073,9 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::span<BLASBuildIn
     }
 
     // Transition all BLAS to read state
-    for (const auto& info : build_infos)
+    for (size_t i = 0; i < count; i++)
     {
-        m_context.mark_use(info.blas, dx::Usage::AS_READ);
+        m_context.mark_use(&m_mesh_resources[start_idx + i].blas, dx::Usage::AS_READ);
     }
     m_context.emit_barriers(cmd_list, blas_barrier_ptrs.data(), blas_barrier_ptrs.size(), nullptr,
                             0);

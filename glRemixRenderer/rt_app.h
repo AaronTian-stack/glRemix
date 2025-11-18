@@ -132,11 +132,6 @@ class glRemixRenderer : public Application
     uint32_t frame_leniency = 10;
     uint32_t current_frame;
 
-protected:
-    void create() override;
-    void render() override;
-    void destroy() override;
-
     void create_uav_rt();
 
     void read_gl_command_stream();
@@ -145,18 +140,15 @@ protected:
     void read_geometry(void* ipc_buf, size_t* offset, GLTopology topology, UINT32 bytes_read,
                        bool call_list);
 
-    struct BLASBuildInfo
-    {
-        const dx::D3D12Buffer* vertex_buffer;
-        const dx::D3D12Buffer* index_buffer;
-        dx::D3D12Buffer* blas;
-    };
-
-    // acceleration structure builders
-    void build_mesh_blas_batch(std::span<BLASBuildInfo> build_infos,
-                               ID3D12GraphicsCommandList7* cmd_list);
+    // This should only be called from create_pending_buffers
+    void build_mesh_blas_batch(size_t start_idx, size_t count, ID3D12GraphicsCommandList7* cmd_list);
     void create_pending_buffers(ID3D12GraphicsCommandList7* cmd_list);
     void build_tlas(ID3D12GraphicsCommandList7* cmd_list);
+
+protected:
+    void create() override;
+    void render() override;
+    void destroy() override;
 
 public:
     glRemixRenderer() = default;
