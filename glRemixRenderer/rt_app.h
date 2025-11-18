@@ -89,10 +89,16 @@ class glRemixRenderer : public Application
 
     // BLAS, VB, IB per mesh
     // VB and IB have descriptors for SRV to be allocated from pager
+    // TODO: Stop using GPU Upload memory for these because they are committed resources!!!
+    // Since VB/IB/BLAS are destroyed and created so often we would like them to be placed resources
     FreeListVector<MeshResources> m_mesh_resources;
+
     // Materials per buffer
+    // TODO: Make this a macro instead?
     static constexpr UINT MATERIALS_PER_BUFFER = 256;
-    FreeListVector<BufferAndDescriptor> m_material_buffers;
+
+    // This is written to by CPU potentially in two consecutive frames so we need to double buffer it
+    FreeListVector<std::array<BufferAndDescriptor, m_frames_in_flight>> m_material_buffers;
 
     // matrix stack
     gl::glMatrixStack m_matrix_stack;
@@ -114,7 +120,7 @@ class glRemixRenderer : public Application
     XMFLOAT3 m_normal = { 0.0f, 0.0f, 1.0f };
     Material m_material;
 
-    BufferAndDescriptor m_light_buffer;
+    std::array<BufferAndDescriptor, m_frames_in_flight> m_light_buffer;
     std::array<Light, 8> m_lights{};
     std::vector<Material> m_materials;
 
@@ -135,7 +141,8 @@ protected:
     void read_gl_command_stream();
     void read_ipc_buffer(std::vector<UINT8>& ipc_buf, size_t start_offset, UINT32 bytes_read,
                          bool call_list = false);
-    void read_geometry(void* ipc_buf, size_t* offset, GLTopology topology, UINT32 bytes_read);
+    void read_geometry(void* ipc_buf, size_t* offset, GLTopology topology, UINT32 bytes_read,
+                       bool call_list);
 
     struct BLASBuildInfo
     {

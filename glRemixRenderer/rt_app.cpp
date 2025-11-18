@@ -17,22 +17,25 @@
 
 void glRemix::glRemixRenderer::create_material_buffer()
 {
-    BufferAndDescriptor bd;
+    std::array<BufferAndDescriptor, m_frames_in_flight> bds;
     constexpr dx::BufferDesc desc{
         .size = sizeof(Material) * MATERIALS_PER_BUFFER,
         .stride = sizeof(Material),
         .visibility = dx::CPU | dx::GPU,
     };
-    m_context.create_buffer(desc, &bd.buffer, "material buffer");
 
-    bd.page_index = m_descriptor_pager.allocate_descriptor(m_context,
-                                                           dx::DescriptorPager::MATERIALS,
-                                                           &bd.descriptor);
+    for (auto& bd : bds)
+    {
+        m_context.create_buffer(desc, &bd.buffer, "material buffer");
 
-    m_context.create_shader_resource_view(bd.buffer, bd.descriptor);
+        bd.page_index = m_descriptor_pager.allocate_descriptor(m_context,
+                                                               dx::DescriptorPager::MATERIALS,
+                                                               &bd.descriptor);
 
+        m_context.create_shader_resource_view(bd.buffer, bd.descriptor);
+    }
     // TODO: When this material is freed, free descriptor from pager
-    m_material_buffers.push_back(std::move(bd));
+    m_material_buffers.push_back(std::move(bds));
 }
 
 void glRemix::glRemixRenderer::create()
@@ -157,7 +160,9 @@ void glRemix::glRemixRenderer::create()
         root_sig_desc.pParameters = root_parameters.data();
         root_sig_desc.NumStaticSamplers = 0;
         root_sig_desc.pStaticSamplers = nullptr;
-        root_sig_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+        root_sig_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
+        //| D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED; // Add samplers if needed, note
+        //you have to bind a sampler heap when this flag is enabled
 
         THROW_IF_FALSE(
             m_context.create_root_signature(root_sig_desc,
@@ -295,7 +300,12 @@ void glRemix::glRemixRenderer::create()
     dx::BufferDesc light_desc{ .size = sizeof(Light) * m_lights.size(),
                                .stride = sizeof(Light),
                                .visibility = dx::CPU | dx::GPU };
-    m_context.create_buffer(light_desc, &m_light_buffer.buffer, "light buffer");
+    for (UINT i = 0; i < m_frames_in_flight; i++)
+    {
+        THROW_IF_FALSE(
+            m_context.create_buffer(light_desc, &m_light_buffer[i].buffer, "light buffer"));
+        // TODO: Create descriptors
+    }
 
     // TODO: Allocate in slab fashion like materials
     // This should be managed by pager
@@ -303,6 +313,8 @@ void glRemix::glRemixRenderer::create()
                                      .stride = sizeof(GPUMeshRecord),
                                      .visibility = dx::CPU | dx::GPU };
     m_context.create_buffer(mesh_record_desc, &m_gpu_mesh_record.buffer, "mesh record buffer");
+    THROW_IF_FALSE(m_CPU_descriptor_heap.allocate(&m_gpu_mesh_record.descriptor));
+    m_context.create_shader_resource_view(m_gpu_mesh_record.buffer, m_gpu_mesh_record.descriptor);
 }
 
 void glRemix::glRemixRenderer::read_gl_command_stream()
@@ -452,7 +464,7 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
                                                // inbetween glbegin and end
                 advance = false;
                 read_geometry(ipc_buf.data(), &offset, static_cast<GLTopology>(type->mode),
-                              bytes_read);
+                              bytes_read, call_list);
                 break;
             }
             case GLCommandType::GLCMD_NORMAL3F:
@@ -589,7 +601,8 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
 
 // adds to vertex and index buffers depending on topology type
 void glRemix::glRemixRenderer::read_geometry(void* const ipc_buf, size_t* const offset,
-                                             const GLTopology topology, const UINT32 bytes_read)
+                                             const GLTopology topology, const UINT32 bytes_read,
+                                             const bool call_list)
 {
     const auto byte_p = static_cast<UINT8*>(ipc_buf);
 
@@ -770,8 +783,13 @@ void glRemix::glRemixRenderer::read_geometry(void* const ipc_buf, size_t* const 
 
     mesh->last_frame = current_frame;
 
-    // This is ok because it is a small struct
-    m_meshes.push_back(*mesh);
+    // Temporary fix?
+    // TODO: Proper fix to consider display list compilation modes
+    if (call_list || list_mode_ != gl::GLListMode::COMPILE)
+    {
+        // This is ok because it is a small struct
+        m_meshes.push_back(*mesh);
+    }
 }
 
 void glRemix::glRemixRenderer::build_pending_blas_buffers(ID3D12GraphicsCommandList7* cmd_list)
@@ -864,22 +882,20 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::vector<BLASBuild
     }
 
     // TODO: Use static allocator this is terrible
+    // Or break up the batches. Put a hard cap on number of BLAS built at once
     static std::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometry_descs;
-    static std::vector<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS> blas_inputs;
     static std::vector<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC> blas_build_descs;
     static std::vector<dx::D3D12Buffer*> blas_buffers;
     static std::vector<UINT64> scratch_sizes;
     static std::vector<UINT64> scratch_offsets;
 
     geometry_descs.clear();
-    blas_inputs.clear();
     blas_build_descs.clear();
     blas_buffers.clear();
     scratch_sizes.clear();
     scratch_offsets.clear();
 
     geometry_descs.reserve(build_infos.size());
-    blas_inputs.reserve(build_infos.size());
     blas_build_descs.reserve(build_infos.size());
     blas_buffers.reserve(build_infos.size());
     scratch_sizes.reserve(build_infos.size());
@@ -902,7 +918,6 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const std::vector<BLASBuild
             .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
             .pGeometryDescs = &geometry_descs.back(),
         };
-        blas_inputs.push_back(blas_input);
 
         const auto blas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(
             blas_input);
@@ -1147,41 +1162,37 @@ void glRemix::glRemixRenderer::render()
     // Read GL stream and set resources accordingly
     read_gl_command_stream();
 
-    // Update material
-    UINT created_material_buffers = 0;
-    const auto old_mat_size = m_material_buffers.size();
     while (m_materials.size() > m_material_buffers.size() * MATERIALS_PER_BUFFER)
     {
         // TODO: Issue huge warning when this happens
         create_material_buffer();
-        created_material_buffers++;
     }
-    // Update material buffer but only the portion that has been added this frame
-    // TODO: Update changed materials as well?
-    {
-        for (auto i = old_mat_size; i < m_material_buffers.size(); i++)
-        {
-            // TODO: Update material texture indices
-            // This will be tough since we don't want to do it in place
-            // Perhaps just add separate members for global index
 
-            const auto& mat_buffer = m_material_buffers[i];
-            void* mat_ptr;
-            THROW_IF_FALSE(m_context.map_buffer(&mat_buffer.buffer, &mat_ptr));
-            const auto start_idx = i * MATERIALS_PER_BUFFER;
-            const auto end_idx = std::min(start_idx + MATERIALS_PER_BUFFER, m_materials.size());
-            const auto mat_count = end_idx - start_idx;
-            memcpy(mat_ptr, m_materials.data() + start_idx, sizeof(Material) * mat_count);
-            m_context.unmap_buffer(&mat_buffer.buffer);
-        }
+    // Update material buffers every frame
+    for (UINT i = 0; i < m_material_buffers.size(); i++)
+    {
+        // TODO: Update material texture indices
+        // This will be tough since we don't want to do it in place
+        // Perhaps just add separate members for global index
+
+        const auto& mat_buffer = m_material_buffers[i][get_frame_index()];
+        void* mat_ptr;
+        THROW_IF_FALSE(m_context.map_buffer(&mat_buffer.buffer, &mat_ptr));
+        const auto start_idx = i * MATERIALS_PER_BUFFER;
+        assert(!u64_overflows_u32(m_materials.size()));
+        const auto end_idx = std::min(start_idx + MATERIALS_PER_BUFFER,
+                                      static_cast<UINT>(m_materials.size()));
+        const auto mat_count = end_idx - start_idx;
+        memcpy(mat_ptr, m_materials.data() + start_idx, sizeof(Material) * mat_count);
+        m_context.unmap_buffer(&mat_buffer.buffer);
     }
 
     // Update light buffer
     {
         void* light_ptr;
-        THROW_IF_FALSE(m_context.map_buffer(&m_light_buffer.buffer, &light_ptr));
+        THROW_IF_FALSE(m_context.map_buffer(&m_light_buffer[get_frame_index()].buffer, &light_ptr));
         memcpy(light_ptr, m_lights.data(), sizeof(Light) * m_lights.size());
-        m_context.unmap_buffer(&m_light_buffer.buffer);
+        m_context.unmap_buffer(&m_light_buffer[get_frame_index()].buffer);
     }
 
     m_context.start_imgui_frame();
@@ -1235,7 +1246,7 @@ void glRemix::glRemixRenderer::render()
         // Materials
         {
             auto buffer_index = mesh.mat_idx / MATERIALS_PER_BUFFER;
-            const auto& material_buffer = m_material_buffers[buffer_index];
+            const auto& material_buffer = m_material_buffers[buffer_index][get_frame_index()];
             auto page_index = material_buffer.page_index;
             auto offset = m_descriptor_pager.calculate_global_offset(dx::DescriptorPager::MATERIALS,
                                                                      page_index);
@@ -1307,6 +1318,9 @@ void glRemix::glRemixRenderer::render()
         std::array rt_textures = { &m_uav_rt };
         m_context.emit_barriers(cmd_list.Get(), nullptr, 0, rt_textures.data(), rt_textures.size());
 
+        // Bind descriptor heap(s) before setting the root signature when using DIRECTLY_INDEXED
+        m_context.set_descriptor_heap(cmd_list.Get(), m_GPU_descriptor_heap);
+
         cmd_list->SetPipelineState1(m_rt_pipeline.Get());
         cmd_list->SetComputeRootSignature(m_rt_global_root_signature.Get());
 
@@ -1318,21 +1332,22 @@ void glRemix::glRemixRenderer::render()
         // TLAS
         m_context.copy_descriptors(gpu_heap, m_tlas_descriptor, 1);
         // UAV RT
-        gpu_heap.offset++;
+        ++gpu_heap.offset;
         m_context.copy_descriptors(gpu_heap, m_uav_rt_descriptor, 1);
         // Current CBV
-        gpu_heap.offset++;
+        ++gpu_heap.offset;
         m_context.copy_descriptors(gpu_heap, m_raygen_cbv_descriptors[get_frame_index()], 1);
-
-        // Set descriptor heap and table our descriptors
-        m_context.set_descriptor_heap(cmd_list.Get(), m_GPU_descriptor_heap);
+        // MeshRecord(s)
+        // TODO: Copy multiple MeshRecord buffer descriptors if needed
+        ++gpu_heap.offset;
+        m_context.copy_descriptors(gpu_heap, m_gpu_mesh_record.descriptor, 1);
 
         D3D12_GPU_DESCRIPTOR_HANDLE descriptor_table_handle{};
         m_GPU_descriptor_heap.get_gpu_descriptor(&descriptor_table_handle, 0);
         // RT is compute
         cmd_list->SetComputeRootDescriptorTable(0, descriptor_table_handle);
-        m_GPU_descriptor_heap.get_gpu_descriptor(&descriptor_table_handle,
-                                                 reserved_descriptor_offset);
+
+        m_GPU_descriptor_heap.get_gpu_descriptor(&descriptor_table_handle, 3);
         cmd_list->SetComputeRootDescriptorTable(1, descriptor_table_handle);
 
         D3D12_GPU_VIRTUAL_ADDRESS shader_table_base_address = m_shader_table.get_gpu_address();

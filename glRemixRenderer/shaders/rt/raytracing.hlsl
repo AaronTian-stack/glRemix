@@ -9,11 +9,13 @@ struct RayGenConstantBuffer
 // Other stuff matches C layout
 // TODO: Make shared file for these structs
 
-struct MeshRecord
+struct GPUMeshRecord
 {
-    uint blas_vb_id_idx;
-    // Materials are structured buffers. For now assume index 0
-    // TODO: Add second buffer index
+    uint vb_idx;
+    uint ib_idx;
+    // Buffer index (since materials are multiple structured buffers)
+    uint mat_buffer_idx;
+    // Index within that buffer
     uint mat_idx;
 };
 
@@ -49,7 +51,14 @@ RaytracingAccelerationStructure scene : register(t0);
 RWTexture2D<float4> render_target : register(u0);
 ConstantBuffer<RayGenConstantBuffer> g_raygen_cb : register(b0);
 
-StructuredBuffer<MeshRecord> meshes : register(t1);
+StructuredBuffer<GPUMeshRecord> meshes : register(t1);
+
+struct GPUVertex
+{
+    float3 position;
+    float3 color;
+    float3 normal;
+};
 
 // https://learn.microsoft.com/en-us/windows/win32/direct3d12/intersection-attributes
 typedef BuiltInTriangleIntersectionAttributes TriAttributes;
@@ -137,9 +146,7 @@ float3 transform_to_world(float3 local_dir, float3 N)
             break;
         }
 
-        // hit - accumulate color
         total_color += throughput * payload.color.rgb;
-        // throughput *= 0.6f;
 
         float2 xi = float2(rand(seed), rand(seed));
         float3 local_dir = cosine_sample_hemisphere(xi);
@@ -157,82 +164,70 @@ float3 transform_to_world(float3 local_dir, float3 N)
 
     [shader("closesthit")] void ClosestHitMain(inout RayPayload payload, in TriAttributes attr)
 {
-    /*
-    // check indexing logic
-    uint instanceID = InstanceID();
-    MeshRecord mesh = meshes[instanceID];
-    Material material = materials[mesh.matID];
-    Light light = lights[0];  // TODO add shading for all lights
+    // Fetch mesh record for this instance; indices are into the global SRV heap
+    const GPUMeshRecord mesh = meshes[InstanceID()];
 
-    float3 hit_pos = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
-    float3 normal = normalize(-WorldRayDirection());  // TODO use vertex buffer to get actual normal
-    float3 l_vec = normalize(light.position.xyz - hit_pos);
+    // Bindless fetch of vertex and index buffers from the global SRV heap
+    StructuredBuffer<GPUVertex> vb = ResourceDescriptorHeap[NonUniformResourceIndex(mesh.vb_idx)];
+    StructuredBuffer<uint> ib = ResourceDescriptorHeap[NonUniformResourceIndex(mesh.ib_idx)];
 
-    float3 ambient = material.ambient.rgb;
-    float normal_l_dot = max(dot(normal, l_vec), 0.0);
-    float3 diffuse = material.diffuse.rgb + light.diffuse.rgb + normal_l_dot;
+    // Triangle indices for this primitive
+    const uint tri = PrimitiveIndex();
+    const uint i0 = ib[tri * 3 + 0];
+    const uint i1 = ib[tri * 3 + 1];
+    const uint i2 = ib[tri * 3 + 2];
 
-    float3 color = ambient + diffuse;
-    payload.color = float4(color, 1.0f);*/
+    // Vertex fetch
+    const GPUVertex v0 = vb[i0];
+    const GPUVertex v1 = vb[i1];
+    const GPUVertex v2 = vb[i2];
 
-    uint instanceID = InstanceID();
-    uint tri = PrimitiveIndex();
-    float3 hit_pos = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
+    //// DEBUG
+    // payload.color = float4(v0.position, 1.0); payload.hit = true; return;
+    // payload.color = float4(v0.color, 1.0); payload.hit = true; return;
+    // payload.color = float4(v0.normal * 0.5 + 0.5, 1.0); payload.hit = true; return;
 
-    // hacky gear color
-    float3 albedo = float3(0, 0, 0);
+    float3 bary;
+    bary.yz = attr.barycentrics;
+    bary.x = 1.0f - bary.y - bary.z;
 
-    if (instanceID >= 0 && instanceID < 4)
+    // Interpolate attributes
+    float3 albedo = v0.color * bary.x + v1.color * bary.y + v2.color * bary.z;
+    float3 n_obj = normalize(v0.normal * bary.x + v1.normal * bary.y + v2.normal * bary.z);
+
+    // Transform normal to world space (assumes no non-uniform scale)
+    float3x3 o2w3x3 = (float3x3)ObjectToWorld();
+    float3 n_world = normalize(mul(n_obj, o2w3x3));
+
+    const float3 hit_pos = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
+    const float3 light_pos = float3(10.0, 10.0, 20.0);  // Hardcoded for demo
+    const float3 light_color = float3(1.0, 1.0, 1.0);
+    const float3 light_vec = normalize(light_pos - hit_pos);
+
+    Material mat;
+    mat.ambient = float4(1.0, 1.0, 1.0, 1.0);
+    mat.diffuse = float4(1.0, 1.0, 1.0, 1.0);
+    mat.specular = float4(0.0, 0.0, 0.0, 1.0);
+    mat.emission = float4(0.0, 0.0, 0.0, 1.0);
+    mat.shininess = 32.0;
+
+    // Fetch material
+    if (mesh.mat_buffer_idx != 0xFFFFFFFFu)  // -1
     {
-        albedo = float3(1, 0, 0);
-    }
-    else if (instanceID == 4 || instanceID == 5)
-    {
-        albedo = float3(1, 0, 0);
+        StructuredBuffer<Material> mat_buf
+            = ResourceDescriptorHeap[NonUniformResourceIndex(mesh.mat_buffer_idx)];
+        mat = mat_buf[mesh.mat_idx];
     }
 
-    else if (instanceID >= 6 && instanceID < 10)
-    {
-        albedo = float3(0, 1, 0);
-    }
-    else if (instanceID == 10 || instanceID == 11)
-    {
-        albedo = float3(0, 1, 0);
-    }
-
-    else if (instanceID == 16 || instanceID == 17)
-    {
-        albedo = float3(0, 0, 1);
-    }
-    else
-    {
-        albedo = float3(0, 0, 1);
-    }
-
-    float3 light_pos = float3(10.0, 10.0, 10.0);
-    float3 light_color = float3(1.0, 1.0, 1.0);
-    float3 ambient = 0.1 * albedo;
-
-    // hacky normal calculation - TODO use actual vertex normals
-    tri /= 2;
-    float3 normal = (tri.xxx % 3 == uint3(0, 1, 2)) * (tri < 3 ? -1 : 1);
-
-    // float3 bary = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x,
-    // attr.barycentrics.y); float3 normal = normalize(float3(bary.x, bary.y, bary.z) * 2.0 - 1.0);
-
-    float3 light_vec = normalize(light_pos - hit_pos);
-
-    float normal_dot_light = max(dot(normal, light_vec), 0.0);
-    float3 diffuse = albedo * light_color * normal_dot_light;
-
-    float3 color = ambient + diffuse;
-
-    // further TraceRay calls needed for reflective materials
+    const float n_dot_l = max(dot(n_world, light_vec), 0.0);
+    float3 ambient = mat.ambient.rgb * albedo;
+    float3 diffuse = mat.diffuse.rgb * albedo * n_dot_l * light_color;
+    float3 color = diffuse;
 
     payload.hit_pos = hit_pos;
-    payload.normal = normal;
+    payload.normal = n_world;
     payload.hit = true;
-    payload.color = float4(color, 1.0);  // using hacky colors right now, not diffuse
+    payload.color = float4(color, 1.0);
 }
 
 [shader("miss")] void MissMain(inout RayPayload payload)

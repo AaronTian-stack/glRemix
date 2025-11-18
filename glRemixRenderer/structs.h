@@ -62,6 +62,7 @@ struct MeshRecord
     UINT32 last_frame;
 };
 
+// TODO: Move this to some kind of shared header with shader
 struct GPUMeshRecord
 {
     UINT32 vb_idx;
