@@ -126,5 +126,5 @@ if(_GLREMIX_SHIM_DEPLOY_CONFIG_DIR)
     endif()
 endif()
 
-include(${CMAKE_CURRENT_LIST_DIR}/cmake/shim_compile_spec.cmake)
+include(${REPO_ROOT}/cmake/shim_helper.cmake)
 set_shim_compile_specifications(${PROJECT_NAME})
