@@ -16,53 +16,54 @@ bool D3D12DescriptorHeap::create(ID3D12Device* device, const D3D12_DESCRIPTOR_HE
 
     m_descriptor_size = device->GetDescriptorHandleIncrementSize(desc.Type);
 
-    // GPU heap always uses linear for ring buffer
-    D3D12MA::VIRTUAL_BLOCK_DESC block_desc{
-        .Flags = desc.Flags & D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
-                     ? D3D12MA::VIRTUAL_BLOCK_FLAG_ALGORITHM_LINEAR
-                     : D3D12MA::VIRTUAL_BLOCK_FLAG_NONE,
-        .Size = desc.NumDescriptors,  // Descriptor is atomic unit, not bytes
-        .pAllocationCallbacks = nullptr,
-    };
-    const auto hr = D3D12MA::CreateVirtualBlock(&block_desc,
-                                                m_virtual_block.ReleaseAndGetAddressOf());
-
-    return SUCCEEDED(hr);
+    return true;
 }
 
-bool D3D12DescriptorHeap::allocate(const UINT count, D3D12DescriptorTable* descriptor)
+bool D3D12DescriptorHeap::allocate(D3D12Descriptor* descriptor)
 {
     assert(m_descriptor_size);
-    D3D12MA::VIRTUAL_ALLOCATION_DESC alloc_desc{};
-    alloc_desc.Size = count;
 
-    const auto hr = m_virtual_block->Allocate(&alloc_desc, &descriptor->alloc, &descriptor->offset);
+    if (m_curr_offset >= m_desc.NumDescriptors && m_free_list.empty())
+    {
+        return false;
+    }
+
+    if (!m_free_list.empty())
+    {
+        descriptor->offset = m_free_list.back();
+        m_free_list.pop_back();
+    }
+    else
+    {
+        descriptor->offset = m_curr_offset++;
+    }
 
     descriptor->heap = this;
 
-    return SUCCEEDED(hr);
+    return true;
 }
 
-void D3D12DescriptorHeap::deallocate(D3D12DescriptorTable* descriptor) const
+void D3D12DescriptorHeap::deallocate(D3D12Descriptor* descriptor)
 {
-    m_virtual_block->FreeAllocation(descriptor->alloc);
+    m_free_list.push_back(descriptor->offset);
     *descriptor = {};
 }
 
-void D3D12DescriptorHeap::free_all() const
+void D3D12DescriptorHeap::free_all()
 {
-    m_virtual_block->Clear();
+    m_free_list.clear();
+    m_curr_offset = 0;
 }
 
 void D3D12DescriptorHeap::get_cpu_descriptor(D3D12_CPU_DESCRIPTOR_HANDLE* handle,
-                                             size_t num_descriptor_offset) const
+                                             const size_t num_descriptor_offset) const
 {
     D3D12_CPU_DESCRIPTOR_HANDLE start_handle = m_heap->GetCPUDescriptorHandleForHeapStart();
     handle->ptr = start_handle.ptr + num_descriptor_offset * m_descriptor_size;
 }
 
 bool D3D12DescriptorHeap::get_gpu_descriptor(D3D12_GPU_DESCRIPTOR_HANDLE* handle,
-                                             size_t num_descriptor_offset) const
+                                             const size_t num_descriptor_offset) const
 {
     if (!(m_desc.Flags & D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE))
     {

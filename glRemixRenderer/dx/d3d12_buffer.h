@@ -6,6 +6,15 @@
 
 using Microsoft::WRL::ComPtr;
 
+// Operator overloads for D3D12MA enums to work with designated initializers
+namespace D3D12MA
+{
+constexpr ALLOCATOR_FLAGS operator|(ALLOCATOR_FLAGS a, ALLOCATOR_FLAGS b)
+{
+    return static_cast<ALLOCATOR_FLAGS>(static_cast<int>(a) | static_cast<int>(b));
+}
+}  // namespace D3D12MA
+
 namespace glRemix::dx
 {
 struct D3D12Resource
@@ -28,6 +37,16 @@ enum BufferVisibility : UINT8
     GPU = 1 << 0,
     CPU = 1 << 1,
 };
+
+constexpr BufferVisibility operator|(const BufferVisibility a, const BufferVisibility b)
+{
+    return static_cast<BufferVisibility>(static_cast<UINT8>(a) | static_cast<UINT8>(b));
+}
+
+constexpr BufferVisibility operator&(const BufferVisibility a, const BufferVisibility b)
+{
+    return static_cast<BufferVisibility>(static_cast<UINT8>(a) & static_cast<UINT8>(b));
+}
 
 struct BufferDesc
 {
