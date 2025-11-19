@@ -68,6 +68,8 @@ if(GLREMIX_DEPLOY_DIR)
     endif()
 endif()
 
+option(GLREMIX_AUTO_LAUNCH_RENDERER "Automatically launch renderer process (disable when using graphics debuggers like PIX)" ON)
+
 if(NOT TARGET ${PROJECT_NAME})
     add_library(${PROJECT_NAME} SHARED
         ${GLREMIX_SHIM_SOURCE_FILES_REL}
