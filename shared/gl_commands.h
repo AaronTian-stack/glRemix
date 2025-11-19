@@ -88,8 +88,8 @@ enum class GLCommandType : UINT32
     GLCMD_NORMAL_POINTER,
     GLCMD_TEXCOORD_POINTER,
     GLCMD_COLOR_POINTER,
-    GLCMD_DRAW_ARRAYS, // within fixed-function scope
-    GLCMD_DRAW_ELEMENTS, // within fixed-function scope
+    GLCMD_DRAW_ARRAYS,    // within fixed-function scope
+    GLCMD_DRAW_ELEMENTS,  // within fixed-function scope
 
     // Matrix Operations
     GLCMD_MATRIX_MODE,
@@ -120,10 +120,8 @@ enum class GLCommandType : UINT32
     GLCMD_TEX_ENV_F,
 
     // Fixed Function
-    GLCMD_LIGHT,
     GLCMD_LIGHTF,
     GLCMD_LIGHTFV,
-    GLCMD_MATERIAL,
     GLCMD_MATERIALI,
     GLCMD_MATERIALF,
     GLCMD_MATERIALIV,
@@ -145,7 +143,7 @@ enum class GLCommandType : UINT32
     GLCMD_STENCIL_OP_SEPARATE_ATI,
 
     // Other
-    WGLCMD_CREATE_CONTEXT, // wglCreateContext needs IPC
+    WGLCMD_CREATE_CONTEXT,  // wglCreateContext needs IPC
 };
 
 // Component Structs
@@ -399,13 +397,6 @@ struct GLLightfvCommand
     UINT32 light;
     UINT32 pname;
     GLVec4f params;
-};
-
-struct GLMaterialCommand
-{
-    UINT32 face;
-    UINT32 pname;
-    float param;
 };
 
 struct GLMaterialiCommand

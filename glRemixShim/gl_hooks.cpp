@@ -58,6 +58,7 @@ FakePixelFormat create_default_pixel_format(const PIXELFORMATDESCRIPTOR* request
     return result;
 }
 
+/* CORE IMMEDIATE MODE */
 void APIENTRY gl_begin_ovr(GLenum mode)
 {
     GLBeginCommand payload{ mode };
@@ -70,7 +71,6 @@ void APIENTRY gl_end_ovr()
     g_ipc.write_command(GLCommandType::GLCMD_END, payload);
 }
 
-/* Basic Commands */
 void APIENTRY gl_vertex2f_ovr(GLfloat x, GLfloat y)
 {
     GLVertex2fCommand payload{ x, y };
@@ -107,7 +107,104 @@ void APIENTRY gl_tex_coord2f_ovr(GLfloat s, GLfloat t)
     g_ipc.write_command(GLCommandType::GLCMD_TEXCOORD2F, payload);
 }
 
-/* Matrix Operations */
+/* DISPLAY LISTS */
+void APIENTRY gl_call_list_ovr(GLuint list)
+{
+    GLCallListCommand payload{ list };
+    g_ipc.write_command(GLCommandType::GLCMD_CALL_LIST, payload);
+}
+
+void APIENTRY gl_new_list_ovr(GLuint list, GLenum mode)
+{
+    GLNewListCommand payload{ list, mode };
+    g_ipc.write_command(GLCommandType::GLCMD_NEW_LIST, payload);
+}
+
+void APIENTRY gl_end_list_ovr()
+{
+    GLEndListCommand payload{};
+    g_ipc.write_command(GLCommandType::GLCMD_END_LIST, payload);
+}
+
+GLuint APIENTRY gl_gen_lists_ovr(GLsizei range)
+{
+    // fetchandadd
+    GLuint base = g_list_id_counter;
+    g_list_id_counter += range;
+
+    return base;
+}
+
+/* CLIENT STATE */
+void APIENTRY gl_enable_client_state_ovr(GLenum array)
+{
+    GLEnableClientStateCommand payload{ array };
+    g_ipc.write_command(GLCommandType::GLCMD_ENABLE_CLIENT_STATE, payload);
+}
+
+void APIENTRY gl_disable_client_state_ovr(GLenum array)
+{
+    GLDisableClientStateCommand payload{ array };
+    g_ipc.write_command(GLCommandType::GLCMD_DISABLE_CLIENT_STATE, payload);
+}
+
+void APIENTRY gl_vertex_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
+{
+    GLVertexPointerCommand payload{ static_cast<UINT32>(size), type, static_cast<UINT32>(stride) };
+
+    UINT32 bytes = utils::ComputeClientArraySize(-1, size, type, stride);  // TODO
+
+    g_ipc.write_command(GLCommandType::GLCMD_VERTEX_POINTER, payload, pointer != nullptr, pointer,
+                        bytes);
+}
+
+void APIENTRY gl_normal_pointer_ovr(GLenum type, GLsizei stride, const void* pointer)
+{
+    GLNormalPointerCommand payload{ type, static_cast<UINT32>(stride) };
+
+    UINT32 bytes = utils::ComputeClientArraySize(-1, 3, type, stride);
+
+    g_ipc.write_command(GLCommandType::GLCMD_NORMAL_POINTER, payload, pointer != nullptr, pointer,
+                        bytes);
+}
+
+void APIENTRY gl_tex_coord_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
+{
+    GLTexCoordPointerCommand payload{ static_cast<UINT32>(size), type, static_cast<UINT32>(stride) };
+
+    UINT32 bytes = utils::ComputeClientArraySize(-1, size, type, stride);
+
+    g_ipc.write_command(GLCommandType::GLCMD_TEXCOORD_POINTER, payload, pointer != nullptr, pointer,
+                        bytes);
+}
+
+void APIENTRY gl_color_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
+{
+    GLColorPointerCommand payload{ static_cast<UINT32>(size), type, static_cast<UINT32>(stride) };
+
+    UINT32 bytes = utils::ComputeClientArraySize(-1, size, type, stride);
+
+    g_ipc.write_command(GLCommandType::GLCMD_COLOR_POINTER, payload, pointer != nullptr, pointer,
+                        bytes);
+}
+
+void APIENTRY gl_draw_arrays_ovr(GLenum mode, GLint first, GLsizei count)
+{
+    GLDrawArraysCommand payload{ mode, static_cast<UINT32>(first), static_cast<UINT32>(count) };
+    g_ipc.write_command(GLCommandType::GLCMD_DRAW_ARRAYS, payload);
+}
+
+void APIENTRY gl_draw_elements_ovr(GLenum mode, GLsizei count, GLenum type, const void* indices)
+{
+    GLDrawElementsCommand payload{ mode, static_cast<UINT32>(count), type };
+
+    UINT32 bytes = utils::ComputeIndexArraySize(count, type);
+
+    g_ipc.write_command(GLCommandType::GLCMD_DRAW_ELEMENTS, payload, indices != nullptr, indices,
+                        bytes);
+}
+
+/* MATRIX OPERATIONS */
 void APIENTRY gl_matrix_mode_ovr(GLenum mode)
 {
     GLMatrixModeCommand payload{ mode };
@@ -164,7 +261,51 @@ void APIENTRY gl_scalef_ovr(GLfloat x, GLfloat y, GLfloat z)
     g_ipc.write_command(GLCommandType::GLCMD_SCALE, payload);
 }
 
-/* Texture Operations */
+void APIENTRY gl_viewport_ovr(GLint x, GLint y, GLsizei width, GLsizei height)
+{
+    GLViewportCommand payload{ x, y, width, height };
+    g_ipc.write_command(GLCommandType::GLCMD_VIEWPORT, payload);
+}
+
+void APIENTRY gl_ortho_ovr(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top,
+                           GLdouble zNear, GLdouble zFar)
+{
+    GLOrthoCommand payload{ left, right, bottom, top, zNear, zFar };
+    g_ipc.write_command(GLCommandType::GLCMD_ORTHO, payload);
+}
+
+void APIENTRY gl_frustum_ovr(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top,
+                             GLdouble zNear, GLdouble zFar)
+{
+    GLFrustumCommand payload{ left, right, bottom, top, zNear, zFar };
+    g_ipc.write_command(GLCommandType::GLCMD_FRUSTUM, payload);
+}
+
+/* RENDERING */
+void APIENTRY gl_clear_ovr(GLbitfield mask)
+{
+    GLClearCommand payload{ mask };
+    g_ipc.write_command(GLCommandType::GLCMD_CLEAR, payload);
+}
+
+void APIENTRY gl_clear_color_ovr(GLfloat r, GLfloat g, GLfloat b, GLfloat a)
+{
+    GLClearColorCommand payload{ { r, g, b, a } };
+    g_ipc.write_command(GLCommandType::GLCMD_CLEAR_COLOR, payload);
+}
+
+void APIENTRY gl_flush_ovr()
+{
+    GLFlushCommand payload{};
+    g_ipc.write_command(GLCommandType::GLCMD_FLUSH, payload);
+}
+
+void APIENTRY gl_finish_ovr()
+{
+    GLFinishCommand payload{};
+    g_ipc.write_command(GLCommandType::GLCMD_FINISH, payload);
+}
+
 void APIENTRY gl_bind_texture_ovr(GLenum target, GLuint texture)
 {
     GLBindTextureCommand payload{ target, texture };
@@ -201,7 +342,7 @@ void APIENTRY gl_tex_image_2d_ovr(GLenum target, GLint level, GLint internalForm
     payload.format = format;
     payload.type = type;
 
-    const UINT32 pixels_bytes = ComputePixelDataSize(width, height, format, type);
+    const UINT32 pixels_bytes = utils::ComputePixelDataSize(width, height, format, type);
 
     g_ipc.write_command(GLCommandType::GLCMD_TEX_IMAGE_2D, payload, pixels != nullptr, pixels,
                         pixels_bytes);
@@ -213,19 +354,19 @@ void APIENTRY gl_tex_parameterf_ovr(GLenum target, GLenum pname, GLfloat param)
     g_ipc.write_command(GLCommandType::GLCMD_TEX_PARAMETER, payload);
 }
 
-/* Lighting */
-void APIENTRY gl_enable_ovr(GLenum cap)
+void APIENTRY gl_tex_envf_ovr(GLenum target, GLenum pname, GLfloat param)
 {
-    GLEnableCommand payload{ cap };
-    g_ipc.write_command(GLCommandType::GLCMD_ENABLE, payload);
+    GLTexEnvfCommand payload{ target, pname, param };
+    g_ipc.write_command(GLCommandType::GLCMD_TEX_ENV_F, payload);
 }
 
-void APIENTRY gl_disable_ovr(GLenum cap)
+void APIENTRY gl_tex_envi_ovr(GLenum target, GLenum pname, GLint param)
 {
-    GLDisableCommand payload{ cap };
-    g_ipc.write_command(GLCommandType::GLCMD_DISABLE, payload);
+    GLTexEnviCommand payload{ target, pname, static_cast<UINT32>(param) };
+    g_ipc.write_command(GLCommandType::GLCMD_TEX_ENV_I, payload);
 }
 
+/* FIXED FUNCTION */
 void APIENTRY gl_lightf_ovr(GLenum light, GLenum pname, GLfloat param)
 {
     GLLightCommand payload{ light, pname, param };
@@ -238,10 +379,25 @@ void APIENTRY gl_lightfv_ovr(GLenum light, GLenum pname, const GLfloat* params)
     g_ipc.write_command(GLCommandType::GLCMD_LIGHTFV, payload);
 }
 
+void APIENTRY gl_materiali_ovr(GLenum face, GLenum pname, GLint param)
+{
+    GLMaterialiCommand payload{ face, pname, param };
+    g_ipc.write_command(GLCommandType::GLCMD_MATERIALI, payload);
+}
+
 void APIENTRY gl_materialf_ovr(GLenum face, GLenum pname, GLfloat param)
 {
-    GLMaterialCommand payload{ face, pname, param };
+    GLMaterialfCommand payload{ face, pname, param };
     g_ipc.write_command(GLCommandType::GLCMD_MATERIALF, payload);
+}
+
+void APIENTRY gl_materialiv_ovr(GLenum face, GLenum pname, const GLint* params)
+{
+    GLMaterialivCommand payload{ face,
+                                 pname,
+                                 { static_cast<float>(params[0]), static_cast<float>(params[1]),
+                                   static_cast<float>(params[2]), static_cast<float>(params[3]) } };
+    g_ipc.write_command(GLCommandType::GLCMD_MATERIALIV, payload);
 }
 
 void APIENTRY gl_materialfv_ovr(GLenum face, GLenum pname, const GLfloat* params)
@@ -250,78 +406,83 @@ void APIENTRY gl_materialfv_ovr(GLenum face, GLenum pname, const GLfloat* params
     g_ipc.write_command(GLCommandType::GLCMD_MATERIALFV, payload);
 }
 
-/* Buffer Operations */
-void APIENTRY gl_clear_ovr(GLbitfield mask)
+void APIENTRY gl_alpha_func_ovr(GLenum func, GLclampf ref)
 {
-    GLClearCommand payload{ mask };
-    g_ipc.write_command(GLCommandType::GLCMD_CLEAR, payload);
+    GLAlphaFuncCommand payload{ func, ref };
+    g_ipc.write_command(GLCommandType::GLCMD_ALPHA_FUNC, payload);
 }
 
-void APIENTRY gl_clear_color_ovr(GLfloat r, GLfloat g, GLfloat b, GLfloat a)
+/* STATE MANAGEMENT */
+void APIENTRY gl_enable_ovr(GLenum cap)
 {
-    GLClearColorCommand payload{ { r, g, b, a } };
-    g_ipc.write_command(GLCommandType::GLCMD_CLEAR_COLOR, payload);
+    GLEnableCommand payload{ cap };
+    g_ipc.write_command(GLCommandType::GLCMD_ENABLE, payload);
 }
 
-void APIENTRY gl_flush_ovr()
+void APIENTRY gl_disable_ovr(GLenum cap)
 {
-    GLFlushCommand payload{};
-    g_ipc.write_command(GLCommandType::GLCMD_FLUSH, payload);
+    GLDisableCommand payload{ cap };
+    g_ipc.write_command(GLCommandType::GLCMD_DISABLE, payload);
 }
 
-void APIENTRY gl_finish_ovr()
+void APIENTRY gl_color_mask_ovr(GLboolean r, GLboolean g, GLboolean b, GLboolean a)
 {
-    GLFinishCommand payload{};
-    g_ipc.write_command(GLCommandType::GLCMD_FINISH, payload);
+    GLColorMaskCommand payload{ (UINT8)r, (UINT8)g, (UINT8)b, (UINT8)a };
+    g_ipc.write_command(GLCommandType::GLCMD_COLOR_MASK, payload);
 }
 
-/* Viewport & Projection */
-void APIENTRY gl_viewport_ovr(GLint x, GLint y, GLsizei width, GLsizei height)
+void APIENTRY gl_depth_mask_ovr(GLboolean flag)
 {
-    GLViewportCommand payload{ x, y, width, height };
-    g_ipc.write_command(GLCommandType::GLCMD_VIEWPORT, payload);
+    GLDepthMaskCommand payload{ (UINT8)flag };
+    g_ipc.write_command(GLCommandType::GLCMD_DEPTH_MASK, payload);
 }
 
-void APIENTRY gl_ortho_ovr(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top,
-                           GLdouble zNear, GLdouble zFar)
+void APIENTRY gl_blend_func_ovr(GLenum sfactor, GLenum dfactor)
 {
-    GLOrthoCommand payload{ left, right, bottom, top, zNear, zFar };
-    g_ipc.write_command(GLCommandType::GLCMD_ORTHO, payload);
+    GLBlendFuncCommand payload{ sfactor, dfactor };
+    g_ipc.write_command(GLCommandType::GLCMD_BLEND_FUNC, payload);
 }
 
-void APIENTRY gl_frustum_ovr(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top,
-                             GLdouble zNear, GLdouble zFar)
+void APIENTRY gl_point_size_ovr(GLfloat size)
 {
-    GLFrustumCommand payload{ left, right, bottom, top, zNear, zFar };
-    g_ipc.write_command(GLCommandType::GLCMD_FRUSTUM, payload);
+    GLPointSizeCommand payload{ size };
+    g_ipc.write_command(GLCommandType::GLCMD_POINT_SIZE, payload);
 }
 
-/* Display Lists */
-void APIENTRY gl_call_list_ovr(GLuint list)
+void APIENTRY gl_polygon_offset_ovr(GLfloat factor, GLfloat units)
 {
-    GLCallListCommand payload{ list };
-    g_ipc.write_command(GLCommandType::GLCMD_CALL_LIST, payload);
+    GLPolygonOffsetCommand payload{ factor, units };
+    g_ipc.write_command(GLCommandType::GLCMD_POLYGON_OFFSET, payload);
 }
 
-void APIENTRY gl_new_list_ovr(GLuint list, GLenum mode)
+void APIENTRY gl_cull_face_ovr(GLenum mode)
 {
-    GLNewListCommand payload{ list, mode };
-    g_ipc.write_command(GLCommandType::GLCMD_NEW_LIST, payload);
+    GLCullFaceCommand payload{ mode };
+    g_ipc.write_command(GLCommandType::GLCMD_CULL_FACE, payload);
 }
 
-void APIENTRY gl_end_list_ovr()
+void APIENTRY gl_stencil_mask_ovr(GLuint mask)
 {
-    GLEndListCommand payload{};
-    g_ipc.write_command(GLCommandType::GLCMD_END_LIST, payload);
+    GLStencilMaskCommand payload{ mask };
+    g_ipc.write_command(GLCommandType::GLCMD_STENCIL_MASK, payload);
 }
 
-GLuint APIENTRY gl_gen_lists_ovr(GLsizei range)
+void APIENTRY gl_stencil_func_ovr(GLenum func, GLint ref, GLuint mask)
 {
-    // fetchandadd
-    GLuint base = g_list_id_counter;
-    g_list_id_counter += range;
+    GLStencilFuncCommand payload{ func, ref, mask };
+    g_ipc.write_command(GLCommandType::GLCMD_STENCIL_FUNC, payload);
+}
 
-    return base;
+void APIENTRY gl_stencil_op_ovr(GLenum sfail, GLenum dpfail, GLenum dppass)
+{
+    GLStencilOpCommand payload{ sfail, dpfail, dppass };
+    g_ipc.write_command(GLCommandType::GLCMD_STENCIL_OP, payload);
+}
+
+void APIENTRY gl_stencil_op_separate_ATI_ovr(GLenum face, GLenum sfail, GLenum dpfail, GLenum dppass)
+{
+    GLStencilOpSeparateATICommand payload{ face, sfail, dpfail, dppass };
+    g_ipc.write_command(GLCommandType::GLCMD_STENCIL_OP_SEPARATE_ATI, payload);
 }
 
 /* WGL (Windows Graphics Library) overrides */
@@ -445,6 +606,7 @@ void install_overrides()
     // create lambda function for `std::call_once`
     auto register_all_hooks_once_fn = []
     {
+        /* CORE IMMEDIATE MODE */
         gl::register_hook("glBegin", reinterpret_cast<PROC>(&gl_begin_ovr));
         gl::register_hook("glEnd", reinterpret_cast<PROC>(&gl_end_ovr));
         gl::register_hook("glVertex2f", reinterpret_cast<PROC>(&gl_vertex2f_ovr));
@@ -453,6 +615,26 @@ void install_overrides()
         gl::register_hook("glColor4f", reinterpret_cast<PROC>(&gl_color4f_ovr));
         gl::register_hook("glNormal3f", reinterpret_cast<PROC>(&gl_normal3f_ovr));
         gl::register_hook("glTexCoord2f", reinterpret_cast<PROC>(&gl_tex_coord2f_ovr));
+
+        /* DISPLAY LISTS */
+        gl::register_hook("glCallList", reinterpret_cast<PROC>(&gl_call_list_ovr));
+        gl::register_hook("glNewList", reinterpret_cast<PROC>(&gl_new_list_ovr));
+        gl::register_hook("glEndList", reinterpret_cast<PROC>(&gl_end_list_ovr));
+        gl::register_hook("glGenLists", reinterpret_cast<PROC>(&gl_gen_lists_ovr));
+
+        /* CLIENT STATE */
+        gl::register_hook("glEnableClientState",
+                          reinterpret_cast<PROC>(&gl_enable_client_state_ovr));
+        gl::register_hook("glDisableClientState",
+                          reinterpret_cast<PROC>(&gl_disable_client_state_ovr));
+        gl::register_hook("glVertexPointer", reinterpret_cast<PROC>(&gl_vertex_pointer_ovr));
+        gl::register_hook("glNormalPointer", reinterpret_cast<PROC>(&gl_normal_pointer_ovr));
+        gl::register_hook("glTexCoordPointer", reinterpret_cast<PROC>(&gl_tex_coord_pointer_ovr));
+        gl::register_hook("glColorPointer", reinterpret_cast<PROC>(&gl_color_pointer_ovr));
+        gl::register_hook("glDrawArrays", reinterpret_cast<PROC>(&gl_draw_arrays_ovr));
+        gl::register_hook("glDrawElements", reinterpret_cast<PROC>(&gl_draw_elements_ovr));
+
+        /* MATRIX OPERATIONS */
         gl::register_hook("glMatrixMode", reinterpret_cast<PROC>(&gl_matrix_mode_ovr));
         gl::register_hook("glLoadIdentity", reinterpret_cast<PROC>(&gl_load_identity_ovr));
         gl::register_hook("glLoadMatrixf", reinterpret_cast<PROC>(&gl_load_matrixf_ovr));
@@ -462,29 +644,46 @@ void install_overrides()
         gl::register_hook("glTranslatef", reinterpret_cast<PROC>(&gl_translatef_ovr));
         gl::register_hook("glRotatef", reinterpret_cast<PROC>(&gl_rotatef_ovr));
         gl::register_hook("glScalef", reinterpret_cast<PROC>(&gl_scalef_ovr));
+        gl::register_hook("glViewport", reinterpret_cast<PROC>(&gl_viewport_ovr));
+        gl::register_hook("glOrtho", reinterpret_cast<PROC>(&gl_ortho_ovr));
+        gl::register_hook("glFrustum", reinterpret_cast<PROC>(&gl_frustum_ovr));
+
+        /* RENDERING */
+        gl::register_hook("glClear", reinterpret_cast<PROC>(&gl_clear_ovr));
+        gl::register_hook("glClearColor", reinterpret_cast<PROC>(&gl_clear_color_ovr));
+        gl::register_hook("glFlush", reinterpret_cast<PROC>(&gl_flush_ovr));
+        gl::register_hook("glFinish", reinterpret_cast<PROC>(&gl_finish_ovr));
         gl::register_hook("glBindTexture", reinterpret_cast<PROC>(&gl_bind_texture_ovr));
         gl::register_hook("glGenTextures", reinterpret_cast<PROC>(&gl_gen_textures_ovr));
         gl::register_hook("glDeleteTextures", reinterpret_cast<PROC>(&gl_delete_textures_ovr));
         gl::register_hook("glTexImage2D", reinterpret_cast<PROC>(&gl_tex_image_2d_ovr));
         gl::register_hook("glTexParameterf", reinterpret_cast<PROC>(&gl_tex_parameterf_ovr));
-        gl::register_hook("glEnable", reinterpret_cast<PROC>(&gl_enable_ovr));
-        gl::register_hook("glDisable", reinterpret_cast<PROC>(&gl_disable_ovr));
+        gl::register_hook("glTexEnvi", reinterpret_cast<PROC>(&gl_tex_envi_ovr));
+        gl::register_hook("glTexEnvf", reinterpret_cast<PROC>(&gl_tex_envf_ovr));
+
+        /* FIXED FUNCTION */
         gl::register_hook("glLightf", reinterpret_cast<PROC>(&gl_lightf_ovr));
         gl::register_hook("glLightfv", reinterpret_cast<PROC>(&gl_lightfv_ovr));
+        gl::register_hook("glMateriali", reinterpret_cast<PROC>(&gl_materiali_ovr));
         gl::register_hook("glMaterialf", reinterpret_cast<PROC>(&gl_materialf_ovr));
+        gl::register_hook("glMaterialiv", reinterpret_cast<PROC>(&gl_materialiv_ovr));
         gl::register_hook("glMaterialfv", reinterpret_cast<PROC>(&gl_materialfv_ovr));
-        gl::register_hook("glClear", reinterpret_cast<PROC>(&gl_clear_ovr));
-        gl::register_hook("glClearColor", reinterpret_cast<PROC>(&gl_clear_color_ovr));
-        gl::register_hook("glFlush", reinterpret_cast<PROC>(&gl_flush_ovr));
-        gl::register_hook("glFinish", reinterpret_cast<PROC>(&gl_finish_ovr));
-        gl::register_hook("glViewport", reinterpret_cast<PROC>(&gl_viewport_ovr));
-        gl::register_hook("glOrtho", reinterpret_cast<PROC>(&gl_ortho_ovr));
-        gl::register_hook("glFrustum", reinterpret_cast<PROC>(&gl_frustum_ovr));
+        gl::register_hook("glAlphaFunc", reinterpret_cast<PROC>(&gl_alpha_func_ovr));
 
-        gl::register_hook("glCallList", reinterpret_cast<PROC>(&gl_call_list_ovr));
-        gl::register_hook("glNewList", reinterpret_cast<PROC>(&gl_new_list_ovr));
-        gl::register_hook("glEndList", reinterpret_cast<PROC>(&gl_end_list_ovr));
-        gl::register_hook("glGenLists", reinterpret_cast<PROC>(&gl_gen_lists_ovr));
+        /* STATE MANAGEMENT */
+        gl::register_hook("glEnable", reinterpret_cast<PROC>(&gl_enable_ovr));
+        gl::register_hook("glDisable", reinterpret_cast<PROC>(&gl_disable_ovr));
+        gl::register_hook("glColorMask", reinterpret_cast<PROC>(&gl_color_mask_ovr));
+        gl::register_hook("glDepthMask", reinterpret_cast<PROC>(&gl_depth_mask_ovr));
+        gl::register_hook("glBlendFunc", reinterpret_cast<PROC>(&gl_blend_func_ovr));
+        gl::register_hook("glPointSize", reinterpret_cast<PROC>(&gl_point_size_ovr));
+        gl::register_hook("glPolygonOffset", reinterpret_cast<PROC>(&gl_polygon_offset_ovr));
+        gl::register_hook("glCullFace", reinterpret_cast<PROC>(&gl_cull_face_ovr));
+        gl::register_hook("glStencilMask", reinterpret_cast<PROC>(&gl_stencil_mask_ovr));
+        gl::register_hook("glStencilFunc", reinterpret_cast<PROC>(&gl_stencil_func_ovr));
+        gl::register_hook("glStencilOp", reinterpret_cast<PROC>(&gl_stencil_op_ovr));
+        gl::register_hook("glStencilOpSeparateATI",
+                          reinterpret_cast<PROC>(&gl_stencil_op_separate_ATI_ovr));
 
         // Override WGL for app to work. Return success and try to do nothing.
         gl::register_hook("wglChoosePixelFormat", reinterpret_cast<PROC>(&choose_pixel_format_ovr));

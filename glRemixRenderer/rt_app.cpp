@@ -432,7 +432,7 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer, size_
             }
             case GLCommandType::GLCMD_MATERIALF:
             {
-                const auto* mat = reinterpret_cast<const GLMaterialCommand*>(
+                const auto* mat = reinterpret_cast<const GLMaterialfCommand*>(
                     buffer.data() + offset);  // reach into data payload
 
                 // TODO: when material f is encountered, edit the current m_material based on the
