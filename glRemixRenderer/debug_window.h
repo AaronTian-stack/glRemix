@@ -18,6 +18,7 @@ namespace glRemix
 class DebugWindow
 {
     float m_fps = 0.0f;
+    int debug_counter = 1;
 
     std::vector<MeshRecord> m_meshes;
     uint64_t m_meshID_to_replace = -1;

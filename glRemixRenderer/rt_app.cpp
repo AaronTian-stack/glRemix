@@ -1129,6 +1129,8 @@ uint64_t glRemix::glRemixRenderer::create_hash(std::vector<Vertex> vertices,
 // replaces asset in scene based on file provided by user in ImGui
 void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& new_asset_path)
 {
+    XMFLOAT4X4 old_mesh_mv = m_matrix_pool[0];  // save for transforming new mesh
+
     // erase mesh that needs to be replaced
     for (auto it = m_mesh_map.begin(); it != m_mesh_map.end();)
     {
@@ -1136,6 +1138,7 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
 
         if (mesh.mesh_id == meshID)
         {
+            old_mesh_mv = m_matrix_pool[mesh.mv_idx];
             m_mesh_resources.free(mesh.blas_vb_ib_idx);
 
             it = m_mesh_map.erase(it);
@@ -1154,6 +1157,9 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
     std::vector<Vertex> new_vertices;
     std::vector<uint32_t> new_indices;
     THROW_IF_FALSE(load_mesh_from_path(new_asset_path_fs, new_vertices, new_indices));
+
+    // transform new vertices by replaced mesh's modelview matrix
+    transform_replacement_vertices(new_vertices, old_mesh_mv);
 
     // put new mesh into pending geometries
     uint64_t new_mesh_hash = create_hash(new_vertices, new_indices);
@@ -1184,59 +1190,25 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
     mesh->last_frame = m_current_frame;
 
     m_meshes.push_back(*mesh);
-
 }
 
-//void glRemix::glRemixRenderer::add_to_replacement_map(uint64_t meshID,
-//                                                      std::vector<Vertex>& new_vertices,
-//                                                      std::vector<uint32_t>& new_indices)
-//{
-//    // MeshRecord* mesh = nullptr;
-//
-//    MeshRecord new_mesh = {};
-//    new_mesh.mesh_id = meshID;
-//    new_mesh.vertex_count = new_vertices.size();
-//    new_mesh.index_count = new_indices.size();
-//    // new_mesh.last_frame = current_frame;
-//
-//    // create vertex buffer
-//    dx::D3D12Buffer t_vertex_buffer;
-//    dx::D3D12Buffer t_index_buffer;
-//
-//    dx::BufferDesc vertex_buffer_desc{
-//        .size = sizeof(Vertex) * new_vertices.size(),
-//        .stride = sizeof(Vertex),
-//        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-//    };
-//
-//    void* cpu_ptr = nullptr;
-//    THROW_IF_FALSE(m_context.create_buffer(vertex_buffer_desc, &t_vertex_buffer, "vertex buffer"));
-//    THROW_IF_FALSE(m_context.map_buffer(&t_vertex_buffer, &cpu_ptr));
-//    memcpy(cpu_ptr, new_vertices.data(), vertex_buffer_desc.size);
-//    m_context.unmap_buffer(&t_vertex_buffer);
-//    new_mesh.vertex_id = m_vertex_pool.push_back(std::move(t_vertex_buffer));
-//
-//    // create index buffer
-//    dx::BufferDesc index_buffer_desc{
-//        .size = sizeof(UINT) * new_indices.size(),
-//        .stride = sizeof(UINT),
-//        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-//    };
-//
-//    THROW_IF_FALSE(m_context.create_buffer(index_buffer_desc, &t_index_buffer, "index buffer"));
-//    THROW_IF_FALSE(m_context.map_buffer(&t_index_buffer, &cpu_ptr));
-//    memcpy(cpu_ptr, new_indices.data(), index_buffer_desc.size);
-//    m_context.unmap_buffer(&t_index_buffer);
-//    new_mesh.index_id = m_index_pool.push_back(std::move(t_index_buffer));
-//
-//    // cannot create BLAS here since we don't have cmd_list
-//    new_mesh.blas_id = -1;
-//
-//    // also not assigning material or mv here
-//
-//    m_replacement_map[meshID] = std::move(new_mesh);
-//
-//}
+void glRemix::glRemixRenderer::transform_replacement_vertices(std::vector<Vertex>& gltf_vertices,
+                                                              XMFLOAT4X4 mv)
+{
+    for (auto& v : gltf_vertices)
+    {
+        // vertex position transform
+        XMVECTOR pos = XMVectorSet(v.position.x, v.position.y, v.position.z, 1.0f);
+        XMVECTOR transformed_pos = XMVector4Transform(pos, XMLoadFloat4x4(&mv));
+        XMStoreFloat3(&v.position, transformed_pos);
+
+        // vertex normal transform
+        XMVECTOR norm = XMVectorSet(v.normal.x, v.normal.y, v.normal.z, 0.0f);
+        XMVECTOR transformed_norm = XMVector3TransformNormal(norm, XMLoadFloat4x4(&mv));
+        transformed_norm = XMVector3Normalize(transformed_norm);
+        XMStoreFloat3(&v.normal, transformed_norm);
+    }
+}
 
 bool glRemix::glRemixRenderer::load_mesh_from_path(std::filesystem::path asset_path,
                                                    std::vector<Vertex>& out_vertices,

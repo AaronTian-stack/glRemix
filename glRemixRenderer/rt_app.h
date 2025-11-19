@@ -138,8 +138,7 @@ protected:
     void replace_mesh(uint64_t meshID, const std::string& new_asset_path);
     bool load_mesh_from_path(std::filesystem::path asset_path, std::vector<Vertex>& out_vertices,
                              std::vector<uint32_t>& out_indices);
-    /*void add_to_replacement_map(uint64_t meshID, std::vector<Vertex>& out_vertices,
-                                std::vector<uint32_t>& out_indices);*/
+    void transform_replacement_vertices(std::vector<Vertex>& gltf_vertices, XMFLOAT4X4 mv);
 
 public:
     glRemixRenderer() = default;

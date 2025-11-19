@@ -78,10 +78,15 @@ void DebugWindow::render_mesh_ids()
         ImGui::EndListBox();
     }
 
-    /*m_meshID_to_replace = 2564736516315296377;
-    m_new_asset_path = "C:/Users/anyaa/OneDrive/Desktop/UPenn/CIS5650/avocado_gltf/Avocado.gltf";
+    if (debug_counter == 1)
+    {
+        m_meshID_to_replace = 337216395;
+        m_new_asset_path
+            = "C:/Users/anyaa/OneDrive/Desktop/UPenn/CIS5650/avocado_gltf/Avocado.gltf";
 
-    m_replace_mesh_callback(m_meshID_to_replace, m_new_asset_path);*/
+        m_replace_mesh_callback(m_meshID_to_replace, m_new_asset_path);
+        debug_counter--;
+    }
 
     // handle asset replacement with selected mesh
     if (m_meshID_to_replace != -1)
