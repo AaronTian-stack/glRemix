@@ -381,7 +381,12 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
 
         if (m_current_frame - mesh.last_frame > FRAME_LENIENCY)
         {
+            auto& resource = m_mesh_resources[mesh.blas_vb_ib_idx];
             m_mesh_resources.free(mesh.blas_vb_ib_idx);
+            m_descriptor_pager.free_descriptor(dx::DescriptorPager::VB_IB,
+                                               &resource.vertex_buffer.descriptor);
+            m_descriptor_pager.free_descriptor(dx::DescriptorPager::VB_IB,
+                                               &resource.index_buffer.descriptor);
             it = m_mesh_map.erase(it);
         }
         else
