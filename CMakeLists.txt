@@ -21,6 +21,7 @@ option(GLREMIX_BUILD_SHIM_WIN32 "Build 32-bit OpenGL shim" ON)
 option(GLREMIX_BUILD_SHIM_X64 "Build 64-bit OpenGL shim" OFF)
 option(GLREMIX_BUILD_RENDERER "Build renderer" ON)
 option(GLREMIX_OVERRIDE_RENDERER_PATH "Override path to glRemix renderer. If 'GLREMIX_CUSTOM_RENDERER_EXE_PATH' is not set, default path to renderer executable within deploy directory is used." ON)
+option(GLREMIX_AUTO_LAUNCH_RENDERER "Automatically launch renderer process (disable when using graphics debuggers like PIX)" ON)
 
 set(GLREMIX_COPY_IF_EXISTS_SCRIPT "${REPO_ROOT}/cmake/copy_if_exists.cmake")
 

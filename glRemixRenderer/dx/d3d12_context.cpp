@@ -88,6 +88,15 @@ bool D3D12Context::create(const bool enable_debug_layer)
                                        "DXGI Factory");
     }
 
+    BOOL allow_tearing = FALSE;
+    m_dxgi_factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allow_tearing,
+                                        sizeof(BOOL));
+    if (!allow_tearing)
+    {
+        OutputDebugStringA("D3D12 ERROR: Present tearing not supported\n");
+        return false;
+    }
+
     // Pick discrete GPU
     ComPtr<IDXGIAdapter1> adapter;
     if (FAILED(m_dxgi_factory->EnumAdapterByGpuPreference(0,  // Adapter index
@@ -144,11 +153,11 @@ bool D3D12Context::create(const bool enable_debug_layer)
     }
     if (m_options5.RaytracingTier < D3D12_RAYTRACING_TIER_1_1)
     {
-        OutputDebugStringA("D3D12 ERROR: Raytracing tier 1.1 is not supported\n");
+        OutputDebugStringA("D3D12 ERROR: Raytracing Tier 1.1 is not supported\n");
         return false;
     }
 
-    D3D12_FEATURE_DATA_D3D12_OPTIONS16 options16 = {};  // For GPU upload heaps
+    D3D12_FEATURE_DATA_D3D12_OPTIONS16 options16{};  // For GPU upload heaps
     if (FAILED(m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS16, &options16,
                                              sizeof(options16))))
     {
@@ -156,7 +165,7 @@ bool D3D12Context::create(const bool enable_debug_layer)
         return false;
     }
 
-    // Find the highest supported shader model
+    // Find the highest supported SM
     constexpr std::array shader_models{
         D3D_SHADER_MODEL_6_6, D3D_SHADER_MODEL_6_5, D3D_SHADER_MODEL_6_4, D3D_SHADER_MODEL_6_2,
         D3D_SHADER_MODEL_6_1, D3D_SHADER_MODEL_6_0, D3D_SHADER_MODEL_5_1,
@@ -172,10 +181,29 @@ bool D3D12Context::create(const bool enable_debug_layer)
             break;
         }
     }
+    // Require SM 6.6
+    if (m_shader_model.HighestShaderModel < D3D_SHADER_MODEL_6_6)
+    {
+        OutputDebugStringA("D3D12 ERROR: SM 6.6 is not supported\n");
+        return false;
+    }
 
-    const D3D12MA::ALLOCATOR_DESC allocator_desc = {
-        .Flags = D3D12MA::ALLOCATOR_FLAG_MSAA_TEXTURES_ALWAYS_COMMITTED
-                 | D3D12MA::ALLOCATOR_FLAG_DEFAULT_POOLS_NOT_ZEROED,  // Optional but recommended
+    D3D12_FEATURE_DATA_D3D12_OPTIONS options{};  // For Tier 2 Descriptor Heaps
+    if (FAILED(
+            m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options))))
+    {
+        OutputDebugStringA("D3D12 ERROR: Failed to query D3D12 options");
+        return false;
+    }
+    if (options.ResourceBindingTier < D3D12_RESOURCE_BINDING_TIER_2)
+    {
+        // Need full heap for SRVs
+        OutputDebugStringA("D3D12 ERROR: Descriptor Heap Tier 2 is not supported\n");
+        return false;
+    }
+
+    const D3D12MA::ALLOCATOR_DESC allocator_desc{
+        .Flags = D3D12MA_RECOMMENDED_ALLOCATOR_FLAGS,  // Optional but recommended
         .pDevice = m_device.Get(),
         .PreferredBlockSize{},
         .pAllocationCallbacks{},
@@ -245,7 +273,7 @@ bool D3D12Context::create_swapchain(const HWND window, D3D12Queue* const queue,
                                                 .Scaling = DXGI_SCALING_STRETCH,
                                                 .SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD,
                                                 .AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED,
-                                                .Flags = 0 };
+                                                .Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING };
 
     ComPtr<IDXGISwapChain1> swapchain1;
     if (FAILED(m_dxgi_factory->CreateSwapChainForHwnd(queue->queue.Get(),  // Force flush
@@ -280,7 +308,7 @@ bool D3D12Context::create_swapchain(const HWND window, D3D12Queue* const queue,
     return true;
 }
 
-bool D3D12Context::create_swapchain_descriptors(D3D12DescriptorTable* descriptors,
+bool D3D12Context::create_swapchain_descriptors(D3D12Descriptor* descriptors,
                                                 D3D12DescriptorHeap* rtv_heap)
 {
     assert(descriptors);
@@ -296,17 +324,17 @@ bool D3D12Context::create_swapchain_descriptors(D3D12DescriptorTable* descriptor
         return false;
     }
 
-    if (!rtv_heap->allocate(Application::m_frames_in_flight, descriptors))
-    {
-        OutputDebugStringA("D3D12 ERROR: Failed to allocate descriptors\n");
-        return false;
-    }
-
     assert(m_swapchain_buffers.size() >= Application::m_frames_in_flight);
+
     for (UINT i = 0; i < Application::m_frames_in_flight; i++)
     {
+        if (!rtv_heap->allocate(&descriptors[i]))
+        {
+            OutputDebugStringA("D3D12 ERROR: Failed to allocate descriptors\n");
+            return false;
+        }
         D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle{};
-        rtv_heap->get_cpu_descriptor(&rtv_handle, descriptors->offset + i);
+        rtv_heap->get_cpu_descriptor(&rtv_handle, descriptors[i].offset);
         m_device->CreateRenderTargetView(m_swapchain_buffers[i].Get(), nullptr, rtv_handle);
     }
 
@@ -886,15 +914,12 @@ static D3D12_DEPTH_STENCIL_DESC make_default_depth_stencil_desc()
 }
 
 void D3D12Context::create_constant_buffer_view(const D3D12Buffer* buffer,
-                                               const D3D12DescriptorTable* descriptor_table,
-                                               const UINT descriptor_index) const
+                                               const D3D12Descriptor& descriptor) const
 {
     assert(buffer);
-    assert(descriptor_table);
 
     D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
-    descriptor_table->heap->get_cpu_descriptor(&cpu_handle,
-                                               descriptor_table->offset + descriptor_index);
+    descriptor.heap->get_cpu_descriptor(&cpu_handle, descriptor.offset);
 
     D3D12_CONSTANT_BUFFER_VIEW_DESC cbv_desc{
         .BufferLocation = buffer->allocation->GetResource()->GetGPUVirtualAddress(),
@@ -904,16 +929,76 @@ void D3D12Context::create_constant_buffer_view(const D3D12Buffer* buffer,
     m_device->CreateConstantBufferView(&cbv_desc, cpu_handle);
 }
 
-void D3D12Context::create_shader_resource_view_acceleration_structure(
-    const D3D12Buffer& tlas, const D3D12DescriptorTable* descriptor_table,
-    UINT descriptor_index) const
+void D3D12Context::create_shader_resource_view(const D3D12Buffer& buffer,
+                                               const D3D12Descriptor& descriptor) const
 {
-    assert(&tlas);
-    assert(descriptor_table);
-
     D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
-    descriptor_table->heap->get_cpu_descriptor(&cpu_handle,
-                                               descriptor_table->offset + descriptor_index);
+    assert(!u64_overflows_u32(buffer.desc.stride));
+    descriptor.heap->get_cpu_descriptor(&cpu_handle, descriptor.offset);
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc{
+        .Format = DXGI_FORMAT_UNKNOWN,
+        .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+        .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+        .Buffer{
+            .FirstElement = 0,
+            .NumElements = static_cast<UINT>(buffer.desc.size / buffer.desc.stride),
+            .StructureByteStride = static_cast<UINT>(buffer.desc.stride),
+            .Flags = D3D12_BUFFER_SRV_FLAG_NONE,
+        },
+    };
+    m_device->CreateShaderResourceView(buffer.allocation->GetResource(), &srv_desc, cpu_handle);
+}
+
+void D3D12Context::create_shader_resource_view_raw(const D3D12Buffer& buffer,
+                                                   const D3D12Descriptor& descriptor) const
+{
+    assert(is_multiple_of_power_of_two(buffer.desc.size, 4));
+    const auto num_elements = buffer.desc.size / 4;
+    assert(!u64_overflows_u32(num_elements));
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
+    descriptor.heap->get_cpu_descriptor(&cpu_handle, descriptor.offset);
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc{
+        .Format = DXGI_FORMAT_R32_TYPELESS,
+        .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+        .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+        .Buffer{
+            .FirstElement = 0,
+            .NumElements = static_cast<UINT>(num_elements),
+            .StructureByteStride = 0,
+            .Flags = D3D12_BUFFER_SRV_FLAG_RAW,
+        },
+    };
+    m_device->CreateShaderResourceView(buffer.allocation->GetResource(), &srv_desc, cpu_handle);
+}
+
+void D3D12Context::create_shader_resource_view_typed(const D3D12Buffer& buffer,
+                                                     const DXGI_FORMAT format,
+                                                     const D3D12Descriptor& descriptor) const
+{
+    const auto num_elements = buffer.desc.size / buffer.desc.stride;
+    assert(!u64_overflows_u32(num_elements));
+    // TODO: bpp check
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
+    descriptor.heap->get_cpu_descriptor(&cpu_handle, descriptor.offset);
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc{
+        .Format = format,
+        .ViewDimension = D3D12_SRV_DIMENSION_BUFFER,
+        .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+        .Buffer{
+            .FirstElement = 0,
+            .NumElements = static_cast<UINT>(num_elements),
+            .StructureByteStride = 0,
+            .Flags = D3D12_BUFFER_SRV_FLAG_NONE,
+        },
+    };
+    m_device->CreateShaderResourceView(buffer.allocation->GetResource(), &srv_desc, cpu_handle);
+}
+
+void D3D12Context::create_shader_resource_view_acceleration_structure(
+    const D3D12Buffer& tlas, const D3D12Descriptor& descriptor) const
+{
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
+    descriptor.heap->get_cpu_descriptor(&cpu_handle, descriptor.offset);
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc{
         .Format = DXGI_FORMAT_UNKNOWN,
@@ -927,17 +1012,12 @@ void D3D12Context::create_shader_resource_view_acceleration_structure(
     m_device->CreateShaderResourceView(nullptr, &srv_desc, cpu_handle);
 }
 
-void D3D12Context::create_unordered_access_view_texture(const D3D12Texture* texture,
+void D3D12Context::create_unordered_access_view_texture(const D3D12Texture& texture,
                                                         const DXGI_FORMAT format,
-                                                        const D3D12DescriptorTable* descriptor_table,
-                                                        const UINT descriptor_index) const
+                                                        const D3D12Descriptor& descriptor) const
 {
-    assert(texture);
-    assert(descriptor_table);
-
     D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
-    descriptor_table->heap->get_cpu_descriptor(&cpu_handle,
-                                               descriptor_table->offset + descriptor_index);
+    descriptor.heap->get_cpu_descriptor(&cpu_handle, descriptor.offset);
 
     D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc{
         .Format = format,
@@ -948,8 +1028,20 @@ void D3D12Context::create_unordered_access_view_texture(const D3D12Texture* text
         },
     };
 
-    m_device->CreateUnorderedAccessView(texture->allocation->GetResource(), nullptr, &uav_desc,
+    m_device->CreateUnorderedAccessView(texture.allocation->GetResource(), nullptr, &uav_desc,
                                         cpu_handle);
+}
+
+void D3D12Context::copy_descriptors(const D3D12Descriptor& dest_start,
+                                    const D3D12Descriptor& src_start, UINT count) const
+{
+    D3D12_CPU_DESCRIPTOR_HANDLE dest_handle;
+    dest_start.heap->get_cpu_descriptor(&dest_handle, dest_start.offset);
+
+    D3D12_CPU_DESCRIPTOR_HANDLE src_handle;
+    src_start.heap->get_cpu_descriptor(&src_handle, src_start.offset);
+
+    m_device->CopyDescriptorsSimple(count, dest_handle, src_handle, dest_start.heap->desc.Type);
 }
 
 bool D3D12Context::create_root_signature(const D3D12_ROOT_SIGNATURE_DESC& desc,
@@ -1239,7 +1331,7 @@ D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC D3D12Context::get_buffer_rt_description
 {
     assert(vertex_buffer);
     assert(vertex_buffer->desc.visibility & GPU);
-    const auto count = vertex_buffer->desc.size / vertex_buffer->desc.stride;
+    const UINT64 count = vertex_buffer->desc.size / vertex_buffer->desc.stride;
     assert(!u64_overflows_u32(count));
 
     DXGI_FORMAT index_format = DXGI_FORMAT_UNKNOWN;
@@ -1257,7 +1349,7 @@ D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC D3D12Context::get_buffer_rt_description
             index_format = DXGI_FORMAT_R32_UINT;
         }
         const auto idx_count = index_buffer->desc.size / index_buffer->desc.stride;
-        assert(!u64_overflows_u32(idx_count) && "Index count must fit in 32 bits");
+        assert(!u64_overflows_u32(idx_count));
         index_count = static_cast<UINT>(idx_count);
     }
 
@@ -1286,8 +1378,8 @@ D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC D3D12Context::get_buffer_rt_description
     const auto count = vertex_buffer->desc.size / vertex_buffer->desc.stride;
     assert(!u64_overflows_u32(count));
 
-    auto vb_base = vertex_buffer->allocation.Get()->GetResource()->GetGPUVirtualAddress();
-    auto vb_start = vb_base + UINT64(vertex_offset) * vertex_buffer->desc.stride;
+    const auto vb_base = vertex_buffer->allocation.Get()->GetResource()->GetGPUVirtualAddress();
+    const auto vb_start = vb_base + static_cast<UINT64>(vertex_offset) * vertex_buffer->desc.stride;
 
     DXGI_FORMAT index_format = DXGI_FORMAT_UNKNOWN;
     UINT64 ib_start = 0;
@@ -1304,7 +1396,7 @@ D3D12_RAYTRACING_GEOMETRY_TRIANGLES_DESC D3D12Context::get_buffer_rt_description
             index_format = DXGI_FORMAT_R32_UINT;
         }
         const auto idx_count = index_buffer->desc.size / index_buffer->desc.stride;
-        assert(!u64_overflows_u32(idx_count) && "Index count must fit in 32 bits");
+        assert(!u64_overflows_u32(idx_count));
 
         const auto ib_base = index_buffer->allocation.Get()->GetResource()->GetGPUVirtualAddress();
         ib_start = ib_base + static_cast<UINT64>(index_offset) * index_buffer->desc.stride;
@@ -1369,7 +1461,9 @@ void D3D12Context::emit_barriers(ID3D12GraphicsCommandList7* cmd_list, D3D12Buff
     assert(buffers || textures);
     const size_t total_count = buffer_count + texture_count;
 
-    std::array<Resource*, 16> resources{};
+    // TODO: Reduce size if possible
+    // Should the program be forced to emit multiple barrier groups instead?
+    std::array<Resource*, 64> resources{};
     assert(total_count <= resources.size());
 
     auto b_ptr = buffers;
@@ -1441,8 +1535,8 @@ bool D3D12Context::init_imgui()
 
     D3D12_DESCRIPTOR_HEAP_DESC heap_desc{
         .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-        .NumDescriptors
-        = Application::m_frames_in_flight,  // This should match swapchain buffer count
+        // This should match swapchain buffer count
+        .NumDescriptors = Application::m_frames_in_flight,
         .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
     };
 
@@ -1451,7 +1545,7 @@ bool D3D12Context::init_imgui()
         return false;
     }
 
-    if (!m_imgui_srv_heap.allocate(1, &m_imgui_font_desc))
+    if (!m_imgui_srv_heap.allocate(&m_imgui_font_desc))
     {
         OutputDebugStringA("ImGui ERROR: Failed to allocate descriptor for font texture\n");
         return false;

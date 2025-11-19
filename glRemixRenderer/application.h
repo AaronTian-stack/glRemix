@@ -19,7 +19,7 @@ public:
 protected:
     dx::D3D12Context m_context;
     dx::D3D12DescriptorHeap m_rtv_heap;
-    dx::D3D12DescriptorTable m_swapchain_descriptors{};
+    std::array<dx::D3D12Descriptor, m_frames_in_flight> m_swapchain_descriptors{};
     D3D12Queue m_gfx_queue;  // Direct command queue
 
     dx::D3D12Fence m_fence_frame_ready{};

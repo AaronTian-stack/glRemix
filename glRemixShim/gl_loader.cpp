@@ -35,6 +35,7 @@ void initialize()
         }
         g_recorder.start_frame();
 
+#ifdef GLREMIX_AUTO_LAUNCH_RENDERER
         // Start the renderer as a subprocess
         // Get the DLL path then expect to find "glRemix_renderer.exe" alongside it
         std::array<char, MAX_PATH> dll_path{};
@@ -72,6 +73,7 @@ void initialize()
                 // TODO: Treat as critical error?
             }
         }
+#endif
     };
 
     std::call_once(g_initialize_flag, initialize_once_fn);

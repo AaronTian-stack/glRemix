@@ -273,8 +273,10 @@ bool mark_use(Resource& resource, const Usage usage)
 void emit_barriers(ID3D12GraphicsCommandList7* command_list, Resource* const* resources,
                    const size_t resource_count, std::vector<BarrierLogEvent>* debug_log)
 {
-    constexpr size_t max_texture_barriers = 8;
-    constexpr size_t max_buffer_barriers = 8;
+    // TODO: This is 8kb and probably should be reduced
+    // If all the meshes are suddenly sent in one frame this will overflow
+    constexpr size_t max_texture_barriers = 64;
+    constexpr size_t max_buffer_barriers = 64;
     constexpr size_t max_barrier_groups = 2;
 
     D3D12_TEXTURE_BARRIER texture_barriers[max_texture_barriers]{};
