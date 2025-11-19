@@ -66,7 +66,7 @@ void glRemix::dx::DescriptorPager::free_descriptor(const PageType type, D3D12Des
         // Check if descriptor belongs to this page
         if (descriptor->heap == &page)
         {
-            m_dirty_index = type;
+            m_dirty_index = std::min(type, m_dirty_index);
             page.deallocate(descriptor);
             return;
         }
