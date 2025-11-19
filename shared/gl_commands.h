@@ -66,7 +66,7 @@ enum class GLMaterial : UINT32
 
 enum class GLCommandType : UINT32
 {
-    // Basic OpenGL 1.x commands
+    // Core Immediate Mode
     GLCMD_BEGIN = 1,
     GLCMD_END,
     GLCMD_VERTEX2F,
@@ -76,7 +76,22 @@ enum class GLCommandType : UINT32
     GLCMD_NORMAL3F,
     GLCMD_TEXCOORD2F,
 
-    // Matrix operations
+    // Display Lists
+    GLCMD_CALL_LIST,
+    GLCMD_NEW_LIST,
+    GLCMD_END_LIST,
+
+    // Client State
+    GLCMD_ENABLE_CLIENT_STATE,
+    GLCMD_DISABLE_CLIENT_STATE,
+    GLCMD_VERTEX_POINTER,
+    GLCMD_NORMAL_POINTER,
+    GLCMD_TEXCOORD_POINTER,
+    GLCMD_COLOR_POINTER,
+    GLCMD_DRAW_ARRAYS, // within fixed-function scope
+    GLCMD_DRAW_ELEMENTS, // within fixed-function scope
+
+    // Matrix Operations
     GLCMD_MATRIX_MODE,
     GLCMD_LOAD_IDENTITY,
     GLCMD_LOAD_MATRIX,
@@ -86,51 +101,54 @@ enum class GLCommandType : UINT32
     GLCMD_TRANSLATE,
     GLCMD_ROTATE,
     GLCMD_SCALE,
-
-    // Texture operations
-    GLCMD_BIND_TEXTURE,
-    GLCMD_GEN_TEXTURES,
-    GLCMD_DELETE_TEXTURES,
-    GLCMD_TEX_IMAGE_2D,
-    GLCMD_TEX_PARAMETER,
-
-    // Lighting
-    GLCMD_ENABLE,
-    GLCMD_DISABLE,
-    GLCMD_LIGHT,
-    GLCMD_LIGHTF,
-    GLCMD_LIGHTFV,
-    GLCMD_MATERIAL,
-    GLCMD_MATERIALF,
-    GLCMD_MATERIALFV,
-
-    // Buffer operations
-    GLCMD_CLEAR,
-    GLCMD_CLEAR_COLOR,
-    GLCMD_FLUSH,
-    GLCMD_FINISH,
-
-    // Viewport and projection
     GLCMD_VIEWPORT,
     GLCMD_ORTHO,
     GLCMD_FRUSTUM,
     GLCMD_PERSPECTIVE,
 
+    // Rendering
+    GLCMD_CLEAR,
+    GLCMD_CLEAR_COLOR,
+    GLCMD_FLUSH,
+    GLCMD_FINISH,
+    GLCMD_BIND_TEXTURE,
+    GLCMD_GEN_TEXTURES,
+    GLCMD_DELETE_TEXTURES,
+    GLCMD_TEX_IMAGE_2D,
+    GLCMD_TEX_PARAMETER,
+    GLCMD_TEX_ENV_I,
+    GLCMD_TEX_ENV_F,
+
+    // Fixed Function
+    GLCMD_LIGHT,
+    GLCMD_LIGHTF,
+    GLCMD_LIGHTFV,
+    GLCMD_MATERIAL,
+    GLCMD_MATERIALI,
+    GLCMD_MATERIALF,
+    GLCMD_MATERIALIV,
+    GLCMD_MATERIALFV,
+    GLCMD_ALPHA_FUNC,
+
+    // State Management
+    GLCMD_ENABLE,
+    GLCMD_DISABLE,
+    GLCMD_COLOR_MASK,
+    GLCMD_DEPTH_MASK,
+    GLCMD_BLEND_FUNC,
+    GLCMD_POINT_SIZE,
+    GLCMD_POLYGON_OFFSET,
+    GLCMD_CULL_FACE,
+    GLCMD_STENCIL_MASK,
+    GLCMD_STENCIL_FUNC,
+    GLCMD_STENCIL_OP,
+    GLCMD_STENCIL_OP_SEPARATE_ATI,
+
     // Other
-    GLCMD_CREATE,
-    GLCMD_SHUTDOWN,
-
-    // Display Lists
-    GLCMD_CALL_LIST,
-    GLCMD_NEW_LIST,
-    GLCMD_END_LIST,
-
-    // Data Pointers
-    GLCMD_VERTEX_POINTER,
-
-    GLCMD_DRAW_ARRAYS,
+    WGLCMD_CREATE_CONTEXT, // wglCreateContext needs IPC
 };
 
+// Component Structs
 struct GLVec2f
 {
     float x, y;
@@ -161,7 +179,7 @@ struct GLEmptyCommand
     UINT32 reserved = 0;  // to maintain alignment. think of as padding GPUBuffers
 };
 
-// Name *Unifs for clear association
+// Named *Unifs for clear association
 // Header for all commands
 struct GLCommandUnifs
 {
@@ -169,19 +187,13 @@ struct GLCommandUnifs
     UINT32 dataSize;
 };
 
-struct GLCreateCommand
-{
-    HWND hwnd;  // NOTE: 32-bit in x86 shim, 64-bit in x64 shim
-};
-
-// Specific command structures
+/* CORE IMMEDIATE MODE */
 struct GLBeginCommand
 {
     UINT32 mode;  // GL_TRIANGLES, GL_QUADS, etc.
 };
 
 using GLEndCommand = GLEmptyCommand;
-
 using GLVertex2fCommand = GLVec2f;
 using GLVertex3fCommand = GLVec3f;
 using GLColor3fCommand = GLVec3f;
@@ -189,7 +201,73 @@ using GLColor4fCommand = GLVec4f;
 using GLNormal3fCommand = GLVec3f;
 using GLTexCoord2fCommand = GLVec2f;
 
-// Matrix operations
+/* DISPLAY LISTS */
+struct GLCallListCommand
+{
+    UINT32 list;
+};
+
+struct GLNewListCommand
+{
+    UINT32 list;
+    UINT32 mode;  // enum GL_COMPILE or GL_COMPILE_AND_EXECUTE
+};
+
+using GLEndListCommand = GLEmptyCommand;
+
+/* CLIENT STATE */
+struct GLEnableClientStateCommand
+{
+    UINT32 array;
+};
+
+struct GLDisableClientStateCommand
+{
+    UINT32 array;
+};
+
+struct GLVertexPointerCommand
+{
+    UINT32 size;
+    UINT32 type;
+    UINT32 stride;
+};
+
+struct GLNormalPointerCommand
+{
+    UINT32 type;
+    UINT32 stride;
+};
+
+struct GLTexCoordPointerCommand
+{
+    UINT32 size;
+    UINT32 type;
+    UINT32 stride;
+};
+
+struct GLColorPointerCommand
+{
+    UINT32 size;
+    UINT32 type;
+    UINT32 stride;
+};
+
+struct GLDrawArraysCommand
+{
+    UINT32 mode;
+    UINT32 first;
+    UINT32 count;
+};
+
+struct GLDrawElementsCommand
+{
+    UINT32 mode;
+    UINT32 count;
+    UINT32 type;
+};
+
+/* MATRIX OPERATIONS */
 struct GLMatrixModeCommand
 {
     UINT32 mode;
@@ -225,7 +303,40 @@ struct GLScaleCommand
     GLVec3f s;
 };
 
-// Texture operations
+struct GLViewportCommand
+{
+    int32_t x, y, width, height;
+};
+
+struct GLOrthoCommand
+{
+    double left, right, bottom, top, zNear, zFar;
+};
+
+struct GLFrustumCommand
+{
+    double left, right, bottom, top, zNear, zFar;
+};
+
+struct GLPerspectiveCommand
+{
+    double fovY, aspect, zNear, zFar;
+};
+
+/* RENDERING */
+struct GLClearCommand
+{
+    UINT32 mask;
+};
+
+struct GLClearColorCommand
+{
+    GLVec4f color;
+};
+
+using GLFlushCommand = GLEmptyCommand;
+using GLFinishCommand = GLEmptyCommand;
+
 struct GLBindTextureCommand
 {
     UINT32 target;
@@ -261,17 +372,21 @@ struct GLTexParameterCommand
     float param;
 };
 
-// Lighting
-struct GLEnableCommand
+struct GLTexEnviCommand
 {
-    UINT32 cap;
+    UINT32 target;
+    UINT32 pname;
+    UINT32 param;
 };
 
-struct GLDisableCommand
+struct GLTexEnvfCommand
 {
-    UINT32 cap;
+    UINT32 target;
+    UINT32 pname;
+    float param;
 };
 
+/* FIXED FUNCTION */
 struct GLLightCommand
 {
     UINT32 light;
@@ -293,6 +408,27 @@ struct GLMaterialCommand
     float param;
 };
 
+struct GLMaterialiCommand
+{
+    UINT32 face;
+    UINT32 pname;
+    int param;
+};
+
+struct GLMaterialfCommand
+{
+    UINT32 face;
+    UINT32 pname;
+    float param;
+};
+
+struct GLMaterialivCommand
+{
+    UINT32 face;
+    UINT32 pname;
+    GLVec4f params;
+};
+
 struct GLMaterialfvCommand
 {
     UINT32 face;
@@ -300,70 +436,84 @@ struct GLMaterialfvCommand
     GLVec4f params;
 };
 
-// Buffer ops
-struct GLClearCommand
+struct GLAlphaFuncCommand
+{
+    UINT32 func;
+    float ref;
+};
+
+/* STATE MANAGEMENT */
+struct GLEnableCommand
+{
+    UINT32 cap;
+};
+
+struct GLDisableCommand
+{
+    UINT32 cap;
+};
+
+struct GLColorMaskCommand
+{
+    UINT8 r, g, b, a;
+};
+
+struct GLDepthMaskCommand
+{
+    UINT8 flag;
+};
+
+struct GLBlendFuncCommand
+{
+    UINT32 sfactor;
+    UINT32 dfactor;
+};
+
+struct GLPointSizeCommand
+{
+    float size;
+};
+
+struct GLPolygonOffsetCommand
+{
+    float factor;
+    float units;
+};
+
+struct GLCullFaceCommand
+{
+    UINT32 mode;
+};
+
+struct GLStencilMaskCommand
 {
     UINT32 mask;
 };
 
-struct GLClearColorCommand
+struct GLStencilFuncCommand
 {
-    GLVec4f color;
+    UINT32 func;
+    INT32 ref;
+    UINT32 mask;
 };
 
-using GLFlushCommand = GLEmptyCommand;
-using GLFinishCommand = GLEmptyCommand;
-
-// Viewport & projection
-struct GLViewportCommand
+struct GLStencilOpCommand
 {
-    int32_t x, y, width, height;
+    UINT32 sfail;
+    UINT32 dpfail;
+    UINT32 dppass;
 };
 
-struct GLOrthoCommand
+struct GLStencilOpSeparateATICommand
 {
-    double left, right, bottom, top, zNear, zFar;
+    UINT32 face;
+    UINT32 sfail;
+    UINT32 dpfail;
+    UINT32 dppass;
 };
 
-struct GLFrustumCommand
+struct WGLCreateContextCommand
 {
-    double left, right, bottom, top, zNear, zFar;
-};
-
-struct GLPerspectiveCommand
-{
-    double fovY, aspect, zNear, zFar;
-};
-
-// Other
-using GLShutdownCommand = GLEmptyCommand;
-
-// Display Lists
-struct GLCallListCommand
-{
-    UINT32 list;
-};
-
-struct GLNewListCommand
-{
-    UINT32 list;
-    UINT32 mode;  // enum GL_COMPILE or GL_COMPILE_AND_EXECUTE
-};
-
-using GLEndListCommand = GLEmptyCommand;
-
-// Data Pointers
-struct GLVertexPointerCommand
-{
-    UINT32 size;
-    UINT32 type;
-    UINT32 stride;
-};
-
-struct GLDrawArraysCommand
-{
-    UINT32 mode;
-    UINT32 first;
-    UINT32 count;
+    HWND hwnd;  // NOTE: 32-bit in x86 shim, 64-bit in x64 shim
 };
 }  // namespace glRemix

@@ -339,7 +339,7 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer, size_
 
         switch (header->type)
         {
-            case GLCommandType::GLCMD_CREATE:
+            case GLCommandType::WGLCMD_CREATE_CONTEXT:
             {
                 HWND hwnd;
 

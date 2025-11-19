@@ -296,13 +296,6 @@ void APIENTRY gl_frustum_ovr(GLdouble left, GLdouble right, GLdouble bottom, GLd
     g_ipc.write_command(GLCommandType::GLCMD_FRUSTUM, payload);
 }
 
-/* Other */
-void APIENTRY gl_shutdown_ovr()
-{
-    GLShutdownCommand payload{};
-    g_ipc.write_command(GLCommandType::GLCMD_SHUTDOWN, payload);
-}
-
 /* Display Lists */
 void APIENTRY gl_call_list_ovr(GLuint list)
 {
@@ -407,9 +400,9 @@ HGLRC WINAPI create_context_ovr(HDC dc)
     HWND hwnd = WindowFromDC(dc);
     assert(hwnd);
 
-    GLCreateCommand payload{ hwnd };
+    WGLCreateContextCommand payload{ hwnd };
 
-    g_ipc.write_command(GLCommandType::GLCMD_CREATE, payload);
+    g_ipc.write_command(GLCommandType::WGLCMD_CREATE_CONTEXT, payload);
 
     return reinterpret_cast<HGLRC>(static_cast<UINT_PTR>(0xDEADBEEF));  // Dummy context handle
 }
