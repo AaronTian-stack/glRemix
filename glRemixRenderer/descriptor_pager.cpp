@@ -84,7 +84,7 @@ void glRemix::dx::DescriptorPager::copy_pages_to_gpu(const D3D12Context& context
 
 #ifdef _DEBUG
     {
-        // Assert that gpu heap can hold all the descriptors to be copied
+        // Assert that GPU heap can hold all the descriptors to be copied
         UINT total_descriptors = 0;
         for (UINT8 type = 0; type < END; type++)
         {

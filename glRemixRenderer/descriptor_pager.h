@@ -11,13 +11,10 @@ class DescriptorPager
 {
 public:
     // Try to arrange in order of frequency of new page allocations (least to most)
-    // This does not include double buffered resources or TLAS
     enum PageType : UINT8
     {
-        // Could technically be allocated in slab fashion but there needs to be a second index
         MATERIALS,
 
-        // Grow as app runs, maybe shrink in the future too
         VB_IB,
         TEXTURES,
         MESH_RECORDS,
