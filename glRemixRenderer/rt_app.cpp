@@ -128,10 +128,10 @@ void glRemix::glRemixRenderer::create()
             .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND
         };
 
-        // Constant buffer at b0
+        // Constant buffers at b0 and b1
         descriptor_ranges[2] = {
             .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV,
-            .NumDescriptors = 1,
+            .NumDescriptors = 2, // now binds raygen at b0 and lights at b1
             .BaseShaderRegister = 0,
             .RegisterSpace = 0,
             .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND
@@ -313,14 +313,17 @@ void glRemix::glRemixRenderer::create()
                                               m_raygen_cbv_descriptors[i]);
     }
 
-    dx::BufferDesc light_desc{ .size = sizeof(Light) * m_lights.size(),
-                               .stride = sizeof(Light),
+    dx::BufferDesc light_desc{ .size = align_u32(sizeof(Light) * m_lights.size(), CB_ALIGNMENT),
+                               .stride = align_u32(sizeof(Light) * m_lights.size(), CB_ALIGNMENT),
                                .visibility = dx::CPU | dx::GPU };
     for (UINT i = 0; i < m_frames_in_flight; i++)
     {
         THROW_IF_FALSE(
             m_context.create_buffer(light_desc, &m_light_buffer[i].buffer, "light buffer"));
-        // TODO: Create descriptors
+        THROW_IF_FALSE(m_CPU_descriptor_heap.allocate(
+            &m_light_buffer[i].descriptor));  // allocate on the cpu heap
+        m_context.create_constant_buffer_view(&m_light_buffer[i].buffer,
+                                              m_light_buffer[i].descriptor);
     }
 
     // TODO: Allocate in slab fashion like materials
@@ -557,8 +560,18 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
                 const auto* light = reinterpret_cast<const GLLightCommand*>(
                     ipc_buf.data() + offset);  // reach into data payload
 
-                // TODO: when light f is encountered, edit the corresponding index in m_lights based
-                // on the param and value
+                uint32_t light_index = static_cast<uint32_t>(light->light) - static_cast<uint32_t>(GLLight::GL_LIGHT0);
+                Light& m_light = m_lights[light_index];
+
+                switch (static_cast<GLLight>(light->pname))
+                {
+                    case GLLight::GL_SPOT_EXPONENT: m_light.spot_exponent = light->param; break;
+                    case GLLight::GL_SPOT_CUTOFF: m_light.spot_cutoff = light->param; break;
+                    case GLLight::GL_CONSTANT_ATTENUATION: m_light.constant_attenuation = light->param; break;
+                    case GLLight::GL_LINEAR_ATTENUATION: m_light.linear_attenuation = light->param; break;
+                    case GLLight::GL_QUADRATIC_ATTENUATION: m_light.quadratic_attenuation = light->param; break;
+                    default: break;
+                }
 
                 break;
             }
@@ -567,8 +580,25 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
                 const auto* light = reinterpret_cast<const GLLightfvCommand*>(
                     ipc_buf.data() + offset);  // reach into data payload
 
-                // TODO: when light fv is encountered, edit the corresponding index in m_lights
-                // based on the param and value
+                uint32_t light_index = static_cast<uint32_t>(light->light)
+                                       - static_cast<uint32_t>(GLLight::GL_LIGHT0);
+                Light& m_light = m_lights[light_index];
+
+                auto set_xmfloat4 = [&](const GLVec4f& v)
+                { return XMFLOAT4{ v.x, v.y, v.z, v.w }; };
+
+                auto set_xmfloat3 = [&](const GLVec4f& v)
+                { return XMFLOAT3{ v.x, v.y, v.z }; };
+
+                switch (static_cast<GLLight>(light->pname))
+                {
+                    case GLLight::GL_POSITION: m_light.position = set_xmfloat4(light->params); break;
+                    case GLLight::GL_AMBIENT: m_light.ambient = set_xmfloat4(light->params); break;
+                    case GLLight::GL_DIFFUSE: m_light.diffuse = set_xmfloat4(light->params); break;
+                    case GLLight::GL_SPECULAR: m_light.specular = set_xmfloat4(light->params); break;
+                    case GLLight::GL_SPOT_DIRECTION: m_light.spot_direction = set_xmfloat3(light->params); break;
+                    default: break;
+                }
 
                 break;
             }
@@ -1295,8 +1325,8 @@ void glRemix::glRemixRenderer::render()
     // Build all pending buffers from geometry collected in read_gl_command_stream
     create_pending_buffers(cmd_list.Get());
 
-    // Currently reserve TLAS, 1 UAV RT, 1 CBV, and (for now) 1 MeshRecord buffer per frame
-    constexpr auto reserved_descriptor_offset = 4;
+    // Currently reserve TLAS, 1 UAV RT, 2 CBV, and (for now) 1 MeshRecord buffer per frame
+    constexpr auto reserved_descriptor_offset = 5;
     // Update mesh records vector with global indices based off current paging status
     // This is done in place on the per frame vector of MeshRecords
     static std::vector<GPUMeshRecord> gpu_mesh_records_to_copy;
@@ -1395,9 +1425,12 @@ void glRemix::glRemixRenderer::render()
         // UAV RT
         ++gpu_heap.offset;
         m_context.copy_descriptors(gpu_heap, m_uav_rt_descriptor, 1);
-        // Current CBV
+        // Raygen CBV
         ++gpu_heap.offset;
         m_context.copy_descriptors(gpu_heap, m_raygen_cbv_descriptors[get_frame_index()], 1);
+        // Light CBV
+        ++gpu_heap.offset;
+        m_context.copy_descriptors(gpu_heap, m_light_buffer[get_frame_index()].descriptor, 1);
         // MeshRecord(s)
         // TODO: Copy multiple MeshRecord buffer descriptors if needed
         ++gpu_heap.offset;
@@ -1408,7 +1441,7 @@ void glRemix::glRemixRenderer::render()
         // RT is compute
         cmd_list->SetComputeRootDescriptorTable(0, descriptor_table_handle);
 
-        m_GPU_descriptor_heap.get_gpu_descriptor(&descriptor_table_handle, 3);
+        m_GPU_descriptor_heap.get_gpu_descriptor(&descriptor_table_handle, 4);
         cmd_list->SetComputeRootDescriptorTable(1, descriptor_table_handle);
 
         D3D12_GPU_VIRTUAL_ADDRESS shader_table_base_address = m_shader_table.get_gpu_address();

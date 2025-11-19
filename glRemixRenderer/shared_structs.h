@@ -34,6 +34,9 @@ struct Light
     float constant_attenuation;
     float linear_attenuation;
     float quadratic_attenuation;
+
+    // TODO pad or make GPULight
+    float _pad;
 };
 
 struct Material
