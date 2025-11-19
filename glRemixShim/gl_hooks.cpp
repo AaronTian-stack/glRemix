@@ -152,7 +152,7 @@ void APIENTRY gl_vertex_pointer_ovr(GLint size, GLenum type, GLsizei stride, con
 {
     GLVertexPointerCommand payload{ static_cast<UINT32>(size), type, static_cast<UINT32>(stride) };
 
-    UINT32 bytes = utils::ComputeClientArraySize(-1, size, type, stride);  // TODO
+    UINT32 bytes = utils::ComputeClientArraySize(4, size, type, stride);  // TODO
 
     g_ipc.write_command(GLCommandType::GLCMD_VERTEX_POINTER, payload, pointer != nullptr, pointer,
                         bytes);
@@ -162,7 +162,7 @@ void APIENTRY gl_normal_pointer_ovr(GLenum type, GLsizei stride, const void* poi
 {
     GLNormalPointerCommand payload{ type, static_cast<UINT32>(stride) };
 
-    UINT32 bytes = utils::ComputeClientArraySize(-1, 3, type, stride);
+    UINT32 bytes = utils::ComputeClientArraySize(4, 3, type, stride);
 
     g_ipc.write_command(GLCommandType::GLCMD_NORMAL_POINTER, payload, pointer != nullptr, pointer,
                         bytes);
@@ -172,7 +172,7 @@ void APIENTRY gl_tex_coord_pointer_ovr(GLint size, GLenum type, GLsizei stride, 
 {
     GLTexCoordPointerCommand payload{ static_cast<UINT32>(size), type, static_cast<UINT32>(stride) };
 
-    UINT32 bytes = utils::ComputeClientArraySize(-1, size, type, stride);
+    UINT32 bytes = utils::ComputeClientArraySize(4, size, type, stride);
 
     g_ipc.write_command(GLCommandType::GLCMD_TEXCOORD_POINTER, payload, pointer != nullptr, pointer,
                         bytes);
@@ -182,7 +182,7 @@ void APIENTRY gl_color_pointer_ovr(GLint size, GLenum type, GLsizei stride, cons
 {
     GLColorPointerCommand payload{ static_cast<UINT32>(size), type, static_cast<UINT32>(stride) };
 
-    UINT32 bytes = utils::ComputeClientArraySize(-1, size, type, stride);
+    UINT32 bytes = utils::ComputeClientArraySize(4, size, type, stride);
 
     g_ipc.write_command(GLCommandType::GLCMD_COLOR_POINTER, payload, pointer != nullptr, pointer,
                         bytes);

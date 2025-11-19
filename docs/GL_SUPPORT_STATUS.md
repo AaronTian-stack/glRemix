@@ -1,90 +1,92 @@
-# CORE IMMEDIATE MODE
-glBegin
-glEnd
-glVertex2f
-glVertex3f
-glColor3f
-glColor4f
-glNormal3f
-glTexCoord2f
+# Status of Supported OpenGL Command Overrides
 
-# DISPLAY LISTS
-glCallList
-glNewList
-glEndList
-glGenLists
+## CORE IMMEDIATE MODE
+- glBegin
+- glEnd
+- glVertex2f
+- glVertex3f
+- glColor3f
+- glColor4f
+- glNormal3f
+- glTexCoord2f
 
-# CLIENT STATE
-**glEnableClientState**
-**glDisableClientState**
-**glVertexPointer**
-**glNormalPointer**
-**glTexCoordPointer**
-**glColorPointer**
-**glDrawArrays**
-**glDrawElements**
+## DISPLAY LISTS
+- glCallList
+- glNewList
+- glEndList
+- glGenLists
 
-# MATRIX OPERATIONS
-glMatrixMode
-glLoadIdentity
-glLoadMatrixf
-glMultMatrixf
-glPushMatrix
-glPopMatrix
-glTranslatef
-glRotatef
-glScalef
-glViewport
-glOrtho
-glFrustum
-gluPerspective
+## CLIENT STATE
+- **glEnableClientState**
+- **glDisableClientState**
+- **glVertexPointer**
+- **glNormalPointer**
+- **glTexCoordPointer**
+- **glColorPointer**
+- **glDrawArrays**
+- **glDrawElements**
 
-# RENDERING
-glClear
-glClearColor
-glFlush
-glFinish
-glBindTexture
-glGenTextures
-glDeleteTextures
-glTexImage2D
-glTexParameterf
-**glTexEnvi**
-**glTexEnvf**
+## MATRIX OPERATIONS
+- glMatrixMode
+- glLoadIdentity
+- glLoadMatrixf
+- glMultMatrixf
+- glPushMatrix
+- glPopMatrix
+- glTranslatef
+- glRotatef
+- glScalef
+- glViewport
+- glOrtho
+- glFrustum
+- gluPerspective
 
-# FIXED FUNCTION
-glLightf
-glLightfv
-**glMateriali**
-glMaterialf
-**glMaterialiv**
-glMaterialfv
-**glAlphaFunc**
+## RENDERING
+- glClear
+- glClearColor
+- glFlush
+- glFinish
+- glBindTexture
+- glGenTextures
+- glDeleteTextures
+- glTexImage2D
+- glTexParameterf
+- **glTexEnvi**
+- **glTexEnvf**
 
-# STATE MANAGEMENT
-glEnable
-glDisable
-**glColorMask**
-**glDepthMask**
-**glBlendFunc**
-**glPointSize**
-**glPolygonOffset**
-**glCullFace**
-**glStencilMask**
-**glStencilFunc**
-**glStencilOp**
-**glStencilOpSeparateATI**
+## FIXED FUNCTION
+- glLightf
+- glLightfv
+- **glMateriali**
+- glMaterialf
+- **glMaterialiv**
+- glMaterialfv
+- **glAlphaFunc**
 
-# WGL / CONTEXT
-wglChoosePixelFormat
-wglDescribePixelFormat
-wglGetPixelFormat
-wglSetPixelFormat
-wglSwapBuffers
-wglCreateContext
-wglDeleteContext
-wglGetCurrentContext
-wglGetCurrentDC
-wglMakeCurrent
-wglShareLists
-wglSwapIntervalEXT
+## STATE MANAGEMENT
+- glEnable
+- glDisable
+- **glColorMask**
+- **glDepthMask**
+- **glBlendFunc**
+- **glPointSize**
+- **glPolygonOffset**
+- **glCullFace**
+- **glStencilMask**
+- **glStencilFunc**
+- **glStencilOp**
+- **glStencilOpSeparateATI**
+
+## WGL
+- wglChoosePixelFormat
+- wglDescribePixelFormat
+- wglGetPixelFormat
+- wglSetPixelFormat
+- wglSwapBuffers
+- wglCreateContext
+- wglDeleteContext
+- wglGetCurrentContext
+- wglGetCurrentDC
+- wglMakeCurrent
+- wglShareLists
+- wglSwapIntervalEXT
