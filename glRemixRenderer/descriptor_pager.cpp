@@ -66,7 +66,7 @@ void glRemix::dx::DescriptorPager::free_descriptor(const PageType type, D3D12Des
         // Check if descriptor belongs to this page
         if (descriptor->heap == &page)
         {
-            m_dirty_index = type;
+            m_dirty_index = std::min(type, m_dirty_index);
             page.deallocate(descriptor);
             return;
         }
@@ -84,7 +84,7 @@ void glRemix::dx::DescriptorPager::copy_pages_to_gpu(const D3D12Context& context
 
 #ifdef _DEBUG
     {
-        // Assert that gpu heap can hold all the descriptors to be copied
+        // Assert that GPU heap can hold all the descriptors to be copied
         UINT total_descriptors = 0;
         for (UINT8 type = 0; type < END; type++)
         {

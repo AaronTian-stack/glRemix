@@ -88,6 +88,15 @@ bool D3D12Context::create(const bool enable_debug_layer)
                                        "DXGI Factory");
     }
 
+    BOOL allow_tearing = FALSE;
+    m_dxgi_factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allow_tearing,
+                                        sizeof(BOOL));
+    if (!allow_tearing)
+    {
+        OutputDebugStringA("D3D12 ERROR: Present tearing not supported\n");
+        return false;
+    }
+
     // Pick discrete GPU
     ComPtr<IDXGIAdapter1> adapter;
     if (FAILED(m_dxgi_factory->EnumAdapterByGpuPreference(0,  // Adapter index
