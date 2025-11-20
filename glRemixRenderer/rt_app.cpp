@@ -1390,20 +1390,16 @@ void glRemix::glRemixRenderer::render()
 
     // Dispatch rays to UAV render target
     {
-        XMMATRIX view = XMMatrixIdentity();
-
         XMMATRIX proj = XMLoadFloat4x4(&m_matrix_stack.top(gl::GLMatrixMode::PROJECTION));
 
-        XMMATRIX view_proj = XMMatrixMultiply(view, proj);
-
-        XMMATRIX inverse_view_projection = XMMatrixInverse(nullptr, view_proj);
+        XMMATRIX inv_proj = XMMatrixInverse(nullptr, proj);
 
         RayGenConstantBuffer raygen_cb{
             .width = static_cast<float>(win_dims.x),
             .height = static_cast<float>(win_dims.y),
         };
-        XMStoreFloat4x4(&raygen_cb.view_proj, XMMatrixTranspose(view_proj));
-        XMStoreFloat4x4(&raygen_cb.inv_view_proj, XMMatrixTranspose(inverse_view_projection));
+        XMStoreFloat4x4(&raygen_cb.view_proj, XMMatrixTranspose(proj));
+        XMStoreFloat4x4(&raygen_cb.inv_view_proj, XMMatrixTranspose(inv_proj));
 
         // Copy constant buffer to GPU
         auto raygen_cb_ptr = &m_raygen_constant_buffers[get_frame_index()];
