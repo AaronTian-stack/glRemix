@@ -34,6 +34,8 @@ struct Light
     float constant_attenuation;
     float linear_attenuation;
     float quadratic_attenuation;
+
+    BOOL enabled;
 };
 
 struct Material
