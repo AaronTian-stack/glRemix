@@ -68,6 +68,8 @@ if(GLREMIX_DEPLOY_DIR)
     endif()
 endif()
 
+option(GLREMIX_AUTO_LAUNCH_RENDERER "Automatically launch renderer process (disable when using graphics debuggers like PIX)" ON)
+
 if(NOT TARGET ${PROJECT_NAME})
     add_library(${PROJECT_NAME} SHARED
         ${GLREMIX_SHIM_SOURCE_FILES_REL}
@@ -96,6 +98,10 @@ if(NOT TARGET ${PROJECT_NAME})
         "${REPO_ROOT}/external/robin-map-1.4.0/include"
         "${REPO_ROOT}"
     )
+
+    if(GLREMIX_AUTO_LAUNCH_RENDERER)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE GLREMIX_AUTO_LAUNCH_RENDERER)
+    endif()
 endif()
 
 add_dependencies(${PROJECT_NAME} glremix_generate_gl_wrappers)

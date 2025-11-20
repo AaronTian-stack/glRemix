@@ -15,6 +15,29 @@
 
 #include "dx/d3d12_barrier.h"
 
+void glRemix::glRemixRenderer::create_material_buffer()
+{
+    std::array<BufferAndDescriptor, m_frames_in_flight> bds;
+    constexpr dx::BufferDesc desc{
+        .size = sizeof(Material) * MATERIALS_PER_BUFFER,
+        .stride = sizeof(Material),
+        .visibility = dx::CPU | dx::GPU,
+    };
+
+    for (auto& bd : bds)
+    {
+        m_context.create_buffer(desc, &bd.buffer, "material buffer");
+
+        bd.page_index = m_descriptor_pager.allocate_descriptor(m_context,
+                                                               dx::DescriptorPager::MATERIALS,
+                                                               &bd.descriptor);
+
+        m_context.create_shader_resource_view(bd.buffer, bd.descriptor);
+    }
+    // TODO: When this material is freed, free descriptor from pager
+    m_material_buffers.push_back(std::move(bds));
+}
+
 void glRemix::glRemixRenderer::create()
 {
     for (UINT i = 0; i < m_frames_in_flight; i++)
@@ -47,7 +70,7 @@ void glRemix::glRemixRenderer::create()
 
     // Get executable directory for shader paths
     wchar_t exe_path[MAX_PATH];
-    GetModuleFileNameW(NULL, exe_path, MAX_PATH);
+    GetModuleFileNameW(nullptr, exe_path, MAX_PATH);
     std::filesystem::path exe_dir = std::filesystem::path(exe_path).parent_path();
     std::filesystem::path shader_dir = exe_dir / "shaders";
 
@@ -71,8 +94,8 @@ void glRemix::glRemixRenderer::create()
 
     pipeline_desc.root_signature = m_root_signature.Get();
 
-    ComPtr<ID3D12ShaderReflection>
-        shader_reflection_interface;  // Needs to stay in scope until pipeline is created
+    // Needs to stay in scope until pipeline is created
+    ComPtr<ID3D12ShaderReflection> shader_reflection_interface;
     THROW_IF_FALSE(
         m_context.reflect_input_layout(vertex_shader.Get(), &pipeline_desc.input_layout, false,
                                        shader_reflection_interface.ReleaseAndGetAddressOf()));
@@ -93,42 +116,75 @@ void glRemix::glRemixRenderer::create()
     {
         std::array<D3D12_DESCRIPTOR_RANGE, 3> descriptor_ranges{};
 
-        // Acceleration structure (SRV) at t0
-        // t0: TLAS; t1: meshes; t2: materials; t3: lights
-        descriptor_ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-        descriptor_ranges[0].NumDescriptors = 1;  // 4 in the future
-        descriptor_ranges[0].BaseShaderRegister = 0;
-        descriptor_ranges[0].RegisterSpace = 0;
-        descriptor_ranges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+        // TLAS at t0
+        descriptor_ranges[0] = {
+            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+            .NumDescriptors = 1,
+            .BaseShaderRegister = 0,
+            .RegisterSpace = 0,
+            .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND
+        };
 
         // Output UAV at u0
-        descriptor_ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
-        descriptor_ranges[1].NumDescriptors = 1;
-        descriptor_ranges[1].BaseShaderRegister = 0;
-        descriptor_ranges[1].RegisterSpace = 0;
-        descriptor_ranges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+        descriptor_ranges[1] = {
+            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+            .NumDescriptors = 1,
+            .BaseShaderRegister = 0,
+            .RegisterSpace = 0,
+            .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND
+        };
 
-        // Constant buffer at b0
-        descriptor_ranges[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
-        descriptor_ranges[2].NumDescriptors = 1;
-        descriptor_ranges[2].BaseShaderRegister = 0;
-        descriptor_ranges[2].RegisterSpace = 0;
-        descriptor_ranges[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+        // Constant buffers at b0 and b1
+        descriptor_ranges[2] = {
+            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV,
+            .NumDescriptors = 2,  // now binds raygen at b0 and lights at b1
+            .BaseShaderRegister = 0,
+            .RegisterSpace = 0,
+            .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND
+        };
 
-        std::array<D3D12_ROOT_PARAMETER, 1> root_parameters{};
+        // Unbounded MeshRecords array
+        D3D12_DESCRIPTOR_RANGE mesh_record_range{
 
-        // Single table for everything
-        root_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-        root_parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-        root_parameters[0].DescriptorTable.NumDescriptorRanges = 3;
-        root_parameters[0].DescriptorTable.pDescriptorRanges = descriptor_ranges.data();
+            .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+            .NumDescriptors = 1,
+            .BaseShaderRegister = 1,  // t1
+            .RegisterSpace = 0,
+            .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
+        };
+
+        std::array<D3D12_ROOT_PARAMETER, 2> root_parameters{};
+
+        // Single table for everything except for MeshRecords
+        root_parameters[0] = 
+        {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+            .DescriptorTable = {
+                .NumDescriptorRanges = 3,
+                .pDescriptorRanges = descriptor_ranges.data(),
+            },
+            .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+        };
+
+        // Separate table to bind MeshRecords
+        root_parameters[1] = 
+        {
+            .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+            .DescriptorTable = {
+                .NumDescriptorRanges = 1,
+                .pDescriptorRanges = &mesh_record_range,
+            },
+            .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+        };
 
         D3D12_ROOT_SIGNATURE_DESC root_sig_desc{};
         root_sig_desc.NumParameters = static_cast<UINT>(root_parameters.size());
         root_sig_desc.pParameters = root_parameters.data();
         root_sig_desc.NumStaticSamplers = 0;
         root_sig_desc.pStaticSamplers = nullptr;
-        root_sig_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+        root_sig_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
+        // Add samplers if needed, note you have to bind a sampler heap when this flag is enabled
+        // | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED;
 
         THROW_IF_FALSE(
             m_context.create_root_signature(root_sig_desc,
@@ -136,21 +192,26 @@ void glRemix::glRemixRenderer::create()
                                             "rt global root signature"));
     }
 
-    // Create ray tracing descriptor heap for TLAS SRV, Output UAV, and constant buffer
-    // Added SRV for meshes, materials, and lights
     {
         D3D12_DESCRIPTOR_HEAP_DESC descriptor_heap_desc{
             .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-            .NumDescriptors
-            = 6,  // TLAS SRV, meshes SRV, materials SRV, lights SRV, Output UAV, Raygen CB
+            // 1 million is limit, stick with 100k for now
+            .NumDescriptors = 100000,
             .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE,
         };
-        THROW_IF_FALSE(m_context.create_descriptor_heap(descriptor_heap_desc, &m_rt_descriptor_heap,
-                                                        "ray tracing descriptor heap"));
-
-        // Allocate descriptor table for all ray tracing descriptors (views will be created after
-        // resources are ready)
-        THROW_IF_FALSE(m_rt_descriptor_heap.allocate(6, &m_rt_descriptors));
+        THROW_IF_FALSE(m_context.create_descriptor_heap(descriptor_heap_desc, &m_GPU_descriptor_heap,
+                                                        "ray tracing GPU descriptor heap"));
+    }
+    {
+        D3D12_DESCRIPTOR_HEAP_DESC descriptor_heap_desc{
+            .Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+            // Camera, Lights, AS
+            // Two for double buffered resource
+            .NumDescriptors = 16,
+            .Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE,
+        };
+        THROW_IF_FALSE(m_context.create_descriptor_heap(descriptor_heap_desc, &m_CPU_descriptor_heap,
+                                                        "CPU descriptor heap"));
     }
 
     // Compile ray tracing pipeline
@@ -166,7 +227,7 @@ void glRemix::glRemixRenderer::create()
     rt_desc.global_root_signature = m_rt_global_root_signature.Get();
     rt_desc.max_recursion_depth = 1;
     // Make sure these match in the shader
-    rt_desc.payload_size = sizeof(float) * (4 + 3 + 1 + 3);
+    rt_desc.payload_size = sizeof(RayPayload);
     rt_desc.attribute_size = sizeof(float) * 2;
     THROW_IF_FALSE(m_context.create_raytracing_pipeline(rt_desc, raytracing_shaders.Get(),
                                                         m_rt_pipeline.ReleaseAndGetAddressOf(),
@@ -196,7 +257,7 @@ void glRemix::glRemixRenderer::create()
         dx::BufferDesc shader_table_desc{
             .size = total_shader_table_size,
             .stride = 0,
-            .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+            .visibility = dx::CPU | dx::GPU,
         };
         THROW_IF_FALSE(m_context.create_buffer(shader_table_desc, &m_shader_table, "shader tables"));
 
@@ -225,7 +286,7 @@ void glRemix::glRemixRenderer::create()
     dx::BufferDesc raygen_cb_desc{
         .size = align_u32(sizeof(RayGenConstantBuffer), CB_ALIGNMENT),
         .stride = align_u32(sizeof(RayGenConstantBuffer), CB_ALIGNMENT),
-        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+        .visibility = dx::CPU | dx::GPU,
     };
     for (UINT i = 0; i < m_frames_in_flight; i++)
     {
@@ -233,9 +294,8 @@ void glRemix::glRemixRenderer::create()
                                                "raygen constant buffer"));
     }
 
-    constexpr UINT64 scratch_size = 16u * MEGABYTE;
     dx::BufferDesc scratch_buffer_desc{
-        .size = scratch_size,
+        .size = 16ul * MEGABYTE,
         .stride = 0,
         .visibility = dx::GPU,
         .uav = true,  // Scratch space must be in UAV layout
@@ -243,18 +303,43 @@ void glRemix::glRemixRenderer::create()
     THROW_IF_FALSE(
         m_context.create_buffer(scratch_buffer_desc, &m_scratch_space, "BLAS scratch space"));
 
-    // Start out with 64 instances/meshes
+    // Start out with 128 instances/meshes
     dx::BufferDesc instance_buffer_desc{
-        .size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * 64,
+        .size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * 128,
         .stride = sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
-        .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
+        .visibility = dx::CPU | dx::GPU,
     };
     THROW_IF_FALSE(
         m_context.create_buffer(instance_buffer_desc, &m_tlas.instance, "TLAS instance buffer"));
 
-    // TODO: Use CPU descriptors and copy to GPU visible heap
-    // Will be updated each frame
-    m_context.create_constant_buffer_view(&m_raygen_constant_buffers[0], &m_rt_descriptors, 2);
+    for (UINT i = 0; i < m_raygen_cbv_descriptors.size(); i++)
+    {
+        THROW_IF_FALSE(m_CPU_descriptor_heap.allocate(&m_raygen_cbv_descriptors[i]));
+        m_context.create_constant_buffer_view(&m_raygen_constant_buffers[i],
+                                              m_raygen_cbv_descriptors[i]);
+    }
+
+    dx::BufferDesc light_desc{ .size = align_u32(sizeof(Light) * m_lights.size(), CB_ALIGNMENT),
+                               .stride = align_u32(sizeof(Light) * m_lights.size(), CB_ALIGNMENT),
+                               .visibility = dx::CPU | dx::GPU };
+    for (UINT i = 0; i < m_frames_in_flight; i++)
+    {
+        THROW_IF_FALSE(
+            m_context.create_buffer(light_desc, &m_light_buffer[i].buffer, "light buffer"));
+        THROW_IF_FALSE(m_CPU_descriptor_heap.allocate(
+            &m_light_buffer[i].descriptor));  // allocate on the cpu heap
+        m_context.create_constant_buffer_view(&m_light_buffer[i].buffer,
+                                              m_light_buffer[i].descriptor);
+    }
+
+    // TODO: Allocate in slab fashion like materials
+    // This should be managed by pager
+    dx::BufferDesc mesh_record_desc{ .size = sizeof(GPUMeshRecord) * 128,
+                                     .stride = sizeof(GPUMeshRecord),
+                                     .visibility = dx::CPU | dx::GPU };
+    m_context.create_buffer(mesh_record_desc, &m_gpu_mesh_record.buffer, "mesh record buffer");
+    THROW_IF_FALSE(m_CPU_descriptor_heap.allocate(&m_gpu_mesh_record.descriptor));
+    m_context.create_shader_resource_view(m_gpu_mesh_record.buffer, m_gpu_mesh_record.descriptor);
 }
 
 void glRemix::glRemixRenderer::read_gl_command_stream()
@@ -262,67 +347,46 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     UINT32 payload_size = 0;
 
     // consume frame from IPC buffer
-    m_ipc.consume_frame_or_wait(m_ipc_buffer.data(), &payload_size, &current_frame);
+    m_ipc.consume_frame_or_wait(m_ipc_buffer.data(), &payload_size, &m_current_frame);
 
     if (payload_size == 0)
     {
         return;
     }
 
-    m_meshes.clear();       // per frame meshes
-    m_matrix_pool.clear();  // reset matrix pool each frame
+    m_meshes.clear();              // per frame meshes
+    m_matrix_pool.clear();         // reset matrix pool each frame
     m_materials.clear();
-
-    // for acceleration structure building
-    THROW_IF_FALSE(SUCCEEDED(m_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
-    ComPtr<ID3D12GraphicsCommandList7> cmd_list;
-    THROW_IF_FALSE(m_context.create_command_list(cmd_list.ReleaseAndGetAddressOf(),
-                                                 m_cmd_pools[get_frame_index()]));
+    m_pending_geometries.clear();  // clear pending geometry data
 
     // loop through data from frame
-    read_ipc_buffer(m_ipc_buffer, 0, payload_size, cmd_list.Get());
-
-    THROW_IF_FALSE(SUCCEEDED(cmd_list->Close()));
-    const std::array<ID3D12CommandList*, 1> lists = { cmd_list.Get() };
-    m_gfx_queue.queue->ExecuteCommandLists(1, lists.data());
-
-    // Signal fence and wait for GPU to finish
-    auto current_fence_value = ++m_fence_frame_ready_val[get_frame_index()];
-    m_gfx_queue.queue->Signal(m_fence_frame_ready.fence.Get(), current_fence_value);
-
-    dx::WaitInfo wait_info{
-        .wait_all = true,
-        .count = 1,
-        .fences = &m_fence_frame_ready,
-        .values = &current_fence_value,
-        .timeout = INFINITE,
-    };
-
-    THROW_IF_FALSE(m_context.wait_fences(wait_info));  // Block CPU until done
+    read_ipc_buffer(m_ipc_buffer, 0, payload_size);
 
     // garbage collect meshes
     for (auto it = m_mesh_map.begin(); it != m_mesh_map.end();)
     {
         auto& mesh = it->second;
 
-        if (current_frame - mesh.last_frame > frame_leniency)
+        if (m_current_frame - mesh.last_frame > FRAME_LENIENCY)
         {
-            m_blas_pool.free(mesh.blas_id);
-            m_vertex_pool.free(mesh.vertex_id);
-            m_index_pool.free(mesh.index_id);
-
+            auto& resource = m_mesh_resources[mesh.blas_vb_ib_idx];
+            m_mesh_resources.free(mesh.blas_vb_ib_idx);
+            m_descriptor_pager.free_descriptor(dx::DescriptorPager::VB_IB,
+                                               &resource.vertex_buffer.descriptor);
+            m_descriptor_pager.free_descriptor(dx::DescriptorPager::VB_IB,
+                                               &resource.index_buffer.descriptor);
             it = m_mesh_map.erase(it);
         }
         else
         {
-            it++;
+            ++it;
         }
     }
 }
 
-void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer, size_t start_offset,
-                                               UINT32 payload_size,
-                                               ID3D12GraphicsCommandList7* cmd_list, bool call_list)
+void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer,
+                                               const size_t start_offset, const UINT32 payload_size,
+                                               const bool call_list)
 {
     // display list logic
     UINT32 list_index = 0;
@@ -348,14 +412,10 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer, size_
 
                 // hwnd = reinterpret_cast<HWND>(hwnd_ptr);
                 THROW_IF_FALSE(m_context.create_swapchain(hwnd, &m_gfx_queue, &m_frame_index));
-                THROW_IF_FALSE(
-                    m_context.create_swapchain_descriptors(&m_swapchain_descriptors, &m_rtv_heap));
+                THROW_IF_FALSE(m_context.create_swapchain_descriptors(m_swapchain_descriptors.data(),
+                                                                      &m_rtv_heap));
                 THROW_IF_FALSE(m_context.init_imgui());
                 create_uav_rt();
-                // TODO: Descriptor should be on CPU heap
-                m_context.create_unordered_access_view_texture(&m_uav_render_target,
-                                                               m_uav_render_target.desc.format,
-                                                               &m_rt_descriptors, 1);
                 break;
             }
             case GLCommandType::GLCMD_NEW_LIST:
@@ -378,9 +438,9 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer, size_
                 if (m_display_lists.contains(list->list))
                 {
                     auto& list_buf = m_display_lists[list->list];
-                    const UINT32 listEnd = static_cast<UINT32>(list_buf.size());
+                    const UINT32 list_end = static_cast<UINT32>(list_buf.size());
 
-                    read_ipc_buffer(list_buf, 0, listEnd, cmd_list, true);
+                    read_ipc_buffer(list_buf, 0, list_end, true);
                 }
                 else
                 {
@@ -418,16 +478,14 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer, size_
                                               // inbetween glbegin and end
                 advance = false;
                 read_geometry(
-                    buffer, &offset, static_cast<GLTopology>(type->mode), payload_size,
-                    cmd_list);  // store geometry data in vertex buffers depending on topology type
+                    buffer.data(), &offset, static_cast<GLTopology>(type->mode), payload_size,
+                    call_list);  // store geometry data in vertex buffers depending on topology type
                 break;
             }
             case GLCommandType::GLCMD_NORMAL3F:
             {
                 const auto* n = reinterpret_cast<const GLNormal3fCommand*>(buffer.data() + offset);
-                m_normal[0] = n->x;
-                m_normal[1] = n->y;
-                m_normal[2] = n->z;
+                m_normal = { n->x, n->y, n->z };
                 break;
             }
             case GLCommandType::GLCMD_MATERIALF:
@@ -435,9 +493,26 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer, size_
                 const auto* mat = reinterpret_cast<const GLMaterialfCommand*>(
                     buffer.data() + offset);  // reach into data payload
 
-                // TODO: when material f is encountered, edit the current m_material based on the
-                // param and value
-
+                // Ignore face parameter for now
+                auto set_xmfloat4 = [&](const float v) { return XMFLOAT4{ v, v, v, 1.0f }; };
+                switch (static_cast<GLLight>(mat->pname))
+                {
+                    case GLLight::GL_AMBIENT: m_material.ambient = set_xmfloat4(mat->param); break;
+                    case GLLight::GL_DIFFUSE: m_material.diffuse = set_xmfloat4(mat->param); break;
+                    case GLLight::GL_SPECULAR:
+                        m_material.specular = set_xmfloat4(mat->param);
+                        break;
+                    default:
+                        switch (static_cast<GLMaterial>(mat->pname))
+                        {
+                            case GLMaterial::GL_EMISSION:
+                                m_material.emission = set_xmfloat4(mat->param);
+                                break;
+                            case GLMaterial::GL_SHININESS: m_material.shininess = mat->param; break;
+                            default: break;
+                        }
+                        break;
+                }
                 break;
             }
             case GLCommandType::GLCMD_MATERIALFV:
@@ -445,8 +520,34 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer, size_
                 const auto* mat = reinterpret_cast<const GLMaterialfvCommand*>(
                     buffer.data() + offset);  // reach into data payload
 
-                // TODO: when material fv is encountered, edit the current m_material based on the
-                // param and value
+                // Ignore face parameter for now
+                auto set_xmfloat4 = [&](const GLVec4f& v)
+                { return XMFLOAT4{ v.x, v.y, v.z, v.w }; };
+
+                switch (static_cast<GLLight>(mat->pname))
+                {
+                    case GLLight::GL_AMBIENT: m_material.ambient = set_xmfloat4(mat->params); break;
+                    case GLLight::GL_DIFFUSE: m_material.diffuse = set_xmfloat4(mat->params); break;
+                    case GLLight::GL_SPECULAR:
+                        m_material.specular = set_xmfloat4(mat->params);
+                        break;
+                    default:
+                        switch (static_cast<GLMaterial>(mat->pname))
+                        {
+                            case GLMaterial::GL_EMISSION:
+                                m_material.emission = set_xmfloat4(mat->params);
+                                break;
+                            case GLMaterial::GL_SHININESS:
+                                m_material.shininess = mat->params.x;
+                                break;
+                            case GLMaterial::GL_AMBIENT_AND_DIFFUSE:
+                                m_material.ambient = set_xmfloat4(mat->params);
+                                m_material.diffuse = set_xmfloat4(mat->params);
+                                break;
+                            default: break;
+                        }
+                        break;
+                }
 
                 break;
             }
@@ -455,8 +556,25 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer, size_
                 const auto* light = reinterpret_cast<const GLLightCommand*>(
                     buffer.data() + offset);  // reach into data payload
 
-                // TODO: when light f is encountered, edit the corresponding index in m_lights based
-                // on the param and value
+                uint32_t light_index = static_cast<uint32_t>(light->light)
+                                       - static_cast<uint32_t>(GLLight::GL_LIGHT0);
+                Light& m_light = m_lights[light_index];
+
+                switch (static_cast<GLLight>(light->pname))
+                {
+                    case GLLight::GL_SPOT_EXPONENT: m_light.spot_exponent = light->param; break;
+                    case GLLight::GL_SPOT_CUTOFF: m_light.spot_cutoff = light->param; break;
+                    case GLLight::GL_CONSTANT_ATTENUATION:
+                        m_light.constant_attenuation = light->param;
+                        break;
+                    case GLLight::GL_LINEAR_ATTENUATION:
+                        m_light.linear_attenuation = light->param;
+                        break;
+                    case GLLight::GL_QUADRATIC_ATTENUATION:
+                        m_light.quadratic_attenuation = light->param;
+                        break;
+                    default: break;
+                }
 
                 break;
             }
@@ -465,8 +583,30 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer, size_
                 const auto* light = reinterpret_cast<const GLLightfvCommand*>(
                     buffer.data() + offset);  // reach into data payload
 
-                // TODO: when light fv is encountered, edit the corresponding index in m_lights
-                // based on the param and value
+                uint32_t light_index = static_cast<uint32_t>(light->light)
+                                       - static_cast<uint32_t>(GLLight::GL_LIGHT0);
+                Light& m_light = m_lights[light_index];
+
+                auto set_xmfloat4 = [&](const GLVec4f& v)
+                { return XMFLOAT4{ v.x, v.y, v.z, v.w }; };
+
+                auto set_xmfloat3 = [&](const GLVec4f& v) { return XMFLOAT3{ v.x, v.y, v.z }; };
+
+                switch (static_cast<GLLight>(light->pname))
+                {
+                    case GLLight::GL_POSITION:
+                        m_light.position = set_xmfloat4(light->params);
+                        break;
+                    case GLLight::GL_AMBIENT: m_light.ambient = set_xmfloat4(light->params); break;
+                    case GLLight::GL_DIFFUSE: m_light.diffuse = set_xmfloat4(light->params); break;
+                    case GLLight::GL_SPECULAR:
+                        m_light.specular = set_xmfloat4(light->params);
+                        break;
+                    case GLLight::GL_SPOT_DIRECTION:
+                        m_light.spot_direction = set_xmfloat3(light->params);
+                        break;
+                    default: break;
+                }
 
                 break;
             }
@@ -557,10 +697,12 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer, size_
 }
 
 // adds to vertex and index buffers depending on topology type
-void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t* const offset,
-                                             GLTopology topology, UINT32 bytes_read,
-                                             ID3D12GraphicsCommandList7* cmd_list)
+void glRemix::glRemixRenderer::read_geometry(void* const ipc_buf, size_t* const offset,
+                                             const GLTopology topology, const UINT32 bytes_read,
+                                             const bool call_list)
 {
+    const auto byte_p = static_cast<UINT8*>(ipc_buf);
+
     bool end_primitive = false;
 
     // we will first assess if this mesh has been encountered before
@@ -569,46 +711,41 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
 
     while (*offset + sizeof(GLCommandUnifs) <= bytes_read)
     {
-        const auto* header = reinterpret_cast<const GLCommandUnifs*>(
-            ipc_buf.data()  // get most recent header
-            + *offset);
+        // get most recent header
+        const auto* header = reinterpret_cast<const GLCommandUnifs*>(byte_p + *offset);
 
         *offset += sizeof(GLCommandUnifs);  // move into data payload
+
+        const auto* ipc_p = byte_p + *offset;
 
         switch (header->type)
         {
             case GLCommandType::GLCMD_VERTEX3F:
             {
-                const auto* v = reinterpret_cast<const GLVertex3fCommand*>(ipc_buf.data() + *offset);
-                Vertex vertex{ { v->x, v->y, v->z },
-                               { m_color[0], m_color[1], m_color[2] },
-                               { m_normal[0], m_normal[1], m_normal[2] } };
+                const auto* v = reinterpret_cast<const GLVertex3fCommand*>(ipc_p);
+                // TODO: We should not be discarding A component of color if we want to support alpha
+                Vertex vertex{ .position = { v->x, v->y, v->z },
+                               .color = { m_color.x, m_color.y, m_color.z },
+                               .normal = m_normal };
                 t_vertices.push_back(vertex);
                 break;
             }
             case GLCommandType::GLCMD_NORMAL3F:
             {
-                const auto* n = reinterpret_cast<const GLNormal3fCommand*>(ipc_buf.data() + *offset);
-                m_normal[0] = n->x;
-                m_normal[1] = n->y;
-                m_normal[2] = n->z;
+                const auto* n = reinterpret_cast<const GLNormal3fCommand*>(ipc_p);
+                m_normal = { n->x, n->y, n->z };
                 break;
             }
             case GLCommandType::GLCMD_COLOR3F:
             {
-                const auto* c = reinterpret_cast<const GLColor3fCommand*>(ipc_buf.data() + *offset);
-                m_color[0] = c->x;
-                m_color[1] = c->y;
-                m_color[2] = c->z;
+                const auto* c = reinterpret_cast<const GLColor3fCommand*>(ipc_p);
+                m_color = { c->x, c->y, c->z, m_color.w };
                 break;
             }
             case GLCommandType::GLCMD_COLOR4F:
             {
-                const auto* c = reinterpret_cast<const GLColor4fCommand*>(ipc_buf.data() + *offset);
-                m_color[0] = c->x;
-                m_color[1] = c->y;
-                m_color[2] = c->z;
-                m_color[3] = c->w;
+                const auto* c = reinterpret_cast<const GLColor4fCommand*>(ipc_p);
+                m_color = { c->x, c->y, c->z, c->w };
                 break;
             }
             case GLCommandType::GLCMD_END:  // read vertices until GL_END is encountered at
@@ -617,7 +754,8 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
                 end_primitive = true;
                 break;
             }
-            default: printf("    (Unhandled primitive command)\n"); break;
+            default:  // TODO: Log error
+                break;
         }
 
         *offset += header->dataSize;  // move past data to next command
@@ -628,10 +766,12 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
         }
     }
 
-    // determine indices based on specified topology
-    UINT32 num_indices = 0;
+    // determine indices based on specified topology and reserve space
     if (topology == GLTopology::GL_QUAD_STRIP)
     {
+        const size_t quad_count = t_vertices.size() >= 4 ? (t_vertices.size() - 2) / 2 : 0;
+        t_indices.reserve(quad_count * 6);
+
         for (UINT32 k = 0; k + 3 < t_vertices.size(); k += 2)
         {
             UINT32 a = k + 0;
@@ -645,12 +785,13 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
             t_indices.push_back(a);
             t_indices.push_back(d);
             t_indices.push_back(c);
-
-            num_indices += 6;
         }
     }
     else if (topology == GLTopology::GL_QUADS)
     {
+        const size_t quad_count = t_vertices.size() / 4;
+        t_indices.reserve(quad_count * 6);
+
         for (UINT32 k = 0; k + 3 < t_vertices.size(); k += 4)
         {
             UINT32 a = k + 0;
@@ -664,8 +805,6 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
             t_indices.push_back(a);
             t_indices.push_back(c);
             t_indices.push_back(d);
-
-            num_indices += 6;
         }
     }
 
@@ -685,12 +824,12 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
     for (int i = 0; i < t_vertices.size(); ++i)
     {
         const Vertex& vertex = t_vertices[i];
-        hash_combine(quantize(vertex.position[0]));
-        hash_combine(quantize(vertex.position[1]));
-        hash_combine(quantize(vertex.position[2]));
-        hash_combine(quantize(vertex.color[0]));
-        hash_combine(quantize(vertex.color[1]));
-        hash_combine(quantize(vertex.color[2]));
+        hash_combine(quantize(vertex.position.x));
+        hash_combine(quantize(vertex.position.y));
+        hash_combine(quantize(vertex.position.z));
+        hash_combine(quantize(vertex.color.x));
+        hash_combine(quantize(vertex.color.y));
+        hash_combine(quantize(vertex.color.z));
     }
 
     // get index data to hash
@@ -703,125 +842,281 @@ void glRemix::glRemixRenderer::read_geometry(std::vector<UINT8>& ipc_buf, size_t
     // check if hash exists
     UINT64 hash = seed;
 
-    MeshRecord* mesh = nullptr;
+    MeshRecord* mesh;
     if (m_mesh_map.contains(hash))
     {
         mesh = &m_mesh_map[hash];
     }
     else
     {
-        MeshRecord new_mesh{};
-        new_mesh.vertex_count = t_vertices.size();
-        new_mesh.index_count = t_indices.size();
-        new_mesh.mesh_id = hash;
+        MeshRecord new_mesh;
 
-        // create vertex buffer
-        dx::D3D12Buffer t_vertex_buffer;
-        dx::D3D12Buffer t_index_buffer;
+        // Store pending geometry for deferred BLAS building
+        PendingGeometry pending;
+        pending.vertices = std::move(t_vertices);
+        pending.indices = std::move(t_indices);
+        pending.hash = hash;
+        pending.mat_idx = static_cast<UINT32>(m_materials.size());
+        pending.mv_idx = static_cast<UINT32>(m_matrix_pool.size());
 
-        dx::BufferDesc vertex_buffer_desc{
-            .size = sizeof(Vertex) * t_vertices.size(),
-            .stride = sizeof(Vertex),
-            .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-        };
+        new_mesh.blas_vb_ib_idx = m_mesh_resources.size() + m_pending_geometries.size();
 
-        void* cpu_ptr = nullptr;
-        THROW_IF_FALSE(
-            m_context.create_buffer(vertex_buffer_desc, &t_vertex_buffer, "vertex buffer"));
-        THROW_IF_FALSE(m_context.map_buffer(&t_vertex_buffer, &cpu_ptr));
-        memcpy(cpu_ptr, t_vertices.data(), vertex_buffer_desc.size);
-        m_context.unmap_buffer(&t_vertex_buffer);
-        new_mesh.vertex_id = m_vertex_pool.push_back(std::move(t_vertex_buffer));
+        m_mesh_map.emplace(hash, new_mesh);
 
-        // create index buffer
-        dx::BufferDesc index_buffer_desc{
-            .size = sizeof(UINT) * t_indices.size(),
-            .stride = sizeof(UINT),
-            .visibility = static_cast<dx::BufferVisibility>(dx::CPU | dx::GPU),
-        };
+        m_pending_geometries.push_back(std::move(pending));
 
-        THROW_IF_FALSE(m_context.create_buffer(index_buffer_desc, &t_index_buffer, "index buffer"));
-        THROW_IF_FALSE(m_context.map_buffer(&t_index_buffer, &cpu_ptr));
-        memcpy(cpu_ptr, t_indices.data(), index_buffer_desc.size);
-        m_context.unmap_buffer(&t_index_buffer);
-        new_mesh.index_id = m_index_pool.push_back(std::move(t_index_buffer));
-
-        // create BLAS
-        new_mesh.blas_id = build_mesh_blas(m_vertex_pool[new_mesh.vertex_id],
-                                           m_index_pool[new_mesh.index_id], cmd_list);
-
-        m_mesh_map.emplace(hash, std::move(new_mesh));
         mesh = &m_mesh_map[hash];
     }
 
-    // we assign materials here
-    mesh->mat_id = static_cast<UINT32>(m_materials.size());
-    m_materials.push_back(
-        m_material);  // store the current state of the material in the materials buffer
+    // Assign per-instance data (not cached)
+    mesh->mat_idx = static_cast<UINT32>(m_materials.size());
+    // Store the current state of the material in the materials buffer
+    // TODO: Modifying materials?
+    m_materials.push_back(m_material);
 
-    mesh->mv_id = static_cast<UINT32>(m_matrix_pool.size());
+    mesh->mv_idx = static_cast<UINT32>(m_matrix_pool.size());
+
     m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
 
-    mesh->last_frame = current_frame;
+    mesh->last_frame = m_current_frame;
 
-    m_meshes.push_back(std::move(*mesh));
+    // Temporary fix?
+    // TODO: Proper fix to consider display list compilation modes
+    if (call_list || list_mode_ != gl::GLListMode::COMPILE)
+    {
+        // This is ok because it is a small struct
+        m_meshes.push_back(*mesh);
+    }
 }
 
-int glRemix::glRemixRenderer::build_mesh_blas(const dx::D3D12Buffer& vertex_buffer,
-                                              const dx::D3D12Buffer& index_buffer,
-                                              ID3D12GraphicsCommandList7* cmd_list)
+void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7* cmd_list)
 {
-    dx::D3D12Buffer t_blas_buffer;
+    if (m_pending_geometries.empty())
+    {
+        return;
+    }
 
-    // Build BLAS here for now, but renderer will construct them dynamically for new geometry in
-    // render loop
-    D3D12_RAYTRACING_GEOMETRY_DESC tri_desc{
-        .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-        .Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,  // Try to use this liberally as its faster
-        .Triangles = m_context.get_buffer_rt_description(&vertex_buffer, &index_buffer),
-    };
-    D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS blas_desc{
-        .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-        // Lots of options here, probably want to use different ones, especially the update one
-        .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
-        .NumDescs = 1,
-        .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-        .pGeometryDescs = &tri_desc,
-    };
+    const size_t start_idx = m_mesh_resources.size();
 
-    const auto blas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(blas_desc);
-    // TODO: Reuse scratch space for all BLAS
-    // The same could be done for TLAS(s) as well
+    // Create all vertex and index buffers first
+    for (size_t i = 0; i < m_pending_geometries.size(); ++i)
+    {
+        auto& pending = m_pending_geometries[i];
+        MeshResources resource;
 
-    assert(blas_prebuild_info.ScratchDataSizeInBytes < m_scratch_space.desc.size);
+        // Create vertex buffer
+        auto& vb = resource.vertex_buffer;
+        dx::BufferDesc vertex_buffer_desc{
+            .size = sizeof(Vertex) * pending.vertices.size(),
+            .stride = sizeof(Vertex),
+            .visibility = dx::CPU | dx::GPU,
+        };
+        void* cpu_ptr;
+        THROW_IF_FALSE(m_context.create_buffer(vertex_buffer_desc, &vb.buffer, "vertex buffer"));
 
-    dx::BufferDesc blas_buffer_desc{
-        .size = blas_prebuild_info.ResultDataMaxSizeInBytes,
-        .stride = 0,
-        .visibility = dx::GPU,
-        .acceleration_structure = true,
-    };
-    THROW_IF_FALSE(m_context.create_buffer(blas_buffer_desc, &t_blas_buffer, "BLAS buffer"));
+        THROW_IF_FALSE(m_context.map_buffer(&vb.buffer, &cpu_ptr));
+        memcpy(cpu_ptr, pending.vertices.data(), vertex_buffer_desc.size);
+        m_context.unmap_buffer(&vb.buffer);
 
-    const auto blas_build_desc = m_context.get_raytracing_acceleration_structure(blas_desc,
-                                                                                 &t_blas_buffer,
-                                                                                 nullptr,
-                                                                                 &m_scratch_space);
+        // Create index buffer
+        auto& ib = resource.index_buffer;
+        dx::BufferDesc index_buffer_desc{
+            .size = sizeof(UINT) * pending.indices.size(),
+            .stride = sizeof(UINT),
+            .visibility = dx::CPU | dx::GPU,
+        };
+        THROW_IF_FALSE(m_context.create_buffer(index_buffer_desc, &ib.buffer, "index buffer"));
 
-    // Mark resources for BLAS build
+        THROW_IF_FALSE(m_context.map_buffer(&ib.buffer, &cpu_ptr));
+        memcpy(cpu_ptr, pending.indices.data(), index_buffer_desc.size);
+        m_context.unmap_buffer(&ib.buffer);
+
+        vb.page_index = m_descriptor_pager.allocate_descriptor(m_context,
+                                                               dx::DescriptorPager::VB_IB,
+                                                               &vb.descriptor);
+        m_context.create_shader_resource_view(vb.buffer, vb.descriptor);
+        ib.page_index = m_descriptor_pager.allocate_descriptor(m_context,
+                                                               dx::DescriptorPager::VB_IB,
+                                                               &ib.descriptor);
+        m_context.create_shader_resource_view(ib.buffer, ib.descriptor);
+
+        // Cache the geometry
+        const UINT32 resource_idx = static_cast<UINT32>(start_idx + i);
+        MeshRecord cached_mesh{};
+        cached_mesh.mesh_id = pending.hash;
+        cached_mesh.blas_vb_ib_idx = resource_idx;
+        m_mesh_map[pending.hash] = cached_mesh;
+
+        m_mesh_resources.push_back(std::move(resource));
+    }
+
+    // Build all BLAS in a single batch
+    build_mesh_blas_batch(start_idx, m_pending_geometries.size(), cmd_list);
+
+    m_pending_geometries.clear();
+}
+
+void glRemix::glRemixRenderer::build_mesh_blas_batch(const size_t start_idx, const size_t count,
+                                                     ID3D12GraphicsCommandList7* cmd_list)
+{
+    if (count == 0)
+    {
+        return;
+    }
+
+    // TODO: Use static allocator this is terrible
+    // Or break up the batches. Put a hard cap on number of BLAS built at once
+    // Can call this function recursively for remaining builds
+    static std::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometry_descs;
+    static std::vector<UINT64> scratch_sizes;
+    static std::vector<UINT64> scratch_offsets;
+
+    geometry_descs.clear();
+    scratch_sizes.clear();
+    scratch_offsets.clear();
+
+    geometry_descs.reserve(count);
+    scratch_sizes.reserve(count);
+    scratch_offsets.reserve(count);
+
+    // Create all BLAS buffers and compute scratch sizes
+    for (size_t i = 0; i < count; i++)
+    {
+        auto& info = m_mesh_resources[start_idx + i];
+
+        // TODO: combine multiple geometries BLAS into one buffer?
+        D3D12_RAYTRACING_GEOMETRY_DESC tri_desc{
+            .Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
+            .Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
+            .Triangles = m_context.get_buffer_rt_description(&info.vertex_buffer.buffer,
+                                                             &info.index_buffer.buffer),
+        };
+        geometry_descs.push_back(tri_desc);
+
+        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS blas_input{
+            .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
+            .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
+            .NumDescs = 1,
+            .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+            .pGeometryDescs = &geometry_descs.back(),
+        };
+
+        const auto blas_prebuild_info = m_context.get_acceleration_structure_prebuild_info(
+            blas_input);
+        scratch_sizes.push_back(blas_prebuild_info.ScratchDataSizeInBytes);
+
+        dx::BufferDesc blas_buffer_desc{
+            .size = blas_prebuild_info.ResultDataMaxSizeInBytes,
+            .stride = 0,
+            .visibility = dx::GPU,
+            .acceleration_structure = true,
+        };
+        THROW_IF_FALSE(m_context.create_buffer(blas_buffer_desc, &info.blas, "BLAS buffer"));
+    }
+
+    // Mark all resources for BLAS build
     m_context.mark_use(&m_scratch_space, dx::Usage::UAV_COMPUTE);
-    m_context.mark_use(&t_blas_buffer, dx::Usage::AS_WRITE);
-    std::array build_resources = { &m_scratch_space, &t_blas_buffer };
-    m_context.emit_barriers(cmd_list, build_resources.data(), build_resources.size(), nullptr, 0);
+    for (size_t i = 0; i < count; i++)
+    {
+        m_context.mark_use(&m_mesh_resources[start_idx + i].blas, dx::Usage::AS_WRITE);
+    }
+    const std::array scratch_array = { &m_scratch_space };
+    m_context.emit_barriers(cmd_list, scratch_array.data(), scratch_array.size(), nullptr, 0);
 
-    cmd_list->BuildRaytracingAccelerationStructure(&blas_build_desc, 0, nullptr);
+    // Emit barriers for all BLAS buffers
+    // TODO: Get rid of this and replace with static allocator
+    static std::vector<dx::D3D12Buffer*> blas_barrier_ptrs;
+    blas_barrier_ptrs.clear();
+    for (size_t i = 0; i < count; i++)
+    {
+        blas_barrier_ptrs.push_back(&m_mesh_resources[start_idx + i].blas);
+    }
+    m_context.emit_barriers(cmd_list, blas_barrier_ptrs.data(), blas_barrier_ptrs.size(), nullptr,
+                            0);
 
-    // Transition BLAS to read state
-    m_context.mark_use(&t_blas_buffer, dx::Usage::AS_READ);
-    std::array read_resources = { &t_blas_buffer };
-    m_context.emit_barriers(cmd_list, read_resources.data(), read_resources.size(), nullptr, 0);
+    // Build all BLAS in repeated partial batches
+    size_t build_start = 0;
+    while (build_start < count)
+    {
+        scratch_offsets.clear();
+        UINT64 running_total = 0;
+        size_t batch_count = 0;
 
-    return m_blas_pool.push_back(std::move(t_blas_buffer));
+        // Compute how many builds fit this batch and their offsets
+        for (size_t j = build_start; j < count; j++)
+        {
+            // Alignment requirement: 256 multiple needed between scratch regions
+            running_total = align_u64(running_total,
+                                      D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BYTE_ALIGNMENT);
+            const UINT64 next_total = running_total + scratch_sizes[j];
+            if (next_total <= m_scratch_space.desc.size)
+            {
+                scratch_offsets.push_back(running_total);
+                running_total = next_total;
+                batch_count++;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        // At least one build per batch
+        THROW_IF_FALSE(batch_count > 0);
+
+        // Build each BLAS in the batch
+        for (size_t k = 0; k < batch_count; k++)
+        {
+            const size_t idx = build_start + k;
+            auto& info = m_mesh_resources[start_idx + idx];
+
+            D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS blas_input{
+                .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
+                .Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE,
+                .NumDescs = 1,
+                .DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+                .pGeometryDescs = &geometry_descs[idx],
+            };
+
+            auto blas_build_desc = m_context.get_raytracing_acceleration_structure(blas_input,
+                                                                                   &info.blas,
+                                                                                   nullptr,
+                                                                                   &m_scratch_space);
+
+            // Assign disjoint scratch offsets for this batch
+            blas_build_desc.ScratchAccelerationStructureData += scratch_offsets[k];
+
+            cmd_list->BuildRaytracingAccelerationStructure(&blas_build_desc, 0, nullptr);
+        }
+
+        build_start += batch_count;
+
+        // Insert a global UAV barrier between batches if more remain
+        if (build_start < count)
+        {
+            const D3D12_GLOBAL_BARRIER uav_barrier{
+                .SyncBefore = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+                .SyncAfter = D3D12_BARRIER_SYNC_BUILD_RAYTRACING_ACCELERATION_STRUCTURE,
+                .AccessBefore = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
+                .AccessAfter = D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
+            };
+
+            const D3D12_BARRIER_GROUP group{
+                .Type = D3D12_BARRIER_TYPE_GLOBAL,
+                .NumBarriers = 1,
+                .pGlobalBarriers = &uav_barrier,
+            };
+            cmd_list->Barrier(1, &group);
+        }
+    }
+
+    // Transition all BLAS to read state
+    for (size_t i = 0; i < count; i++)
+    {
+        m_context.mark_use(&m_mesh_resources[start_idx + i].blas, dx::Usage::AS_READ);
+    }
+    m_context.emit_barriers(cmd_list, blas_barrier_ptrs.data(), blas_barrier_ptrs.size(), nullptr,
+                            0);
 }
 
 static D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const XMFLOAT4X4& mv)
@@ -868,12 +1163,14 @@ void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
     }
     for (UINT i = 0; i < instance_count; i++)
     {
-        MeshRecord mesh = m_meshes[i];
+        const MeshRecord& mesh = m_meshes[i];
 
-        const auto blas_addr = m_blas_pool[mesh.blas_id].get_gpu_address();
-        assert(blas_addr != 0);
+        assert(mesh.mv_idx < m_matrix_pool.size());
 
-        D3D12_RAYTRACING_INSTANCE_DESC desc = mv_to_instance_desc(m_matrix_pool[mesh.mv_id]);
+        const auto blas_addr = m_mesh_resources[mesh.blas_vb_ib_idx].blas.get_gpu_address();
+        assert(blas_addr);
+
+        D3D12_RAYTRACING_INSTANCE_DESC desc = mv_to_instance_desc(m_matrix_pool[mesh.mv_idx]);
 
         desc.InstanceID = i;
         desc.InstanceMask = 0xFF;
@@ -907,7 +1204,7 @@ void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
     assert(tlas_prebuild_info.ScratchDataSizeInBytes < m_scratch_space.desc.size);
 
     // Only recreate buffer on first time or if too small
-    // TODO: A warning should be issued when this happens
+    // TODO: A huge warning should be issued when this happens
     if (tlas_prebuild_info.ResultDataMaxSizeInBytes > m_tlas.buffer.desc.size)
     {
         const dx::BufferDesc tlas_buffer_desc{
@@ -947,15 +1244,56 @@ void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
     const std::array read_resources = { &m_tlas.buffer };
     m_context.emit_barriers(cmd_list, read_resources.data(), read_resources.size(), nullptr, 0);
 
-    // TODO: This should not be here and the descriptor should live on a CPU heap and be copied
-    m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer, &m_rt_descriptors,
-                                                                 0);
+    if (!should_update)
+    {
+        // Haven't made a descriptor yet
+        if (m_tlas_descriptor.offset == dx::CREATE_NEW_DESCRIPTOR)
+        {
+            m_CPU_descriptor_heap.allocate(&m_tlas_descriptor);
+        }
+        // Recreate view in place
+        m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer,
+                                                                     m_tlas_descriptor);
+    }
 }
 
 void glRemix::glRemixRenderer::render()
 {
     // Read GL stream and set resources accordingly
     read_gl_command_stream();
+
+    while (m_materials.size() > m_material_buffers.size() * MATERIALS_PER_BUFFER)
+    {
+        // TODO: Issue huge warning when this happens
+        create_material_buffer();
+    }
+
+    // Update material buffers every frame
+    for (UINT i = 0; i < m_material_buffers.size(); i++)
+    {
+        // TODO: Update material texture indices
+        // This will be tough since we don't want to do it in place
+        // Perhaps just add separate members for global index
+
+        const auto& mat_buffer = m_material_buffers[i][get_frame_index()];
+        void* mat_ptr;
+        THROW_IF_FALSE(m_context.map_buffer(&mat_buffer.buffer, &mat_ptr));
+        const auto start_idx = i * MATERIALS_PER_BUFFER;
+        assert(!u64_overflows_u32(m_materials.size()));
+        const auto end_idx = std::min(start_idx + MATERIALS_PER_BUFFER,
+                                      static_cast<UINT>(m_materials.size()));
+        const auto mat_count = end_idx - start_idx;
+        memcpy(mat_ptr, m_materials.data() + start_idx, sizeof(Material) * mat_count);
+        m_context.unmap_buffer(&mat_buffer.buffer);
+    }
+
+    // Update light buffer
+    {
+        void* light_ptr;
+        THROW_IF_FALSE(m_context.map_buffer(&m_light_buffer[get_frame_index()].buffer, &light_ptr));
+        memcpy(light_ptr, m_lights.data(), sizeof(Light) * m_lights.size());
+        m_context.unmap_buffer(&m_light_buffer[get_frame_index()].buffer);
+    }
 
     m_context.start_imgui_frame();
 
@@ -992,10 +1330,64 @@ void glRemix::glRemixRenderer::render()
     cmd_list->RSSetViewports(1, &viewport);
     cmd_list->RSSetScissorRects(1, &scissor_rect);
 
+    // Build all pending buffers from geometry collected in read_gl_command_stream
+    create_pending_buffers(cmd_list.Get());
+
+    // Currently reserve TLAS, 1 UAV RT, 2 CBV, and (for now) 1 MeshRecord buffer per frame
+    constexpr auto reserved_descriptor_offset = 5;
+    // Update mesh records vector with global indices based off current paging status
+    // This is done in place on the per frame vector of MeshRecords
+    static std::vector<GPUMeshRecord> gpu_mesh_records_to_copy;
+    gpu_mesh_records_to_copy.clear();
+    for (auto& mesh : m_meshes)
+    {
+        // InstanceID will be used to access GPUMeshRecord in shader
+        GPUMeshRecord gpu_mesh;
+        // Materials
+        {
+            auto buffer_index = mesh.mat_idx / MATERIALS_PER_BUFFER;
+            const auto& material_buffer = m_material_buffers[buffer_index][get_frame_index()];
+            auto page_index = material_buffer.page_index;
+            auto offset = m_descriptor_pager.calculate_global_offset(dx::DescriptorPager::MATERIALS,
+                                                                     page_index);
+            // Offset in page + global page offset + reserved descriptors
+            gpu_mesh.mat_buffer_idx = material_buffer.descriptor.offset + offset
+                                      + reserved_descriptor_offset;
+            gpu_mesh.mat_idx = mesh.mat_idx % MATERIALS_PER_BUFFER;
+        }
+        // VB and IB
+        {
+            auto vb_page_index = m_mesh_resources[mesh.blas_vb_ib_idx].vertex_buffer.page_index;
+            auto ib_page_index = m_mesh_resources[mesh.blas_vb_ib_idx].index_buffer.page_index;
+            auto vb_offset = m_descriptor_pager.calculate_global_offset(dx::DescriptorPager::VB_IB,
+                                                                        vb_page_index);
+            auto ib_offset = m_descriptor_pager.calculate_global_offset(dx::DescriptorPager::VB_IB,
+                                                                        ib_page_index);
+            const auto& vb_ib_blas = m_mesh_resources[mesh.blas_vb_ib_idx];
+            gpu_mesh.vb_idx = vb_ib_blas.vertex_buffer.descriptor.offset + vb_offset
+                              + reserved_descriptor_offset;
+            gpu_mesh.ib_idx = vb_ib_blas.index_buffer.descriptor.offset + ib_offset
+                              + reserved_descriptor_offset;
+        }
+        gpu_mesh_records_to_copy.push_back(gpu_mesh);
+    }
+    {
+        // TODO: Allocate in slab fashion like materials
+        assert(m_gpu_mesh_record.buffer.desc.size / m_gpu_mesh_record.buffer.desc.stride
+               > gpu_mesh_records_to_copy.size());
+        void* mesh_record_ptr;
+        THROW_IF_FALSE(m_context.map_buffer(&m_gpu_mesh_record.buffer, &mesh_record_ptr));
+        memcpy(mesh_record_ptr, gpu_mesh_records_to_copy.data(),
+               sizeof(GPUMeshRecord) * gpu_mesh_records_to_copy.size());
+        m_context.unmap_buffer(&m_gpu_mesh_record.buffer);
+    }
+
+    m_descriptor_pager.copy_pages_to_gpu(m_context, &m_GPU_descriptor_heap,
+                                         reserved_descriptor_offset);
+
     // Build TLAS
     build_tlas(cmd_list.Get());
-    m_context.create_shader_resource_view_acceleration_structure(m_tlas.buffer, &m_rt_descriptors,
-                                                                 0);
+
     // Dispatch rays to UAV render target
     {
         XMMATRIX view = XMMatrixIdentity();
@@ -1010,9 +1402,8 @@ void glRemix::glRemixRenderer::render()
             .width = static_cast<float>(win_dims.x),
             .height = static_cast<float>(win_dims.y),
         };
-        XMStoreFloat4x4(&raygen_cb.projection_matrix, XMMatrixTranspose(view_proj));
-        XMStoreFloat4x4(&raygen_cb.inv_projection_matrix,
-                        XMMatrixTranspose(inverse_view_projection));
+        XMStoreFloat4x4(&raygen_cb.view_proj, XMMatrixTranspose(view_proj));
+        XMStoreFloat4x4(&raygen_cb.inv_view_proj, XMMatrixTranspose(inverse_view_projection));
 
         // Copy constant buffer to GPU
         auto raygen_cb_ptr = &m_raygen_constant_buffers[get_frame_index()];
@@ -1022,22 +1413,44 @@ void glRemix::glRemixRenderer::render()
         m_context.unmap_buffer(raygen_cb_ptr);
 
         // Mark UAV texture for raytracing use and emit barrier
-        THROW_IF_FALSE(m_context.mark_use(&m_uav_render_target, dx::Usage::UAV_RT));
-        std::array rt_textures = { &m_uav_render_target };
+        THROW_IF_FALSE(m_context.mark_use(&m_uav_rt, dx::Usage::UAV_RT));
+        std::array rt_textures = { &m_uav_rt };
         m_context.emit_barriers(cmd_list.Get(), nullptr, 0, rt_textures.data(), rt_textures.size());
+
+        // Bind descriptor heap(s) before setting the root signature when using DIRECTLY_INDEXED
+        m_context.set_descriptor_heap(cmd_list.Get(), m_GPU_descriptor_heap);
 
         cmd_list->SetPipelineState1(m_rt_pipeline.Get());
         cmd_list->SetComputeRootSignature(m_rt_global_root_signature.Get());
 
-        // TODO: Copy from a CPU descriptor heap instead of recreating each frame
-        m_context.create_constant_buffer_view(&m_raygen_constant_buffers[get_frame_index()],
-                                              &m_rt_descriptors, 2);
+        // Out of order on CPU so need separate copies here
+        dx::D3D12Descriptor gpu_heap{
+            .heap = &m_GPU_descriptor_heap,
+            .offset = 0,
+        };
+        // TLAS
+        m_context.copy_descriptors(gpu_heap, m_tlas_descriptor, 1);
+        // UAV RT
+        ++gpu_heap.offset;
+        m_context.copy_descriptors(gpu_heap, m_uav_rt_descriptor, 1);
+        // Raygen CBV
+        ++gpu_heap.offset;
+        m_context.copy_descriptors(gpu_heap, m_raygen_cbv_descriptors[get_frame_index()], 1);
+        // Light CBV
+        ++gpu_heap.offset;
+        m_context.copy_descriptors(gpu_heap, m_light_buffer[get_frame_index()].descriptor, 1);
+        // MeshRecord(s)
+        // TODO: Copy multiple MeshRecord buffer descriptors if needed
+        ++gpu_heap.offset;
+        m_context.copy_descriptors(gpu_heap, m_gpu_mesh_record.descriptor, 1);
 
-        // Set descriptor heap and table our descriptors
-        m_context.set_descriptor_heap(cmd_list.Get(), m_rt_descriptor_heap);
         D3D12_GPU_DESCRIPTOR_HANDLE descriptor_table_handle{};
-        m_rt_descriptor_heap.get_gpu_descriptor(&descriptor_table_handle, m_rt_descriptors.offset);
+        m_GPU_descriptor_heap.get_gpu_descriptor(&descriptor_table_handle, 0);
+        // RT is compute
         cmd_list->SetComputeRootDescriptorTable(0, descriptor_table_handle);
+
+        m_GPU_descriptor_heap.get_gpu_descriptor(&descriptor_table_handle, 4);
+        cmd_list->SetComputeRootDescriptorTable(1, descriptor_table_handle);
 
         D3D12_GPU_VIRTUAL_ADDRESS shader_table_base_address = m_shader_table.get_gpu_address();
 
@@ -1076,8 +1489,8 @@ void glRemix::glRemixRenderer::render()
         };
 
         // Transition UAV texture from UAV to copy source
-        THROW_IF_FALSE(m_context.mark_use(&m_uav_render_target, dx::Usage::COPY_SRC));
-        std::array copy_textures = { &m_uav_render_target };
+        THROW_IF_FALSE(m_context.mark_use(&m_uav_rt, dx::Usage::COPY_SRC));
+        std::array copy_textures = { &m_uav_rt };
         m_context.emit_barriers(cmd_list.Get(), nullptr, 0, copy_textures.data(),
                                 copy_textures.size());
 
@@ -1099,7 +1512,7 @@ void glRemix::glRemixRenderer::render()
         };
         cmd_list->Barrier(1, &swap_barrier_group);
 
-        m_context.copy_texture_to_swapchain(cmd_list.Get(), m_uav_render_target);
+        m_context.copy_texture_to_swapchain(cmd_list.Get(), m_uav_rt);
 
         // Transition swapchain from COPY_DEST to RENDER_TARGET
         D3D12_TEXTURE_BARRIER swap_to_rtv{
@@ -1120,16 +1533,15 @@ void glRemix::glRemixRenderer::render()
         cmd_list->Barrier(1, &swap_rtv_barrier_group);
 
         // Transition UAV back to UAV layout for next frame
-        THROW_IF_FALSE(m_context.mark_use(&m_uav_render_target, dx::Usage::UAV_RT));
-        std::array post_copy_textures = { &m_uav_render_target };
+        THROW_IF_FALSE(m_context.mark_use(&m_uav_rt, dx::Usage::UAV_RT));
+        std::array post_copy_textures = { &m_uav_rt };
         m_context.emit_barriers(cmd_list.Get(), nullptr, 0, post_copy_textures.data(),
                                 post_copy_textures.size());
     }
 
     // Draw everything (ImGui over the copied ray traced image)
     D3D12_CPU_DESCRIPTOR_HANDLE swapchain_rtv{};
-    m_swapchain_descriptors.heap->get_cpu_descriptor(&swapchain_rtv, m_swapchain_descriptors.offset
-                                                                         + swapchain_idx);
+    m_rtv_heap.get_cpu_descriptor(&swapchain_rtv, m_swapchain_descriptors[swapchain_idx].offset);
     cmd_list->OMSetRenderTargets(1, &swapchain_rtv, FALSE, nullptr);
 
     // This is where rasterization could go
@@ -1207,7 +1619,6 @@ void glRemix::glRemixRenderer::render()
 void glRemix::glRemixRenderer::destroy()
 {
     m_context.destroy_imgui();
-    m_rt_descriptor_heap.deallocate(&m_rt_descriptors);
 }
 
 void glRemix::glRemixRenderer::create_uav_rt()
@@ -1226,7 +1637,11 @@ void glRemix::glRemixRenderer::create_uav_rt()
     };
 
     THROW_IF_FALSE(m_context.create_texture(uav_rt_desc, D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS,
-                                            &m_uav_render_target, nullptr, "UAV and RT texture"));
+                                            &m_uav_rt, nullptr, "UAV and RT texture"));
+
+    THROW_IF_FALSE(m_CPU_descriptor_heap.allocate(&m_uav_rt_descriptor));
+    m_context.create_unordered_access_view_texture(m_uav_rt, m_uav_rt.desc.format,
+                                                   m_uav_rt_descriptor);
 }
 
 glRemix::glRemixRenderer::~glRemixRenderer() {}

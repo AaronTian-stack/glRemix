@@ -45,9 +45,4 @@ void Application::run_with_hwnd(const bool enable_debug_layer)
 
     THROW_IF_FALSE(m_context.wait_idle(&m_gfx_queue));
     destroy();
-
-    for (UINT i = 0; i < m_frames_in_flight; i++)
-    {
-        m_rtv_heap.deallocate(&m_swapchain_descriptors);
-    }
 }

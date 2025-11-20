@@ -27,7 +27,7 @@ namespace glRemix::dx
 class D3D12Context
 {
     D3D12DescriptorHeap m_imgui_srv_heap{};
-    D3D12DescriptorTable m_imgui_font_desc{};
+    D3D12Descriptor m_imgui_font_desc{};
     D3D12_CPU_DESCRIPTOR_HANDLE m_imgui_font_cpu{};  // Persistent CPU handle for allocator callback
     D3D12_GPU_DESCRIPTOR_HANDLE m_imgui_font_gpu{};  // Persistent GPU handle for allocator callback
 
@@ -62,13 +62,11 @@ public:
     bool get_window_dimensions(XMUINT2* dims);
 
     bool create_swapchain(HWND window, D3D12Queue* queue, UINT* frame_index);
-    bool create_swapchain_descriptors(D3D12DescriptorTable* descriptors,
-                                      D3D12DescriptorHeap* rtv_heap);
+    bool create_swapchain_descriptors(D3D12Descriptor* descriptors, D3D12DescriptorHeap* rtv_heap);
     UINT get_swapchain_index() const;
     bool present();
 
     void set_barrier_swapchain(D3D12_TEXTURE_BARRIER* barrier);
-    // void set_barrier_resource(); // TODO: Take as input whatever abstraction is used for textures
 
     bool create_buffer(const BufferDesc& desc, D3D12Buffer* buffer,
                        const char* debug_name = nullptr) const;
@@ -85,14 +83,21 @@ public:
                               const D3D12DescriptorHeap& sampler_heap) const;
 
     void create_constant_buffer_view(const D3D12Buffer* buffer,
-                                     const D3D12DescriptorTable* descriptor_table,
-                                     UINT descriptor_index) const;
-    void create_shader_resource_view_acceleration_structure(
-        const D3D12Buffer& tlas, const D3D12DescriptorTable* descriptor_table,
-        UINT descriptor_index) const;
-    void create_unordered_access_view_texture(const D3D12Texture* texture, DXGI_FORMAT format,
-                                              const D3D12DescriptorTable* descriptor_table,
-                                              UINT descriptor_index) const;
+                                     const D3D12Descriptor& descriptor) const;
+    // Structured buffers only
+    void create_shader_resource_view(const D3D12Buffer& buffer,
+                                     const D3D12Descriptor& descriptor) const;
+    void create_shader_resource_view_raw(const D3D12Buffer& buffer,
+                                         const D3D12Descriptor& descriptor) const;
+    void create_shader_resource_view_typed(const D3D12Buffer& buffer, DXGI_FORMAT format,
+                                           const D3D12Descriptor& descriptor) const;
+    void create_shader_resource_view_acceleration_structure(const D3D12Buffer& tlas,
+                                                            const D3D12Descriptor& descriptor) const;
+    void create_unordered_access_view_texture(const D3D12Texture& texture, DXGI_FORMAT format,
+                                              const D3D12Descriptor& descriptor) const;
+
+    void copy_descriptors(const D3D12Descriptor& dest_start, const D3D12Descriptor& src_start,
+                          UINT count) const;
 
     bool create_texture(const TextureDesc& desc, D3D12_BARRIER_LAYOUT init_layout,
                         D3D12Texture* texture, D3D12_CLEAR_VALUE* clear_value,

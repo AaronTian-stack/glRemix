@@ -42,4 +42,4 @@ On the other hand when enabled, by default `GLREMIX_CUSTOM_RENDERER_EXE_PATH` wi
 ## Developer Tools
 
 ### `format.ps1`
-The source files in this repository are formatted with Clang-Format according to the `.clang-format` file at the root of this repository. Run `powershell.exe -File "scripts\format.ps1"` from the root directory in Windows Powershell or Command Prompt to recurse over the `glRemixShim`, `glRemixRenderer`, and `shared` directories and format all `.cpp`, `.h`, and `.hlsl` files.
+The source files in this repository are formatted with Clang-Format according to the `.clang-format` file at the root of this repository. Run `powershell.exe -File "scripts\format.ps1"` from the root directory in Windows Powershell or Command Prompt to recurse over the `glRemixShim`, `glRemixRenderer`, and `shared` directories and format all `.cpp` and `.h` files.
