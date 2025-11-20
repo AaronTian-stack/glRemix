@@ -35,9 +35,7 @@ struct Light
     float linear_attenuation;
     float quadratic_attenuation;
 
-    // TODO pad or make GPULight
-    // also need to create an enabled bool somehow
-    float _pad;
+    BOOL enabled;
 };
 
 struct Material
