@@ -5,6 +5,12 @@ RaytracingAccelerationStructure scene : register(t0);
 RWTexture2D<float4> render_target : register(u0);
 ConstantBuffer<RayGenConstantBuffer> g_raygen_cb : register(b0);
 
+struct LightCB
+{
+    Light lights[8];
+};
+ConstantBuffer<LightCB> light_cb : register(b1);
+
 StructuredBuffer<GPUMeshRecord> meshes : register(t1);
 
 // https://learn.microsoft.com/en-us/windows/win32/direct3d12/intersection-attributes
@@ -139,7 +145,8 @@ float3 transform_to_world(float3 local_dir, float3 N)
     float3 n_world = normalize(mul(n_obj, o2w3x3));
 
     const float3 hit_pos = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
-    const float3 light_pos = float3(10.0, 10.0, 20.0);  // Hardcoded for demo
+    
+    const float3 light_pos = light_cb.lights[0].position.xyz;  // just grab light index 0 for now i assume gl light state's other values are initialized to some default values which we don't have right now
     const float3 light_color = float3(1.0, 1.0, 1.0);
     const float3 light_vec = normalize(light_pos - hit_pos);
 
