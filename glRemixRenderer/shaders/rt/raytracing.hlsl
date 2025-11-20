@@ -5,27 +5,9 @@ RaytracingAccelerationStructure scene : register(t0);
 RWTexture2D<float4> render_target : register(u0);
 ConstantBuffer<RayGenConstantBuffer> g_raygen_cb : register(b0);
 
-struct LightGPU
-{
-    float4 ambient;
-    float4 diffuse;
-    float4 specular;
-
-    float4 position;
-
-    float3 spot_direction;
-    float spot_exponent;
-    float spot_cutoff;
-
-    float constant_attenuation;
-    float linear_attenuation;
-    float quadratic_attenuation;
-    float _pad;
-};
-
 struct LightCB
 {
-    LightGPU lights[8];
+    Light lights[8];
 };
 ConstantBuffer<LightCB> light_cb : register(b1);
 

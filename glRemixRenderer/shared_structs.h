@@ -36,6 +36,7 @@ struct Light
     float quadratic_attenuation;
 
     // TODO pad or make GPULight
+    // also need to create an enabled bool somehow
     float _pad;
 };
 
