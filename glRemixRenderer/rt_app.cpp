@@ -9,11 +9,15 @@
 #include <filesystem>
 
 #include <imgui.h>
+#include "imgui_impl_win32.h"
 
 #include <shared/math_utils.h>
 #include <shared/gl_commands.h>
 
 #include "dx/d3d12_barrier.h"
+
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam,
+                                                             LPARAM lParam);
 
 void glRemix::glRemixRenderer::create_material_buffer()
 {
@@ -416,6 +420,20 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer,
                                                                       &m_rtv_heap));
                 THROW_IF_FALSE(m_context.init_imgui());
                 create_uav_rt();
+                break;
+            }
+            case GLCommandType::WGLCMD_INPUT_EVENT:
+            {
+                const auto* input_event = reinterpret_cast<const WGLInputEventCommand*>(
+                    buffer.data() + offset);
+
+                // Forward input event to ImGui
+                if (m_context.get_window())
+                {
+                    ImGui_ImplWin32_WndProcHandler(m_context.get_window(), input_event->msg,
+                                                   input_event->wparam,
+                                                   static_cast<LPARAM>(input_event->lparam));
+                }
                 break;
             }
             case GLCommandType::GLCMD_NEW_LIST:
