@@ -10,7 +10,7 @@ namespace glRemix
 
 struct MeshRecord
 {
-    UINT32 mesh_id;  // will eventually be hashed
+    UINT32 mesh_id;
 
     UINT32 blas_vb_ib_idx;
     UINT32 mv_idx;  // index into model view array
