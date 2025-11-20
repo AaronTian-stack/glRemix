@@ -4,102 +4,83 @@
 
 #include "math_utils.h"
 
+#define DBG_PRINT(fmt, ...)                                                                        \
+    do                                                                                             \
+    {                                                                                              \
+        char _buf[256];                                                                            \
+        std::snprintf(_buf, sizeof(_buf), fmt "\n", __VA_ARGS__);                                  \
+        OutputDebugStringA(_buf);                                                                  \
+    } while (0)
+
 namespace glRemix
 {
-// Local keyword allows to stay per-session, Global requires elevated permissions
-// wchar_t is standard for file mapping names in windows (though can maybe switch with TCHAR*)
-constexpr const wchar_t* k_DEFAULT_MAP_NAME = L"Local\\glRemix_DefaultMap";
 constexpr UINT32 k_DEFAULT_CAPACITY = 1 * MEGABYTE;  // i.e. 1mb
-
-/*
- * Current state options :
- * 0 = EMPTY (writer may write)
- * 1 = FILLED (reader may read)
- * 2 = CONSUMED (reader set after reading, may not be necessary)
- */
-// use LONG so that we may use `InterlockedExchange`
-enum class SharedState : LONG
-{
-    EMPTY = 0,
-    FILLED = 1,
-    CONSUMED = 2
-};
-
-// payload[] will be written thereafter in memory
-struct SharedMemoryHeader
-{
-    // must use UINT32 here, int does not fix size
-    volatile SharedState state;  // tracks state across processes
-    volatile UINT32 size;        // curr bytes in payload[]
-    UINT32 capacity;             // total bytes available in payload[]
-};
 
 class SharedMemory
 {
-    HANDLE m_map = nullptr;  // windows provides `HANDLE` typedef
-    LPTSTR m_view = nullptr;
-    SharedMemoryHeader* m_header = nullptr;
-    UINT8* m_payload = nullptr;
-
-    HANDLE m_writeEvent = nullptr;
-    HANDLE m_readEvent = nullptr;
-
-    // helpers
-    bool map_common(HANDLE h_map);
-    void close_all();
-
-    // preview size, is passed into functions
-    static size_t max_object_size(const UINT32 capacity)
-    {
-        return sizeof(SharedMemoryHeader) + capacity;
-    }
-
 public:
     SharedMemory() = default;
     ~SharedMemory();
 
     // writer creates or opens existing mapping and initializes header.
-    bool create_for_writer(const wchar_t* name = k_DEFAULT_MAP_NAME,
-                           UINT32 capacity = k_DEFAULT_CAPACITY);
+    bool create_for_writer(const wchar_t* map_name, const wchar_t* write_event_name,
+                           const wchar_t* read_event_name);
 
     // reader opens existing mapping and maps view.
-    bool open_for_reader(const wchar_t* name = k_DEFAULT_MAP_NAME);
+    bool open_for_reader(const wchar_t* map_name, const wchar_t* write_event_name,
+                         const wchar_t* read_event_name);
 
-    // state: EMPTY || CONSUMED -> FILLED
     // returns true if write success
-    bool write(const void* src, UINT32 bytes, UINT32 offset = 0) const;
+    bool write(const void* src, const UINT32 offset, const UINT32 bytes_to_write);
 
-    bool peek(void* dst, UINT32 max_bytes, UINT32 offset, UINT32* out_bytes) const;
-
-    // state: FILLED -> CONSUMED
     // returns true if read success
-    bool read(void* dst, UINT32 max_bytes, UINT32 offset = 0, UINT32* out_bytes = nullptr);
+    UINT32 read(void* dst, const UINT32 offset, const UINT32 bytes_to_read) const;
+
+    inline UINT32 get_capacity() const
+    {
+        return m_capacity;
+    }
 
     // accesssors
-    SharedMemoryHeader* get_header() const
+    inline HANDLE get_write_event() const
     {
-        return m_header;
+        return m_write_event;
     }
 
-    UINT8* get_payload() const
+    inline HANDLE get_read_event() const
     {
-        return m_payload;
+        return m_read_event;
     }
 
-    UINT32 get_capacity() const
+    inline bool signal_write_event() const
     {
-        return m_header ? m_header->capacity : 0;
+        return SetEvent(m_write_event);
     }
 
-    /* for usage in future sync ops. dummy fxns for now */
-    HANDLE write_event() const
+    inline bool signal_read_event() const
     {
-        return m_writeEvent;
+        return SetEvent(m_read_event);
     }
 
-    HANDLE read_event() const
+private:
+    HANDLE m_map = nullptr;  // windows provides `HANDLE` typedef
+    LPVOID m_view = nullptr;
+    UINT8* m_payload = nullptr;
+
+    // currently, this is never modified.
+    // Only foreseeable refactors is if we want to allow expansion of memory capacity
+    UINT32 m_capacity = k_DEFAULT_CAPACITY;
+
+    HANDLE m_write_event = nullptr;
+    HANDLE m_read_event = nullptr;
+
+    // helpers
+    bool map_common(HANDLE h_map);
+    void close_all();
+
+    inline DWORD max_object_size()
     {
-        return m_readEvent;
+        return static_cast<DWORD>(m_capacity);
     }
 };
 }  // namespace glRemix

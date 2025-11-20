@@ -52,6 +52,7 @@ class glRemixRenderer : public Application
     dx::D3D12Descriptor m_uav_rt_descriptor{};
 
     IPCProtocol m_ipc;
+    std::vector<UINT8> m_ipc_buffer;
 
     // mesh resources
     tsl::robin_map<UINT64, MeshRecord> m_mesh_map;

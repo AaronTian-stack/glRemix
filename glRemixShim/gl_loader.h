@@ -1,11 +1,13 @@
 #pragma once
 
-#include "framework.h"
+#include <shared/ipc_protocol.h>
 
-#include "frame_recorder.h"
+#include "framework.h"
 
 namespace glRemix
 {
+extern glRemix::IPCProtocol g_ipc;
+
 namespace gl
 {
 extern HANDLE g_renderer_process;

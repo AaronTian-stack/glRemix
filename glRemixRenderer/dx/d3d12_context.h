@@ -56,6 +56,8 @@ class D3D12Context
         ID3D12ShaderReflection* shader_reflection, const D3D12_SHADER_DESC& shader_desc,
         bool increment_slot = false);
 
+    BOOL m_allow_tearing = FALSE;
+
 public:
     bool create(bool enable_debug_layer);
 
