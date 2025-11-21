@@ -12,7 +12,7 @@ namespace glRemix
 {
 static void handle_wgl_create_context(const GLCommandContext& ctx, const void* data)
 {
-    const auto* cmd = static_cast<const WGLCreateContextCommand*>(data);
+    const auto cmd = static_cast<const WGLCreateContextCommand*>(data);
     ctx.state.hwnd = cmd->hwnd;
     ctx.state.m_create_context = true;
 }
@@ -23,7 +23,7 @@ static void handle_wgl_create_context(const GLCommandContext& ctx, const void* d
 
 static void handle_begin(const GLCommandContext& ctx, const void* data)
 {
-    const auto* cmd = reinterpret_cast<const GLBeginCommand*>(data);
+    const auto* cmd = static_cast<const GLBeginCommand*>(data);
     ctx.state.m_topology = cmd->mode;
 
     ctx.state.t_vertices.clear();
@@ -162,10 +162,10 @@ static void handle_vertex3f(const GLCommandContext& ctx, const void* data)
 {
     const auto* cmd = static_cast<const GLVertex3fCommand*>(data);
 
-    Vertex vertex{ .position = fv_to_xmf3(*cmd),
-                   .color = ctx.state.m_color,
-                   .normal = ctx.state.m_normal,
-                   .uv = ctx.state.m_uv };
+    const Vertex vertex{ .position = fv_to_xmf3(*cmd),
+                         .color = ctx.state.m_color,
+                         .normal = ctx.state.m_normal,
+                         .uv = ctx.state.m_uv };
     ctx.state.t_vertices.push_back(vertex);
 }
 
@@ -173,10 +173,10 @@ static void handle_vertex2f(const GLCommandContext& ctx, const void* data)
 {
     const auto* cmd = static_cast<const GLVertex2fCommand*>(data);
 
-    Vertex vertex{ .position = fv_to_xmf3(GLVec3f{ cmd->x, cmd->y, 0.0f }),
-                   .color = ctx.state.m_color,
-                   .normal = ctx.state.m_normal,
-                   .uv = ctx.state.m_uv };
+    const Vertex vertex{ .position = fv_to_xmf3(GLVec3f{ cmd->x, cmd->y, 0.0f }),
+                         .color = ctx.state.m_color,
+                         .normal = ctx.state.m_normal,
+                         .uv = ctx.state.m_uv };
     ctx.state.t_vertices.push_back(vertex);
 }
 
@@ -468,8 +468,8 @@ static void handle_end_list(const GLCommandContext& ctx, const void* data)
                                       .m_offset;  // record GL_END_LIST to mark end of display list
 
     // record new list in respective index
-    std::vector new_list(ctx.driver.command_buffer.begin() + ctx.state.m_display_list_begin,
-                         ctx.driver.command_buffer.begin() + display_list_end);
+    std::vector new_list(ctx.driver.get_command_buffer_data() + ctx.state.m_display_list_begin,
+                         ctx.driver.get_command_buffer_data() + display_list_end);
     ctx.state.m_display_lists[ctx.state.m_list_index] = std::move(new_list);
 
     ctx.state.m_execution_mode = GL_COMPILE_AND_EXECUTE;  // reset execution state
@@ -583,8 +583,8 @@ void glRemix::glDriver::init_handlers()
 
 void glRemix::glDriver::init()
 {
-    ipc.init_reader();
-    command_buffer.resize(ipc.get_max_payload_size());
+    m_ipc.init_reader();
+    m_command_buffer.resize(m_ipc.get_max_payload_size());
 
     init_handlers();
 }
@@ -593,25 +593,25 @@ void glRemix::glDriver::process_stream()
 {
     UINT32 buffer_size = 0;
     UINT32 frame_index = 0;
-    ipc.consume_frame_or_wait(command_buffer.data(), &buffer_size, &frame_index);
+    m_ipc.consume_frame_or_wait(m_command_buffer.data(), &buffer_size, &frame_index);
 
     if (buffer_size == 0)
     {
         return;
     }
 
-    state.m_current_frame = frame_index;
+    m_state.m_current_frame = frame_index;
 
     // reset per frames
-    state.m_create_context = false;
-    state.m_meshes.clear();              // per frame meshes
-    state.m_matrix_pool.clear();         // reset matrix pool each frame
-    state.m_materials.clear();
-    state.m_pending_geometries.clear();  // clear pending geometry data
+    m_state.m_create_context = false;
+    m_state.m_meshes.clear();              // per frame meshes
+    m_state.m_matrix_pool.clear();         // reset matrix pool each frame
+    m_state.m_materials.clear();
+    m_state.m_pending_geometries.clear();  // clear pending geometry data
 
-    state.m_offset = 0;
-    GLCommandContext ctx{ state, *this };
-    read_buffer(ctx, command_buffer.data(), buffer_size, state.m_offset);
+    m_state.m_offset = 0;
+    GLCommandContext ctx{ m_state, *this };
+    read_buffer(ctx, m_command_buffer.data(), buffer_size, m_state.m_offset);
 }
 
 void glRemix::glDriver::read_buffer(const GLCommandContext& ctx, const UINT8* buffer,

@@ -12,7 +12,7 @@ namespace glRemix
 {
 constexpr size_t NUM_COMMANDS = static_cast<size_t>(GLCommandType::END_COMMANDS);
 class glDriver;  // forward declare
-struct glState;
+class glState;
 
 // represents view of command within shared memory
 struct GLCommandView
@@ -31,9 +31,9 @@ struct GLCommandContext
 
 class glDriver
 {
-    IPCProtocol ipc;
-
-    glState state;
+    glState m_state;
+    IPCProtocol m_ipc;
+    std::vector<UINT8> m_command_buffer;
 
     using GLCommandHandler = void (*)(const GLCommandContext&, const void* data);
     std::array<GLCommandHandler, NUM_COMMANDS> gl_command_handlers{};
@@ -44,16 +44,19 @@ class glDriver
                            GLCommandView& out);
 
 public:
-    std::vector<UINT8> command_buffer;
-
     void process_stream();
     void read_buffer(const GLCommandContext& ctx, const UINT8* buffer, size_t buffer_size,
                      size_t& offset);
 
     glState& get_state()
     {
-        return state;
-    };
+        return m_state;
+    }
+
+    const UINT8* get_command_buffer_data() const
+    {
+        return m_command_buffer.data();
+    }
 
     glDriver();
     ~glDriver() = default;

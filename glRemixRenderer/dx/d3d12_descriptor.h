@@ -1,6 +1,4 @@
 #pragma once
-#include <cassert>
-#include <wrl/client.h>
 
 namespace glRemix::dx
 {
