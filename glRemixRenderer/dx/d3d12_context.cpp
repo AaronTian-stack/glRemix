@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <cassert>
-#include <stdexcept>
 #include <DirectXMath.h>
+#include <DirectXTex.h>
 
 #include <shared/math_utils.h>
 
@@ -444,7 +444,7 @@ bool D3D12Context::create_buffer(const BufferDesc& desc, D3D12Buffer* buffer,
     return true;
 }
 
-bool D3D12Context::map_buffer(const D3D12Buffer* buffer, void** pointer)
+bool D3D12Context::map_buffer(const D3D12Buffer* const buffer, void** pointer)
 {
     assert(buffer);
     assert(buffer->desc.visibility & CPU);
@@ -570,6 +570,91 @@ bool D3D12Context::create_texture(const TextureDesc& desc, const D3D12_BARRIER_L
     return true;
 }
 
+bool D3D12Context::copy_to_texture(ID3D12GraphicsCommandList7* cmd_list, const void* data,
+                                   D3D12Buffer* const staging, D3D12Texture* const texture)
+{
+    // We don't support multi plane formats so just mips * array/depth
+    const UINT32 num_subresources = texture->desc.mip_levels * texture->desc.depth_or_array_size;
+
+    constexpr UINT max_subresources = 12;
+    assert(num_subresources < max_subresources);
+    std::array<D3D12_PLACED_SUBRESOURCE_FOOTPRINT, max_subresources> layouts;
+    UINT64 size;
+    const auto& desc = texture->allocation->GetResource()->GetDesc();
+    m_device->GetCopyableFootprints(&desc, 0, num_subresources, 0, layouts.data(), nullptr, nullptr,
+                                    &size);
+
+    BufferDesc staging_desc{
+        .size = size,
+        .visibility = CPU,
+        .uav = false,
+        .acceleration_structure = false,
+    };
+    if (!create_buffer(staging_desc, staging, "staging buffer"))
+    {
+        return false;
+    }
+
+    void* upload_memory;
+    map_buffer(staging, &upload_memory);
+    auto upload_ptr = static_cast<UINT8*>(upload_memory);
+
+    const UINT bpp = BitsPerPixel(texture->desc.format) / 8;
+    UINT64 offset = 0;
+    for (UINT subresource = 0; subresource < num_subresources; subresource++)
+    {
+        const auto mip = subresource % texture->desc.mip_levels;
+
+        const auto mip_width = std::max(1u, texture->desc.width >> mip);
+        const auto mip_height = std::max(1u, texture->desc.height >> mip);
+        const auto mip_depth = std::max<UINT>(1u, texture->desc.depth_or_array_size >> mip);
+
+        const auto bytes_per_row = mip_width * bpp;
+
+        const auto& footprint = layouts[subresource];
+        const auto row_pitch = footprint.Footprint.RowPitch;
+        const auto slice_pitch = row_pitch * footprint.Footprint.Height;
+
+        UINT8* dst = &upload_ptr[footprint.Offset];
+
+        const UINT8* src = static_cast<const UINT8*>(data) + offset;
+
+        for (UINT z = 0; z < mip_depth; z++)
+        {
+            UINT8* dst_slice = &dst[z * slice_pitch];
+            const UINT8* src_slice = &src[z * mip_height * bytes_per_row];
+
+            for (UINT y = 0; y < mip_height; y++)
+            {
+                memcpy(&dst_slice[y * row_pitch], &src_slice[y * bytes_per_row], bytes_per_row);
+            }
+        }
+
+        offset += bytes_per_row * mip_height;
+    }
+
+    unmap_buffer(staging);
+
+    // Copy each subresource from stating to texture
+    for (UINT subresource = 0; subresource < num_subresources; subresource++)
+    {
+        D3D12_TEXTURE_COPY_LOCATION destination{
+            .pResource = texture->allocation.Get()->GetResource(),
+            .Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX,
+            .SubresourceIndex = subresource,
+        };
+        D3D12_TEXTURE_COPY_LOCATION source{
+            .pResource = staging->allocation->GetResource(),
+            .Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
+            .PlacedFootprint = layouts[subresource],
+            // PlacedFootprint offset is 0 since handled by allocator
+        };
+        cmd_list->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
+    }
+
+    return true;
+}
+
 bool D3D12Context::create_queue(const D3D12_COMMAND_LIST_TYPE type, D3D12Queue* queue,
                                 const char* debug_name) const
 {
@@ -679,7 +764,6 @@ void D3D12Context::copy_texture_to_swapchain(ID3D12GraphicsCommandList7* cmd_lis
                                              const D3D12Texture& texture)
 {
     assert(cmd_list);
-    assert(&texture);
 
     const UINT copy_width = std::min(m_swapchain_dims.x, texture.desc.width);
     const UINT copy_height = std::min(m_swapchain_dims.y, texture.desc.height);
