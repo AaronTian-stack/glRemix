@@ -713,7 +713,7 @@ void glRemix::glRemixRenderer::render()
 
     if (state.m_create_context)
     {
-        create_hwnd(state.hwnd);
+        create_swapchain_and_rts(state.hwnd);
     }
 
     while (state.m_materials.size() > m_material_buffers.size() * MATERIALS_PER_BUFFER)
@@ -1071,7 +1071,7 @@ void glRemix::glRemixRenderer::destroy()
     m_context.destroy_imgui();
 }
 
-void glRemix::glRemixRenderer::create_hwnd(HWND &hwnd) 
+void glRemix::glRemixRenderer::create_swapchain_and_rts(HWND hwnd)
 {
     THROW_IF_FALSE(m_context.create_swapchain(hwnd, &m_gfx_queue, &m_frame_index));
     THROW_IF_FALSE(

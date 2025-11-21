@@ -35,7 +35,7 @@ namespace glRemix
 
 		glState state;
 
-		using GLCommandHandler = void(*)(GLCommandContext&, const void* data);
+		using GLCommandHandler = void(*)(const GLCommandContext&, const void* data);
         std::array<GLCommandHandler, NUM_COMMANDS> gl_command_handlers{};
 
 		void init();
@@ -45,8 +45,9 @@ namespace glRemix
 
 	public:
         std::vector<UINT8> command_buffer;
+
 		void process_stream();
-        void read_buffer(GLCommandContext& ctx, const UINT8* buffer, size_t buffer_size,
+        void read_buffer(const GLCommandContext& ctx, const UINT8* buffer, size_t buffer_size,
                          size_t& offset);
 
         glState& get_state() { return state; };

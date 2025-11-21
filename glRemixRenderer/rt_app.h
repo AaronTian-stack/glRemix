@@ -79,7 +79,7 @@ class glRemixRenderer : public Application
     static constexpr UINT FRAME_LENIENCY = 10;
     UINT m_current_frame = 0;
 
-    void create_hwnd(HWND& hwnd);
+    void create_swapchain_and_rts(HWND hwnd);
     void create_uav_rt();
 
     // This should only be called from create_pending_buffers

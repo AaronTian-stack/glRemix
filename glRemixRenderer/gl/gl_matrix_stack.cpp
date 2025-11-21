@@ -265,13 +265,10 @@ void glRemix::gl::glMatrixStack::load(UINT32 mode, const float* m)
         return;
     }
 
-    XMFLOAT4X4 glMat;
-    memcpy(&glMat, m, sizeof(float) * 16);
-
-    XMMATRIX dxMat = XMLoadFloat4x4(&glMat);
-    dxMat = XMMatrixTranspose(dxMat);
-
-    XMStoreFloat4x4(&stack->top(), dxMat);
+    stack->top() = { m[0], m[4], m[8],  m[12], 
+                     m[1], m[5], m[9],  m[13],
+                     m[2], m[6], m[10], m[14], 
+                     m[3], m[7], m[11], m[15] };
 }
 
 void glMatrixStack::print_stacks() const
