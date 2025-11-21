@@ -88,10 +88,9 @@ bool D3D12Context::create(const bool enable_debug_layer)
                                        "DXGI Factory");
     }
 
-    BOOL allow_tearing = FALSE;
-    m_dxgi_factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &allow_tearing,
+    m_dxgi_factory->CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, &m_allow_tearing,
                                         sizeof(BOOL));
-    if (!allow_tearing)
+    if (!m_allow_tearing)
     {
         OutputDebugStringA("D3D12 ERROR: Present tearing not supported\n");
         return false;
@@ -350,7 +349,15 @@ UINT D3D12Context::get_swapchain_index() const
 bool D3D12Context::present()
 {
     assert(m_swapchain);
-    if (FAILED(m_swapchain->Present(1, 0)))
+
+    UINT syncInterval = 1;
+    UINT flags = 0;
+    if (m_allow_tearing)
+    {
+        syncInterval = 0;
+        flags = DXGI_PRESENT_ALLOW_TEARING;
+    }
+    if (FAILED(m_swapchain->Present(syncInterval, flags)))
     {
         OutputDebugStringA("D3D12 ERROR: Failed to present swapchain\n");
         return false;

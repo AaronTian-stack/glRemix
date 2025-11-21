@@ -4,6 +4,14 @@
 
 #include "hlsl_compat.h"
 
+#ifndef __cplusplus
+// hlsl path
+#define SHARED_CPP 0
+#else
+// c++ path
+#define SHARED_CPP 1
+#endif
+
 struct RayGenConstantBuffer
 {
     XMFLOAT4X4 view_proj;
@@ -36,6 +44,23 @@ struct Light
     float quadratic_attenuation;
 
     BOOL enabled;
+
+#if SHARED_CPP
+    Light()
+        : ambient(0, 0, 0, 1)
+        , diffuse(1, 1, 1, 1)
+        , specular(0, 0, 0, 1)
+        , position(0, 0, 1, 1)
+        , spot_direction(0, 0, -1)
+        , spot_exponent(0)
+        , spot_cutoff(180.0f)
+        , constant_attenuation(1.0f)
+        , linear_attenuation(0.0f)
+        , quadratic_attenuation(0.0f)
+        , enabled(FALSE)
+    {
+    }
+#endif
 };
 
 struct Material

@@ -107,6 +107,12 @@ void glRemix::glRemixRenderer::create()
                                                       m_raster_pipeline.ReleaseAndGetAddressOf(),
                                                       "raster pipeline"));
 
+    {
+        // setup IPC
+        m_ipc.init_reader();
+        m_ipc_buffer.resize(m_ipc.get_max_payload_size());
+    }
+
     // Create raytracing global root signature
     // TODO: Make a singular very large root signature that is used for all ray tracing pipelines
     {
@@ -133,7 +139,7 @@ void glRemix::glRemixRenderer::create()
         // Constant buffers at b0 and b1
         descriptor_ranges[2] = {
             .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV,
-            .NumDescriptors = 2, // now binds raygen at b0 and lights at b1
+            .NumDescriptors = 2,  // now binds raygen at b0 and lights at b1
             .BaseShaderRegister = 0,
             .RegisterSpace = 0,
             .OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND
@@ -340,36 +346,15 @@ void glRemix::glRemixRenderer::create()
 
 void glRemix::glRemixRenderer::read_gl_command_stream()
 {
-    // stall until initialized
-    while (!m_ipc.init_reader())
+    UINT32 payload_size = 0;
+
+    // consume frame from IPC buffer
+    m_ipc.consume_frame_or_wait(m_ipc_buffer.data(), &payload_size, &m_current_frame);
+
+    if (payload_size == 0)
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(60));
-    }
-
-    const UINT32 buf_capacity = m_ipc.get_capacity();  // ask shared mem for capacity
-    std::vector<UINT8> ipc_buf(buf_capacity);          // decoupled local buffer here
-
-    // stall until frame data is grabbed
-    UINT32 bytes_read = 0;
-    while (
-        !m_ipc.try_consume_frame(ipc_buf.data(), static_cast<UINT32>(ipc_buf.size()), &bytes_read))
-    {
-        OutputDebugStringA("No frame data available.\n");
-        std::this_thread::sleep_for(std::chrono::milliseconds(60));  // rest before next poll
-    }
-
-    const auto* frame_header = reinterpret_cast<const GLFrameUnifs*>(ipc_buf.data());
-
-    // if no data was captured return
-    if (frame_header->payload_size == 0)
-    {
-        char buffer[256];
-        sprintf_s(buffer, "Frame %u: no new commands.\n", frame_header->frame_index);
-        OutputDebugStringA(buffer);
         return;
     }
-
-    m_current_frame = frame_header->frame_index;
 
     m_meshes.clear();              // per frame meshes
     m_matrix_pool.clear();         // reset matrix pool each frame
@@ -377,21 +362,50 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     m_pending_geometries.clear();  // clear pending geometry data
 
     // loop through data from frame
-    read_ipc_buffer(ipc_buf, sizeof(GLFrameUnifs), bytes_read);
+    read_ipc_buffer(m_ipc_buffer, 0, payload_size);
 
-    // inject replacement meshes into meshes to be rendererd
-    /*for (auto& [mesh_id, replacement_mesh] : m_replacement_map)
-    {
-        if (replacement_mesh.blas_id == -1)
-        {
-            replacement_mesh.blas_id = build_mesh_blas(m_vertex_pool[replacement_mesh.vertex_id],
-                                                       m_index_pool[replacement_mesh.index_id],
-                                                       cmd_list.Get());
-        }
-        replacement_mesh.last_frame = current_frame;
+    //// initialize lights
+    // auto is_zero_4 = [](const XMFLOAT4& v)
+    //{ return v.x == 0.0f && v.y == 0.0f && v.z == 0.0f && v.w == 0.0f; };
+    // auto is_zero_3 = [](const XMFLOAT3& v) { return v.x == 0.0f && v.y == 0.0f && v.z == 0.0f; };
 
-        m_meshes.push_back(replacement_mesh);
-    }*/
+    // for (auto& light : m_lights)
+    //{
+    //     if (!light.enabled)
+    //     {
+    //         continue;
+    //     }
+    //
+    //     // if light is enabled, initialize to default if value isn't already set by GL commands
+    //     if (is_zero_4(light.ambient))
+    //     {
+    //         light.ambient = XMFLOAT4(0, 0, 0, 1);
+    //     }
+    //     if (is_zero_4(light.diffuse))
+    //     {
+    //         light.diffuse = XMFLOAT4(1, 1, 1, 1);
+    //     }
+    //     if (is_zero_4(light.specular))
+    //     {
+    //         light.specular = XMFLOAT4(1, 1, 1, 1);
+    //     }
+    //     if (is_zero_3(light.spot_direction))
+    //     {
+    //         light.spot_direction = XMFLOAT3(0, 0, -1);
+    //     }
+    //     if (light.spot_exponent == 0.0f)
+    //     {
+    //         light.spot_exponent = 0.0f;
+    //     }
+    //     if (light.spot_cutoff == 0.0f)
+    //     {
+    //         light.spot_cutoff = 180.0f;
+    //     }
+    //     if (light.constant_attenuation == 0.0f)
+    //     {
+    //         light.constant_attenuation = 1.0f;
+    //     }
+    // }
 
     // garbage collect meshes
     for (auto it = m_mesh_map.begin(); it != m_mesh_map.end();)
@@ -415,8 +429,8 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     }
 }
 
-void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
-                                               const size_t start_offset, const UINT32 bytes_read,
+void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& buffer,
+                                               const size_t start_offset, const UINT32 payload_size,
                                                const bool call_list)
 {
     // display list logic
@@ -425,29 +439,34 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
 
     size_t offset = start_offset;  // add additional start index
 
-    while (offset + sizeof(GLCommandUnifs) <= bytes_read)
+    while (offset + sizeof(GLCommandUnifs) <= payload_size)
     {
-        const auto* header = reinterpret_cast<const GLCommandUnifs*>(ipc_buf.data() + offset);
+        const auto* header = reinterpret_cast<const GLCommandUnifs*>(buffer.data() + offset);
         offset += sizeof(GLCommandUnifs);
 
         bool advance = true;
 
         switch (header->type)
         {
-            case GLCommandType::GLCMD_CREATE:
+            case GLCommandType::WGLCMD_CREATE_CONTEXT:
             {
                 HWND hwnd;
-                memcpy(&hwnd, ipc_buf.data() + offset, sizeof(HWND));
+
+                // `header->dataSize` maintains compatibility when building 64-bit shim
+                memcpy(&hwnd, buffer.data() + offset, header->dataSize);
+
+                // hwnd = reinterpret_cast<HWND>(hwnd_ptr);
                 THROW_IF_FALSE(m_context.create_swapchain(hwnd, &m_gfx_queue, &m_frame_index));
                 THROW_IF_FALSE(m_context.create_swapchain_descriptors(m_swapchain_descriptors.data(),
                                                                       &m_rtv_heap));
                 THROW_IF_FALSE(m_context.init_imgui());
                 create_uav_rt();
+                break;
             }
             case GLCommandType::GLCMD_NEW_LIST:
             {
                 const auto* list = reinterpret_cast<const GLNewListCommand*>(
-                    ipc_buf.data() + offset);  // reach into data payload
+                    buffer.data() + offset);  // reach into data payload
 
                 list_index = list->list;
                 list_mode_ = static_cast<gl::GLListMode>(list->mode);  // set global execution state
@@ -459,7 +478,7 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
             case GLCommandType::GLCMD_CALL_LIST:
             {
                 const auto* list = reinterpret_cast<const GLCallListCommand*>(
-                    ipc_buf.data() + offset);  // reach into data payload
+                    buffer.data() + offset);  // reach into data payload
 
                 if (m_display_lists.contains(list->list))
                 {
@@ -487,8 +506,8 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
                     = offset;  // record GL_END_LIST to mark end of display list
 
                 // record new list in respective index
-                std::vector new_list(ipc_buf.begin() + display_list_begin,
-                                     ipc_buf.begin() + display_list_end);
+                std::vector new_list(buffer.begin() + display_list_begin,
+                                     buffer.begin() + display_list_end);
                 m_display_lists[list_index] = std::move(new_list);
 
                 list_mode_ = gl::GLListMode::COMPILE_AND_EXECUTE;  // reset execution state
@@ -499,24 +518,25 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
             case GLCommandType::GLCMD_BEGIN:
             {
                 const auto* type = reinterpret_cast<const GLBeginCommand*>(
-                    ipc_buf.data() + offset);  // reach into data payload
-                offset += header->dataSize;    // we enter read geometry assuming first command
-                                               // inbetween glbegin and end
+                    buffer.data() + offset);  // reach into data payload
+                offset += header->dataSize;   // we enter read geometry assuming first command
+                                              // inbetween glbegin and end
                 advance = false;
-                read_geometry(ipc_buf.data(), &offset, static_cast<GLTopology>(type->mode),
-                              bytes_read, call_list);
+                read_geometry(
+                    buffer.data(), &offset, static_cast<GLTopology>(type->mode), payload_size,
+                    call_list);  // store geometry data in vertex buffers depending on topology type
                 break;
             }
             case GLCommandType::GLCMD_NORMAL3F:
             {
-                const auto* n = reinterpret_cast<const GLNormal3fCommand*>(ipc_buf.data() + offset);
+                const auto* n = reinterpret_cast<const GLNormal3fCommand*>(buffer.data() + offset);
                 m_normal = { n->x, n->y, n->z };
                 break;
             }
             case GLCommandType::GLCMD_MATERIALF:
             {
-                const auto* mat = reinterpret_cast<const GLMaterialCommand*>(
-                    ipc_buf.data() + offset);  // reach into data payload
+                const auto* mat = reinterpret_cast<const GLMaterialfCommand*>(
+                    buffer.data() + offset);  // reach into data payload
 
                 // Ignore face parameter for now
                 auto set_xmfloat4 = [&](const float v) { return XMFLOAT4{ v, v, v, 1.0f }; };
@@ -543,7 +563,7 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
             case GLCommandType::GLCMD_MATERIALFV:
             {
                 const auto* mat = reinterpret_cast<const GLMaterialfvCommand*>(
-                    ipc_buf.data() + offset);  // reach into data payload
+                    buffer.data() + offset);  // reach into data payload
 
                 // Ignore face parameter for now
                 auto set_xmfloat4 = [&](const GLVec4f& v)
@@ -579,18 +599,25 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
             case GLCommandType::GLCMD_LIGHTF:
             {
                 const auto* light = reinterpret_cast<const GLLightCommand*>(
-                    ipc_buf.data() + offset);  // reach into data payload
+                    buffer.data() + offset);  // reach into data payload
 
-                uint32_t light_index = static_cast<uint32_t>(light->light) - static_cast<uint32_t>(GLLight::GL_LIGHT0);
+                uint32_t light_index = static_cast<uint32_t>(light->light)
+                                       - static_cast<uint32_t>(GLLight::GL_LIGHT0);
                 Light& m_light = m_lights[light_index];
 
                 switch (static_cast<GLLight>(light->pname))
                 {
                     case GLLight::GL_SPOT_EXPONENT: m_light.spot_exponent = light->param; break;
                     case GLLight::GL_SPOT_CUTOFF: m_light.spot_cutoff = light->param; break;
-                    case GLLight::GL_CONSTANT_ATTENUATION: m_light.constant_attenuation = light->param; break;
-                    case GLLight::GL_LINEAR_ATTENUATION: m_light.linear_attenuation = light->param; break;
-                    case GLLight::GL_QUADRATIC_ATTENUATION: m_light.quadratic_attenuation = light->param; break;
+                    case GLLight::GL_CONSTANT_ATTENUATION:
+                        m_light.constant_attenuation = light->param;
+                        break;
+                    case GLLight::GL_LINEAR_ATTENUATION:
+                        m_light.linear_attenuation = light->param;
+                        break;
+                    case GLLight::GL_QUADRATIC_ATTENUATION:
+                        m_light.quadratic_attenuation = light->param;
+                        break;
                     default: break;
                 }
 
@@ -599,25 +626,31 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
             case GLCommandType::GLCMD_LIGHTFV:
             {
                 const auto* light = reinterpret_cast<const GLLightfvCommand*>(
-                    ipc_buf.data() + offset);  // reach into data payload
+                    buffer.data() + offset);  // reach into data payload
 
                 uint32_t light_index = static_cast<uint32_t>(light->light)
                                        - static_cast<uint32_t>(GLLight::GL_LIGHT0);
                 Light& m_light = m_lights[light_index];
+                m_light.enabled = TRUE;  // mark light as enabled
 
                 auto set_xmfloat4 = [&](const GLVec4f& v)
                 { return XMFLOAT4{ v.x, v.y, v.z, v.w }; };
 
-                auto set_xmfloat3 = [&](const GLVec4f& v)
-                { return XMFLOAT3{ v.x, v.y, v.z }; };
+                auto set_xmfloat3 = [&](const GLVec4f& v) { return XMFLOAT3{ v.x, v.y, v.z }; };
 
                 switch (static_cast<GLLight>(light->pname))
                 {
-                    case GLLight::GL_POSITION: m_light.position = set_xmfloat4(light->params); break;
+                    case GLLight::GL_POSITION:
+                        m_light.position = set_xmfloat4(light->params);
+                        break;
                     case GLLight::GL_AMBIENT: m_light.ambient = set_xmfloat4(light->params); break;
                     case GLLight::GL_DIFFUSE: m_light.diffuse = set_xmfloat4(light->params); break;
-                    case GLLight::GL_SPECULAR: m_light.specular = set_xmfloat4(light->params); break;
-                    case GLLight::GL_SPOT_DIRECTION: m_light.spot_direction = set_xmfloat3(light->params); break;
+                    case GLLight::GL_SPECULAR:
+                        m_light.specular = set_xmfloat4(light->params);
+                        break;
+                    case GLLight::GL_SPOT_DIRECTION:
+                        m_light.spot_direction = set_xmfloat3(light->params);
+                        break;
                     default: break;
                 }
 
@@ -626,7 +659,7 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
             case GLCommandType::GLCMD_MATRIX_MODE:
             {
                 const auto* type = reinterpret_cast<const GLMatrixModeCommand*>(
-                    ipc_buf.data() + offset);  // reach into data payload
+                    buffer.data() + offset);  // reach into data payload
                 matrix_mode = static_cast<gl::GLMatrixMode>(type->mode);
                 break;
             }
@@ -647,7 +680,7 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
             }
             case GLCommandType::GLCMD_ROTATE:
             {
-                const auto* angle_axis = reinterpret_cast<const GLRotateCommand*>(ipc_buf.data()
+                const auto* angle_axis = reinterpret_cast<const GLRotateCommand*>(buffer.data()
                                                                                   + offset);
                 const float angle = angle_axis->angle;
                 const float x = angle_axis->axis.x;
@@ -659,14 +692,14 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
             }
             case GLCommandType::GLCMD_TRANSLATE:
             {
-                const auto* vec = reinterpret_cast<const GLTranslateCommand*>(ipc_buf.data()
+                const auto* vec = reinterpret_cast<const GLTranslateCommand*>(buffer.data()
                                                                               + offset);
                 m_matrix_stack.translate(matrix_mode, vec->t.x, vec->t.y, vec->t.z);
                 break;
             }
             case GLCommandType::GLCMD_FRUSTUM:
             {
-                const auto* frust = reinterpret_cast<const GLFrustumCommand*>(ipc_buf.data()
+                const auto* frust = reinterpret_cast<const GLFrustumCommand*>(buffer.data()
                                                                               + offset);
 
                 // get current window dimensions
@@ -695,8 +728,8 @@ void glRemix::glRemixRenderer::read_ipc_buffer(std::vector<UINT8>& ipc_buf,
             default:
             {
                 char buffer[256];
-                sprintf_s(buffer, "Unhandled Command: %d (size: %u)\n", header->type,
-                          header->dataSize);
+                sprintf_s(buffer, "glxRemixRenderer - Unhandled Command: %d (size: %u)\n",
+                          header->type, header->dataSize);
                 OutputDebugStringA(buffer);
                 break;
             }
@@ -1583,20 +1616,16 @@ void glRemix::glRemixRenderer::render()
 
     // Dispatch rays to UAV render target
     {
-        XMMATRIX view = XMMatrixIdentity();
-
         XMMATRIX proj = XMLoadFloat4x4(&m_matrix_stack.top(gl::GLMatrixMode::PROJECTION));
 
-        XMMATRIX view_proj = XMMatrixMultiply(view, proj);
-
-        XMMATRIX inverse_view_projection = XMMatrixInverse(nullptr, view_proj);
+        XMMATRIX inv_proj = XMMatrixInverse(nullptr, proj);
 
         RayGenConstantBuffer raygen_cb{
             .width = static_cast<float>(win_dims.x),
             .height = static_cast<float>(win_dims.y),
         };
-        XMStoreFloat4x4(&raygen_cb.view_proj, XMMatrixTranspose(view_proj));
-        XMStoreFloat4x4(&raygen_cb.inv_view_proj, XMMatrixTranspose(inverse_view_projection));
+        XMStoreFloat4x4(&raygen_cb.view_proj, XMMatrixTranspose(proj));
+        XMStoreFloat4x4(&raygen_cb.inv_view_proj, XMMatrixTranspose(inv_proj));
 
         // Copy constant buffer to GPU
         auto raygen_cb_ptr = &m_raygen_constant_buffers[get_frame_index()];
