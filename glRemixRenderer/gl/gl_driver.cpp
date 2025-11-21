@@ -305,7 +305,9 @@ static void handle_lightfv(const GLCommandContext& ctx, const void* data)
         case GL_AMBIENT: m_light.ambient = fv_to_xmf4(cmd->params); break;
         case GL_DIFFUSE: m_light.diffuse = fv_to_xmf4(cmd->params); break;
         case GL_SPECULAR: m_light.specular = fv_to_xmf4(cmd->params); break;
-        case GL_SPOT_DIRECTION: m_light.spot_direction = fv_to_xmf3(GLVec3f{ cmd->params.x, cmd->params.y, cmd->params.z });
+        case GL_SPOT_DIRECTION:
+            m_light.spot_direction = fv_to_xmf3(
+                GLVec3f{ cmd->params.x, cmd->params.y, cmd->params.z });
             break;
         default: break;
     }
@@ -396,22 +398,24 @@ static void handle_ortho(const GLCommandContext& ctx, const void* data)
 {
     const auto* cmd = static_cast<const GLOrthoCommand*>(data);
 
-    ctx.state.m_matrix_stack.ortho(ctx.state.m_matrix_mode, cmd->left, cmd->right, cmd->bottom, cmd->top, cmd->zNear, cmd->zFar);
+    ctx.state.m_matrix_stack.ortho(ctx.state.m_matrix_mode, cmd->left, cmd->right, cmd->bottom,
+                                   cmd->top, cmd->zNear, cmd->zFar);
 }
 
 static void handle_frustum(const GLCommandContext& ctx, const void* data)
 {
     const auto* cmd = static_cast<const GLFrustumCommand*>(data);
 
-    ctx.state.m_matrix_stack.frustum(ctx.state.m_matrix_mode, cmd->left, cmd->right, cmd->bottom, cmd->top,
-                               cmd->zNear, cmd->zFar);
+    ctx.state.m_matrix_stack.frustum(ctx.state.m_matrix_mode, cmd->left, cmd->right, cmd->bottom,
+                                     cmd->top, cmd->zNear, cmd->zFar);
 }
 
 static void handle_perspective(const GLCommandContext& ctx, const void* data)
 {
     const auto* cmd = static_cast<const GLPerspectiveCommand*>(data);
 
-    ctx.state.m_matrix_stack.perspective(ctx.state.m_matrix_mode, cmd->fovY, cmd->aspect, cmd->zNear, cmd->zFar);
+    ctx.state.m_matrix_stack.perspective(ctx.state.m_matrix_mode, cmd->fovY, cmd->aspect,
+                                         cmd->zNear, cmd->zFar);
 }
 
 // -----------------------------------------------------------------------------
@@ -460,7 +464,8 @@ static void handle_end_list(const GLCommandContext& ctx, const void* data)
 
     const auto* cmd = static_cast<const GLEndListCommand*>(data);
 
-    const auto display_list_end = ctx.state.m_offset;  // record GL_END_LIST to mark end of display list
+    const auto display_list_end = ctx.state
+                                      .m_offset;  // record GL_END_LIST to mark end of display list
 
     // record new list in respective index
     std::vector new_list(ctx.driver.command_buffer.begin() + ctx.state.m_display_list_begin,
@@ -512,15 +517,9 @@ static void handle_disable(const GLCommandContext& ctx, const void* data)
 // -----------------------------------------------------------------------------
 
 // TODO (implementations coming soon)
-static void handle_draw_arrays(const GLCommandContext& ctx, const void* data) 
-{
+static void handle_draw_arrays(const GLCommandContext& ctx, const void* data) {}
 
-}
-
-static void handle_draw_elements(const GLCommandContext& ctx, const void* data) 
-{
-    
-}
+static void handle_draw_elements(const GLCommandContext& ctx, const void* data) {}
 
 }  // namespace glRemix
 
@@ -615,8 +614,8 @@ void glRemix::glDriver::process_stream()
     read_buffer(ctx, command_buffer.data(), buffer_size, state.m_offset);
 }
 
-void glRemix::glDriver::read_buffer(const GLCommandContext& ctx, const UINT8* buffer, size_t buffer_size,
-                                    size_t& offset)
+void glRemix::glDriver::read_buffer(const GLCommandContext& ctx, const UINT8* buffer,
+                                    size_t buffer_size, size_t& offset)
 {
     GLCommandView view{};
     while (read_next_command(buffer, buffer_size, offset, view))
@@ -670,6 +669,6 @@ bool glRemix::glDriver::read_next_command(const UINT8* buffer, size_t buffer_siz
     out.data_size = header->dataSize;
     out.data = buffer + offset;
 
-    offset += header->dataSize; // move header after extracting latest command
+    offset += header->dataSize;  // move header after extracting latest command
     return true;
 }

@@ -393,7 +393,7 @@ void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7
         MeshRecord cached_mesh{};
         cached_mesh.mesh_id = pending.hash;
         cached_mesh.blas_vb_ib_idx = resource_idx;
-        state.m_mesh_map[pending.hash] = cached_mesh; // actually modifies driver state
+        state.m_mesh_map[pending.hash] = cached_mesh;  // actually modifies driver state
 
         m_mesh_resources.push_back(std::move(resource));
     }
@@ -708,7 +708,9 @@ void glRemix::glRemixRenderer::render()
 {
     // Read GL stream and set resources accordingly
     glState& state = m_driver.get_state();
-    state.m_num_mesh_resources = m_mesh_resources.size(); // required for setting mesh record pointers properly within driver
+    state.m_num_mesh_resources
+        = m_mesh_resources
+              .size();  // required for setting mesh record pointers properly within driver
     m_driver.process_stream();
 
     if (state.m_create_context)

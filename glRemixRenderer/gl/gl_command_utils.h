@@ -33,4 +33,4 @@ inline XMFLOAT4 f_to_xmf4(const float f)
 {
     return fv_to_xmf4(GLVec4f{ f, f, f, f });
 }
-}
+}  // namespace glRemix

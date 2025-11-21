@@ -24,7 +24,7 @@ public:
     void push(UINT32 mode);
     void pop(UINT32 mode);
     XMFLOAT4X4& top(UINT32 mode);
-    void mul_set(UINT32 mode, const XMMATRIX& r);     // multiplies and sets top of stack
+    void mul_set(UINT32 mode, const XMMATRIX& r);  // multiplies and sets top of stack
     void mul_set(UINT32 mode, const float* m);     // multiplies and sets top of stack
 
     // operations

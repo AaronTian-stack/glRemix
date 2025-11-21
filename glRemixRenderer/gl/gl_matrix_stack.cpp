@@ -191,7 +191,7 @@ void glMatrixStack::translate(UINT32 mode, float x, float y, float z)
     mul_set(mode, t);
 }
 
-void glRemix::gl::glMatrixStack::scale(UINT32 mode, float x, float y, float z) 
+void glRemix::gl::glMatrixStack::scale(UINT32 mode, float x, float y, float z)
 {
     const auto s = XMMatrixScaling(x, y, z);
     mul_set(mode, s);
@@ -207,13 +207,22 @@ void glRemix::gl::glMatrixStack::ortho(UINT32 mode, double l, double r, double b
     const auto N = static_cast<float>(n);
     const auto F = static_cast<float>(f);
 
-    XMFLOAT4X4 m = 
-    { 
-        2.0f / (R - L), 0.0f, 0.0f, 0.0f,
-        0.0f, 2.0f / (T - B), 0.0f, 0.0f,
-        0.0f, 0.0f, -2.0f / (F - N), 0.0f,
-        -(R + L) / (R - L), -(T + B) / (T - B), -(F + N) / (F - N), 1.0f 
-    };
+    XMFLOAT4X4 m = { 2.0f / (R - L),
+                     0.0f,
+                     0.0f,
+                     0.0f,
+                     0.0f,
+                     2.0f / (T - B),
+                     0.0f,
+                     0.0f,
+                     0.0f,
+                     0.0f,
+                     -2.0f / (F - N),
+                     0.0f,
+                     -(R + L) / (R - L),
+                     -(T + B) / (T - B),
+                     -(F + N) / (F - N),
+                     1.0f };
 
     XMMATRIX mat = XMLoadFloat4x4(&m);
     mat = XMMatrixTranspose(mat);
@@ -236,8 +245,8 @@ void glMatrixStack::frustum(const UINT32 mode, const double l, const double r, c
     mul_set(mode, p);
 }
 
-void glRemix::gl::glMatrixStack::perspective(UINT32 mode, double fovY, double aspect,
-                                             double n, double f)
+void glRemix::gl::glMatrixStack::perspective(UINT32 mode, double fovY, double aspect, double n,
+                                             double f)
 {
     const auto fov = static_cast<float>(fovY);
     const auto asp = static_cast<float>(aspect);
@@ -249,7 +258,7 @@ void glRemix::gl::glMatrixStack::perspective(UINT32 mode, double fovY, double as
     mul_set(mode, p);
 }
 
-void glRemix::gl::glMatrixStack::load(UINT32 mode, const float* m) 
+void glRemix::gl::glMatrixStack::load(UINT32 mode, const float* m)
 {
     std::stack<XMFLOAT4X4>* stack;
     switch (mode)
@@ -265,10 +274,8 @@ void glRemix::gl::glMatrixStack::load(UINT32 mode, const float* m)
         return;
     }
 
-    stack->top() = { m[0], m[4], m[8],  m[12], 
-                     m[1], m[5], m[9],  m[13],
-                     m[2], m[6], m[10], m[14], 
-                     m[3], m[7], m[11], m[15] };
+    stack->top() = { m[0], m[4], m[8],  m[12], m[1], m[5], m[9],  m[13],
+                     m[2], m[6], m[10], m[14], m[3], m[7], m[11], m[15] };
 }
 
 void glMatrixStack::print_stacks() const
