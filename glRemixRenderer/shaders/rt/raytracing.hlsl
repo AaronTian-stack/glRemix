@@ -1,5 +1,8 @@
 #include "shared_structs.h"
 
+#define GL_ObjectToWorld3x4() WorldToObject3x4()
+#define GL_WorldToObject3x4() ObjectToWorld3x4()
+
 RaytracingAccelerationStructure scene : register(t0);
 
 RWTexture2D<float4> render_target : register(u0);
@@ -140,13 +143,15 @@ float3 transform_to_world(float3 local_dir, float3 N)
     float3 albedo = v0.color.rgb * bary.x + v1.color.rgb * bary.y + v2.color.rgb * bary.z;
     float3 n_obj = normalize(v0.normal * bary.x + v1.normal * bary.y + v2.normal * bary.z);
 
-    // Transform normal to world space (assumes no non-uniform scale)
-    float3x3 o2w3x3 = (float3x3)WorldToObject3x4();
+    // Transform normal to world space (assumes uniform scale)
+    float3x3 o2w3x3 = (float3x3)GL_ObjectToWorld3x4();
     float3 n_world = normalize(mul(n_obj, o2w3x3));
 
     const float3 hit_pos = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
-    
-    const float3 light_pos = light_cb.lights[0].position.xyz;  // just grab light index 0 for now i assume gl light state's other values are initialized to some default values which we don't have right now
+
+    // Just grab light index 0 for now
+    // TODO: Should loop through all 8 lights and check if each is enabled
+    const float3 light_pos = light_cb.lights[0].position.xyz;
     const float3 light_color = float3(1.0, 1.0, 1.0);
     const float3 light_vec = normalize(light_pos - hit_pos);
 
