@@ -36,7 +36,10 @@ namespace glRemix
         std::vector<Material> m_materials;
         std::vector<XMFLOAT4X4> m_matrix_pool; 
 
+        // lighting
         std::array<Light, 8> m_lights{};
+        bool m_lighting; // TODO use this to somehow enable or disable lighting
+                         // potential ideas could involve passing a root constant to the shader
 
         // matrix
         gl::glMatrixStack m_matrix_stack;

@@ -708,7 +708,7 @@ void glRemix::glRemixRenderer::render()
 {
     // Read GL stream and set resources accordingly
     glState& state = m_driver.get_state();
-    state.m_num_mesh_resources = m_mesh_resources.size();
+    state.m_num_mesh_resources = m_mesh_resources.size(); // required for setting mesh record pointers properly within driver
     m_driver.process_stream();
 
     if (state.m_create_context)

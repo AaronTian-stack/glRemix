@@ -14,7 +14,7 @@ namespace glRemix
     class glDriver;  // forward declare
     struct glState;
 
-
+    // represents view of command within shared memory
 	struct GLCommandView
 	{
         GLCommandType type;
@@ -22,6 +22,7 @@ namespace glRemix
         const void* data;
 	};
 	
+    // passed in to static handlers to allow them to affect persistent gl state
     struct GLCommandContext
     {
         glState& state;
