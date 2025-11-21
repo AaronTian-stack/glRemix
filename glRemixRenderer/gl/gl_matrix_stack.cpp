@@ -24,14 +24,14 @@ glMatrixStack::glMatrixStack()
     texture.push(i);
 }
 
-void glMatrixStack::identity(const GLMatrixMode mode)
+void glMatrixStack::identity(const UINT32 mode)
 {
     std::stack<XMFLOAT4X4>* stack;
     switch (mode)
     {
-        case GLMatrixMode::MODELVIEW: stack = &model_view; break;
-        case GLMatrixMode::PROJECTION: stack = &projection; break;
-        case GLMatrixMode::TEXTURE: stack = &texture; break;
+        case GL_MODELVIEW: stack = &model_view; break;
+        case GL_PROJECTION: stack = &projection; break;
+        case GL_TEXTURE: stack = &texture; break;
         default: return;
     }
 
@@ -43,25 +43,25 @@ void glMatrixStack::identity(const GLMatrixMode mode)
     XMStoreFloat4x4(&stack->top(), XMMatrixIdentity());
 }
 
-void glMatrixStack::push(GLMatrixMode mode)
+void glMatrixStack::push(UINT32 mode)
 {
     switch (mode)
     {
-        case GLMatrixMode::MODELVIEW:
+        case GL_MODELVIEW:
             if (!model_view.empty())
             {
                 model_view.push(model_view.top());
             }
             break;
 
-        case GLMatrixMode::PROJECTION:
+        case GL_PROJECTION:
             if (!projection.empty())
             {
                 projection.push(projection.top());
             }
             break;
 
-        case GLMatrixMode::TEXTURE:
+        case GL_TEXTURE:
             if (!texture.empty())
             {
                 texture.push(texture.top());
@@ -70,25 +70,25 @@ void glMatrixStack::push(GLMatrixMode mode)
     }
 }
 
-void glMatrixStack::pop(const GLMatrixMode mode)
+void glMatrixStack::pop(const UINT32 mode)
 {
     switch (mode)
     {
-        case GLMatrixMode::MODELVIEW:
+        case GL_MODELVIEW:
             if (model_view.size() > 1)
             {
                 model_view.pop();
             }
             break;
 
-        case GLMatrixMode::PROJECTION:
+        case GL_PROJECTION:
             if (projection.size() > 1)
             {
                 projection.pop();
             }
             break;
 
-        case GLMatrixMode::TEXTURE:
+        case GL_TEXTURE:
             if (texture.size() > 1)
             {
                 texture.pop();
@@ -99,15 +99,15 @@ void glMatrixStack::pop(const GLMatrixMode mode)
     }
 }
 
-XMFLOAT4X4& glMatrixStack::top(const GLMatrixMode mode)
+XMFLOAT4X4& glMatrixStack::top(const UINT32 mode)
 {
     switch (mode)
     {
-        case GLMatrixMode::MODELVIEW: return model_view.top();
+        case GL_MODELVIEW: return model_view.top();
 
-        case GLMatrixMode::PROJECTION: return projection.top();
+        case GL_PROJECTION: return projection.top();
 
-        case GLMatrixMode::TEXTURE: return texture.top();
+        case GL_TEXTURE: return texture.top();
 
         default:
         {
@@ -118,14 +118,14 @@ XMFLOAT4X4& glMatrixStack::top(const GLMatrixMode mode)
     }
 }
 
-void glMatrixStack::mul_set(const GLMatrixMode mode, const XMMATRIX& r)
+void glMatrixStack::mul_set(const UINT32 mode, const XMMATRIX& r)
 {
     std::stack<XMFLOAT4X4>* stack;
     switch (mode)
     {
-        case GLMatrixMode::MODELVIEW: stack = &model_view; break;
-        case GLMatrixMode::PROJECTION: stack = &projection; break;
-        case GLMatrixMode::TEXTURE: stack = &texture; break;
+        case GL_MODELVIEW: stack = &model_view; break;
+        case GL_PROJECTION: stack = &projection; break;
+        case GL_TEXTURE: stack = &texture; break;
         default: return;
     }
 
@@ -141,9 +141,36 @@ void glMatrixStack::mul_set(const GLMatrixMode mode, const XMMATRIX& r)
     XMStoreFloat4x4(&stack->top(), out);
 }
 
+void glMatrixStack::mul_set(const UINT32 mode, const float* m)
+{
+    std::stack<XMFLOAT4X4>* stack;
+    switch (mode)
+    {
+        case GL_MODELVIEW: stack = &model_view; break;
+        case GL_PROJECTION: stack = &projection; break;
+        case GL_TEXTURE: stack = &texture; break;
+        default: return;
+    }
+
+    if (!stack || stack->empty())
+    {
+        return;
+    }
+
+    const auto M = XMLoadFloat4x4(&stack->top());
+
+    XMFLOAT4X4 glMat;
+    memcpy(&glMat, m, sizeof(float) * 16);
+    XMMATRIX dxMat = XMLoadFloat4x4(&glMat);
+
+    const auto out = XMMatrixMultiply(dxMat, M);
+
+    XMStoreFloat4x4(&stack->top(), out);
+}
+
 // operations
 
-void glMatrixStack::rotate(const GLMatrixMode mode, const float angle, const float x, const float y,
+void glMatrixStack::rotate(const UINT32 mode, const float angle, const float x, const float y,
                            const float z)
 {
     const float len = std::sqrt(x * x + y * y + z * z);
@@ -157,14 +184,44 @@ void glMatrixStack::rotate(const GLMatrixMode mode, const float angle, const flo
     mul_set(mode, r);
 }
 
-void glMatrixStack::translate(GLMatrixMode mode, float x, float y, float z)
+void glMatrixStack::translate(UINT32 mode, float x, float y, float z)
 {
     const auto t = XMMatrixTranslation(x, y, z);
 
     mul_set(mode, t);
 }
 
-void glMatrixStack::frustum(const GLMatrixMode mode, const double l, const double r, const double b,
+void glRemix::gl::glMatrixStack::scale(UINT32 mode, float x, float y, float z) 
+{
+    const auto s = XMMatrixScaling(x, y, z);
+    mul_set(mode, s);
+}
+
+void glRemix::gl::glMatrixStack::ortho(UINT32 mode, double l, double r, double b, double t,
+                                       double n, double f)
+{
+    const auto L = static_cast<float>(l);
+    const auto R = static_cast<float>(r);
+    const auto B = static_cast<float>(b);
+    const auto T = static_cast<float>(t);
+    const auto N = static_cast<float>(n);
+    const auto F = static_cast<float>(f);
+
+    XMFLOAT4X4 m = 
+    { 
+        2.0f / (R - L), 0.0f, 0.0f, 0.0f,
+        0.0f, 2.0f / (T - B), 0.0f, 0.0f,
+        0.0f, 0.0f, -2.0f / (F - N), 0.0f,
+        -(R + L) / (R - L), -(T + B) / (T - B), -(F + N) / (F - N), 1.0f 
+    };
+
+    XMMATRIX mat = XMLoadFloat4x4(&m);
+    mat = XMMatrixTranspose(mat);
+
+    mul_set(mode, mat);
+}
+
+void glMatrixStack::frustum(const UINT32 mode, const double l, const double r, const double b,
                             const double t, const double n, const double f)
 {
     const auto L = static_cast<float>(l);
@@ -177,6 +234,44 @@ void glMatrixStack::frustum(const GLMatrixMode mode, const double l, const doubl
     const auto p = XMMatrixPerspectiveOffCenterRH(L, R, B, T, N, F);
 
     mul_set(mode, p);
+}
+
+void glRemix::gl::glMatrixStack::perspective(UINT32 mode, double fovY, double aspect,
+                                             double n, double f)
+{
+    const auto fov = static_cast<float>(fovY);
+    const auto asp = static_cast<float>(aspect);
+    const auto N = static_cast<float>(n);
+    const auto F = static_cast<float>(f);
+
+    const auto p = XMMatrixPerspectiveFovRH(fov, asp, N, F);
+
+    mul_set(mode, p);
+}
+
+void glRemix::gl::glMatrixStack::load(UINT32 mode, const float* m) 
+{
+    std::stack<XMFLOAT4X4>* stack;
+    switch (mode)
+    {
+        case GL_MODELVIEW: stack = &model_view; break;
+        case GL_PROJECTION: stack = &projection; break;
+        case GL_TEXTURE: stack = &texture; break;
+        default: return;
+    }
+
+    if (!stack || stack->empty())
+    {
+        return;
+    }
+
+    XMFLOAT4X4 glMat;
+    memcpy(&glMat, m, sizeof(float) * 16);
+
+    XMMATRIX dxMat = XMLoadFloat4x4(&glMat);
+    dxMat = XMMatrixTranspose(dxMat);
+
+    XMStoreFloat4x4(&stack->top(), dxMat);
 }
 
 void glMatrixStack::print_stacks() const

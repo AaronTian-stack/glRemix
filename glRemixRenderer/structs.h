@@ -1,6 +1,9 @@
 #pragma once
-
 #include <DirectXMath.h>
+#include <vector>
+#include <cstdint>
+#include "dx/d3d12_buffer.h"
+#include "dx/d3d12_descriptor.h"
 
 using namespace DirectX;
 
