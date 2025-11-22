@@ -966,6 +966,21 @@ void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7
         cached_mesh.blas_vb_ib_idx = idx;
         m_mesh_map[pending.hash] = cached_mesh;
 
+        // push to m_meshes
+        MeshRecord* mesh;
+        mesh = &m_mesh_map[pending.hash];
+
+        // assign per-instance data for new mesh
+        mesh->mat_idx = static_cast<UINT32>(m_materials.size());
+        m_materials.push_back(m_material);
+
+        mesh->mv_idx = static_cast<UINT32>(m_matrix_pool.size());
+        m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
+
+        mesh->last_frame = m_current_frame;
+
+        m_meshes.push_back(*mesh);
+
     }
 
     // Build all BLAS in a single batch
@@ -1258,18 +1273,18 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
 
     m_pending_geometries.push_back(std::move(pending));
 
-    mesh = &m_mesh_map[new_mesh_hash];
+    //mesh = &m_mesh_map[new_mesh_hash];
 
-    // assign per-instance data for new mesh
-    mesh->mat_idx = static_cast<UINT32>(m_materials.size());
-    m_materials.push_back(m_material);
+    //// assign per-instance data for new mesh
+    //mesh->mat_idx = static_cast<UINT32>(m_materials.size());
+    //m_materials.push_back(m_material);
 
-    mesh->mv_idx = static_cast<UINT32>(m_matrix_pool.size());
-    m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
+    //mesh->mv_idx = static_cast<UINT32>(m_matrix_pool.size());
+    //m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
 
-    mesh->last_frame = m_current_frame;
+    //mesh->last_frame = m_current_frame;
 
-    m_meshes.push_back(*mesh);
+    //m_meshes.push_back(*mesh);
 }
 
 void glRemix::glRemixRenderer::transform_replacement_vertices(std::vector<Vertex>& gltf_vertices,
