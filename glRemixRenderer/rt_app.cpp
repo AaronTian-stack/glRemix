@@ -1595,7 +1595,7 @@ void glRemix::glRemixRenderer::render()
         ImGui::RenderPlatformWindowsDefault();
     }
 
-    m_context.present();
+    m_context.present(m_debug_window.m_parameters.unlocked);
 
     increment_frame_index();
 

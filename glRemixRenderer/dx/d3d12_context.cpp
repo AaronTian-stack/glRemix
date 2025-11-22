@@ -346,18 +346,18 @@ UINT D3D12Context::get_swapchain_index() const
     return m_swapchain->GetCurrentBackBufferIndex();
 }
 
-bool D3D12Context::present()
+bool D3D12Context::present(const bool unlocked)
 {
     assert(m_swapchain);
 
-    UINT syncInterval = 1;
+    UINT sync_interval = 1;
     UINT flags = 0;
-    if (m_allow_tearing)
+    if (m_allow_tearing && unlocked)
     {
-        syncInterval = 0;
+        sync_interval = 0;
         flags = DXGI_PRESENT_ALLOW_TEARING;
     }
-    if (FAILED(m_swapchain->Present(syncInterval, flags)))
+    if (FAILED(m_swapchain->Present(sync_interval, flags)))
     {
         OutputDebugStringA("D3D12 ERROR: Failed to present swapchain\n");
         return false;
