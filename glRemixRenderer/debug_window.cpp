@@ -78,7 +78,7 @@ void DebugWindow::render_mesh_ids()
         ImGui::EndListBox();
     }
 
-    if (debug_counter == 1)
+    /*if (debug_counter == 1)
     {
         m_meshID_to_replace = 337216395;
         m_new_asset_path
@@ -86,7 +86,7 @@ void DebugWindow::render_mesh_ids()
 
         m_replace_mesh_callback(m_meshID_to_replace, m_new_asset_path);
         debug_counter--;
-    }
+    }*/
 
     // handle asset replacement with selected mesh
     if (m_meshID_to_replace != -1)
@@ -94,13 +94,14 @@ void DebugWindow::render_mesh_ids()
         ImGui::Separator();
 
         // get new asset path from user input
-        char new_asset_path_char[256] = "";
-        ImGui::InputText("Replacement Asset Path", new_asset_path_char, sizeof(new_asset_path_char));
-        m_new_asset_path = new_asset_path_char;
+        //char new_asset_path_char[256] = "";
+        ImGui::InputText("Replacement Asset Path", m_asset_path_buffer, sizeof(m_asset_path_buffer));
 
         // if button is pressed to replace asset, call replace_mesh from rt_app
         if (ImGui::Button("Replace Asset"))
         {
+            m_new_asset_path = m_asset_path_buffer;
+            ImGui::Text("%s", m_asset_path_buffer);
             if (m_replace_mesh_callback)
             {
                 m_replace_mesh_callback(m_meshID_to_replace, m_new_asset_path);

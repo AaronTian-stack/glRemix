@@ -22,6 +22,7 @@ class DebugWindow
 
     std::vector<MeshRecord> m_meshes;
     uint64_t m_meshID_to_replace = -1;
+    char m_asset_path_buffer[256] = "";
     std::string m_new_asset_path;
     std::function<void(uint64_t meshID, const std::string& asset_path)>
         m_replace_mesh_callback;  // replace_mesh function from rt_app

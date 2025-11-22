@@ -49,9 +49,11 @@ public:
 
     void clear();
 
+    std::vector<unsigned> m_free_indices;
+
+
 private:
     std::vector<T> m_elements;
-    std::vector<unsigned> m_free_indices;
 };
 
 template<typename T>
