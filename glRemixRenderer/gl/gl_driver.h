@@ -10,7 +10,7 @@
 
 namespace glRemix
 {
-constexpr size_t NUM_COMMANDS = static_cast<size_t>(GLCommandType::END_COMMANDS);
+constexpr size_t NUM_COMMANDS = static_cast<size_t>(GLCommandType::_COUNT);
 class glDriver;  // forward declare
 class glState;
 
