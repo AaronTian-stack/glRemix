@@ -104,6 +104,9 @@ public:
     bool create_texture(const TextureDesc& desc, D3D12_BARRIER_LAYOUT init_layout,
                         D3D12Texture* texture, D3D12_CLEAR_VALUE* clear_value,
                         const char* debug_name = nullptr) const;
+    // Creates staging buffer with data and records copy to texture
+    bool copy_to_texture(ID3D12GraphicsCommandList7* cmd_list, const void* data,
+                         D3D12Buffer* staging, D3D12Texture* texture);
 
     bool create_queue(D3D12_COMMAND_LIST_TYPE type, D3D12Queue* queue,
                       const char* debug_name = nullptr) const;

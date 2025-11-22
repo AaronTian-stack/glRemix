@@ -87,9 +87,33 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${REPO_ROOT}/external/robin-map-1.4.0/include"
     "${REPO_ROOT}/external/D3D12MemoryAllocator-3.0.1/include"
+    "${REPO_ROOT}/external/DirectXTex/include"
     "${REPO_ROOT}/external/imgui"
     "${REPO_ROOT}"
 )
+
+# Create an imported target for DirectXTex with configuration-specific library paths if available.
+set(DIRECTXTEX_LIB_DIR "${REPO_ROOT}/external/DirectXTex/lib")
+if(NOT TARGET DirectXTex::DirectXTex)
+    set(_directxtex_debug_lib "${DIRECTXTEX_LIB_DIR}/Debug/DirectXTex.lib")
+    set(_directxtex_release_lib "${DIRECTXTEX_LIB_DIR}/Release/DirectXTex.lib")
+    if(EXISTS "${_directxtex_debug_lib}" AND EXISTS "${_directxtex_release_lib}")
+        add_library(DirectXTex::DirectXTex STATIC IMPORTED GLOBAL)
+        set_target_properties(DirectXTex::DirectXTex PROPERTIES
+            IMPORTED_LOCATION_DEBUG "${_directxtex_debug_lib}"
+            IMPORTED_LOCATION_RELEASE "${_directxtex_release_lib}"
+        )
+    else()
+        set(_missing_components "")
+        if(NOT EXISTS "${_directxtex_debug_lib}")
+            string(APPEND _missing_components "\n  Missing Debug lib: ${_directxtex_debug_lib}")
+        endif()
+        if(NOT EXISTS "${_directxtex_release_lib}")
+            string(APPEND _missing_components "\n  Missing Release lib: ${_directxtex_release_lib}")
+        endif()
+        message(FATAL_ERROR "DirectXTex expected for both Debug and Release builds.${_missing_components}\nProvide both configuration libraries or adjust build logic.")
+    endif()
+endif()
 
 set(_GLREMIX_COPY_IF_EXISTS_SCRIPT "${GLREMIX_COPY_IF_EXISTS_SCRIPT}")
 if(NOT _GLREMIX_COPY_IF_EXISTS_SCRIPT)
@@ -139,6 +163,8 @@ if(WIN32)
         dxgi
         dxguid
         dxcompiler # No d3dcompiler since we only use DXC
+        
+        DirectXTex::DirectXTex
         
         # Windows system libraries
         kernel32
