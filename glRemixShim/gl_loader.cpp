@@ -52,6 +52,10 @@ void initialize()
             std::array renderer_path = std::to_array(GLREMIX_CUSTOM_RENDERER_EXE_PATH);
             strcpy_s(dll_path.data(), dll_path.size(), renderer_path.data());
 #endif
+            char debug_msg[512];
+            std::snprintf(debug_msg, sizeof(debug_msg), "glRemix: Using custom renderer path: %s\n",
+                          dll_path.data());
+            OutputDebugStringA(debug_msg);
             STARTUPINFOA si{ .cb = sizeof(STARTUPINFOA) };
             PROCESS_INFORMATION pi;
             if (CreateProcessA(nullptr, dll_path.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,

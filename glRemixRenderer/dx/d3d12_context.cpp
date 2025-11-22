@@ -13,27 +13,6 @@
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx12.h"
 
-extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam,
-                                                             LPARAM lParam);
-
-// Intercept messages and forward to ImGui
-static LRESULT CALLBACK RendererWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
-{
-    if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam))
-    {
-        return true;
-    }
-
-    // Get the original window procedure from window user data
-    auto original_wndproc = reinterpret_cast<WNDPROC>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
-    if (original_wndproc)
-    {
-        return CallWindowProc(original_wndproc, hwnd, msg, wparam, lparam);
-    }
-
-    return DefWindowProc(hwnd, msg, wparam, lparam);
-}
-
 using namespace glRemix::dx;
 
 void glRemix::dx::set_debug_name(ID3D12Object* obj, const char* name)
@@ -249,12 +228,6 @@ bool D3D12Context::create_swapchain(const HWND window, D3D12Queue* const queue,
     assert(frame_index);
 
     m_window = window;
-
-    // Override to intercept messages for ImGui
-    // Store the original window procedure in USERDATA
-    m_original_wndproc = reinterpret_cast<WNDPROC>(GetWindowLongPtr(window, GWLP_WNDPROC));
-    SetWindowLongPtr(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(m_original_wndproc));
-    SetWindowLongPtr(window, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(RendererWndProc));
 
     // I hope the host app doesn't immediately resize the window after creation!
     XMUINT2 dims;

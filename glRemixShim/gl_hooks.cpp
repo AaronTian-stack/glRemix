@@ -23,18 +23,72 @@ struct FakeContext
     HDC last_dc = nullptr;
 };
 
-// WGL/OpenGL might be called from multiple threads
-std::mutex g_mutex;
+// Assume WGL/OpenGL not called from multiple threads
 
 static GLuint g_list_id_counter;  // monotonic id used in `glGenLists` and passed back to host app
 
-// wglSetPixelFormat will only be called once per context
-// Or if there are multiple contexts they can share the same format since they're fake anyway...
-// TODO: Make the above assumption?
+// Assume wglSetPixelFormat will only be called once per context
 tsl::robin_map<HDC, FakePixelFormat> g_pixel_formats;
 
 thread_local HGLRC g_current_context = nullptr;
 thread_local HDC g_current_dc = nullptr;
+
+// Window procedure subclassing
+static WNDPROC g_original_wndproc = nullptr;
+
+// Window procedure to capture input events and forward to IPC
+static LRESULT CALLBACK InputCaptureWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+    bool should_send = false;
+    switch (msg)
+    {
+        case WM_MOUSEMOVE:
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP:
+        case WM_RBUTTONDOWN:
+        case WM_RBUTTONUP:
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONUP:
+        case WM_MOUSEWHEEL:
+        case WM_MOUSEHWHEEL:
+        case WM_XBUTTONDOWN:
+        case WM_XBUTTONUP:
+        case WM_LBUTTONDBLCLK:
+        case WM_RBUTTONDBLCLK:
+        case WM_MBUTTONDBLCLK:
+        case WM_XBUTTONDBLCLK:
+
+        case WM_KEYDOWN:
+        case WM_KEYUP:
+        case WM_SYSKEYDOWN:
+        case WM_SYSKEYUP:
+        case WM_CHAR:
+
+        case WM_SETFOCUS:
+        case WM_KILLFOCUS:
+
+        case WM_SETCURSOR:
+        case WM_MOUSELEAVE: should_send = true; break;
+    }
+
+    if (should_send)
+    {
+        const WGLInputEventCommand payload{
+            .msg = msg,
+            .wparam = wparam,
+            .lparam = static_cast<UINT64>(lparam),
+        };
+
+        g_ipc.write_command(GLCommandType::WGLCMD_INPUT_EVENT, payload);
+    }
+
+    // Call the original window procedure
+    if (g_original_wndproc)
+    {
+        return CallWindowProc(g_original_wndproc, hwnd, msg, wparam, lparam);
+    }
+    return DefWindowProc(hwnd, msg, wparam, lparam);
+}
 
 FakePixelFormat create_default_pixel_format(const PIXELFORMATDESCRIPTOR* requested)
 {
@@ -502,7 +556,6 @@ int WINAPI choose_pixel_format_ovr(HDC dc, const PIXELFORMATDESCRIPTOR* descript
         return 0;
     }
 
-    std::scoped_lock lock(g_mutex);
     g_pixel_formats[dc] = create_default_pixel_format(descriptor);
     return g_pixel_formats[dc].id;
 }
@@ -515,7 +568,6 @@ int WINAPI describe_pixel_format_ovr(HDC dc, int pixel_format, UINT bytes,
         return 0;
     }
 
-    std::scoped_lock lock(g_mutex);
     if (!g_pixel_formats.contains(dc))
     {
         *descriptor = create_default_pixel_format(nullptr).descriptor;
@@ -533,7 +585,6 @@ int WINAPI get_pixel_format_ovr(HDC dc)
         return 0;
     }
 
-    std::scoped_lock lock(g_mutex);
     if (!g_pixel_formats.contains(dc))
     {
         return 0;
@@ -549,7 +600,6 @@ BOOL WINAPI set_pixel_format_ovr(HDC dc, int pixel_format, const PIXELFORMATDESC
         return FALSE;
     }
 
-    std::scoped_lock lock(g_mutex);
     g_pixel_formats[dc] = create_default_pixel_format(descriptor);
     g_pixel_formats[dc].id = pixel_format;
     return TRUE;
@@ -561,8 +611,16 @@ HGLRC WINAPI create_context_ovr(HDC dc)
     HWND hwnd = WindowFromDC(dc);
     assert(hwnd);
 
+    // Install window procedure hook to capture input events
+    if (!g_original_wndproc)
+    {
+        g_original_wndproc = reinterpret_cast<WNDPROC>(
+            SetWindowLongPtr(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(InputCaptureWndProc)));
+    }
+
     WGLCreateContextCommand payload{ hwnd };
 
+    // TODO: Application can do multiple create/destroy context pairs, so we need to account for that
     g_ipc.write_command(GLCommandType::WGLCMD_CREATE_CONTEXT, payload);
 
     return reinterpret_cast<HGLRC>(static_cast<UINT_PTR>(0xDEADBEEF));  // Dummy context handle
@@ -586,6 +644,7 @@ HDC WINAPI get_current_dc_ovr()
 BOOL WINAPI make_current_ovr(HDC dc, HGLRC context)
 {
     g_current_dc = dc;
+    g_current_context = context;
     return TRUE;
 }
 

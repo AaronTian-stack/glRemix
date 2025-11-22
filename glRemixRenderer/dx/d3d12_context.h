@@ -42,7 +42,6 @@ class D3D12Context
     ComPtr<IDxcUtils> m_dxc_utils = nullptr;
 
     HWND m_window = nullptr;
-    WNDPROC m_original_wndproc = nullptr;
 
     XMUINT2 m_swapchain_dims{};
     ComPtr<IDXGISwapChain3> m_swapchain;
@@ -51,12 +50,12 @@ class D3D12Context
 
     D3D12Fence m_fence_wait_all{};
 
+    BOOL m_allow_tearing = FALSE;
+
     static DXGI_FORMAT mask_to_format(BYTE mask, D3D_REGISTER_COMPONENT_TYPE component_type);
     static std::vector<D3D12_INPUT_ELEMENT_DESC> shader_reflection(
         ID3D12ShaderReflection* shader_reflection, const D3D12_SHADER_DESC& shader_desc,
         bool increment_slot = false);
-
-    BOOL m_allow_tearing = FALSE;
 
 public:
     bool create(bool enable_debug_layer);
@@ -177,6 +176,12 @@ public:
     void destroy_imgui();
 
     bool wait_idle(const D3D12Queue* queue);
+
+    HWND get_window() const
+    {
+        return m_window;
+    }
+
     ~D3D12Context();
 };
 
