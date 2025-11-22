@@ -364,49 +364,6 @@ void glRemix::glRemixRenderer::read_gl_command_stream()
     // loop through data from frame
     read_ipc_buffer(m_ipc_buffer, 0, payload_size);
 
-    //// initialize lights
-    // auto is_zero_4 = [](const XMFLOAT4& v)
-    //{ return v.x == 0.0f && v.y == 0.0f && v.z == 0.0f && v.w == 0.0f; };
-    // auto is_zero_3 = [](const XMFLOAT3& v) { return v.x == 0.0f && v.y == 0.0f && v.z == 0.0f; };
-
-    // for (auto& light : m_lights)
-    //{
-    //     if (!light.enabled)
-    //     {
-    //         continue;
-    //     }
-    //
-    //     // if light is enabled, initialize to default if value isn't already set by GL commands
-    //     if (is_zero_4(light.ambient))
-    //     {
-    //         light.ambient = XMFLOAT4(0, 0, 0, 1);
-    //     }
-    //     if (is_zero_4(light.diffuse))
-    //     {
-    //         light.diffuse = XMFLOAT4(1, 1, 1, 1);
-    //     }
-    //     if (is_zero_4(light.specular))
-    //     {
-    //         light.specular = XMFLOAT4(1, 1, 1, 1);
-    //     }
-    //     if (is_zero_3(light.spot_direction))
-    //     {
-    //         light.spot_direction = XMFLOAT3(0, 0, -1);
-    //     }
-    //     if (light.spot_exponent == 0.0f)
-    //     {
-    //         light.spot_exponent = 0.0f;
-    //     }
-    //     if (light.spot_cutoff == 0.0f)
-    //     {
-    //         light.spot_cutoff = 180.0f;
-    //     }
-    //     if (light.constant_attenuation == 0.0f)
-    //     {
-    //         light.constant_attenuation = 1.0f;
-    //     }
-    // }
-
     // garbage collect meshes
     for (auto it = m_mesh_map.begin(); it != m_mesh_map.end();)
     {
