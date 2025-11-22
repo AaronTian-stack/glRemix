@@ -5,9 +5,6 @@
 
 namespace glRemix
 {
-namespace handle
-{
-
 // CORE IMMEDIATE MODE
 static void handle_begin(const GLCommandContext& ctx, const void* data)
 {
@@ -500,13 +497,11 @@ static void handle_wgl_create_context(const GLCommandContext& ctx, const void* d
     ctx.state.hwnd = cmd->hwnd;
     ctx.state.m_create_context = true;
 }
-}  // namespace handle
 }  // namespace glRemix
 
 void glRemix::glDriver::init_handlers()
 {
     using enum GLCommandType;
-    using namespace glRemix::handle;
 
     gl_command_handlers.fill(nullptr);
 
