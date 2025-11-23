@@ -34,7 +34,7 @@ public:
     void scale(UINT32 mode, float x, float y, float z);
     void ortho(UINT32 mode, double l, double r, double b, double t, double n, double f);
     void frustum(UINT32 mode, double l, double r, double b, double t, double n, double f);
-    void perspective(UINT32 mode, double fovY, double aspect, double n, double f);
+    void perspective(UINT32 mode, double fov_y, double aspect, double n, double f);
     void load(UINT32 mode, const float* m);
 
     // debug

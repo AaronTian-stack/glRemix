@@ -88,8 +88,8 @@ enum class GLCommandType : UINT32
     // Other
     WGLCMD_CREATE_CONTEXT,  // wglCreateContext needs IPC
 
-    END_COMMANDS,  // sentinel value (keep this as the last element in enum to always have a count
-                   // of enum elements)
+    _COUNT,  // sentinel value (keep this as the last element in enum to always have a count
+             // of enum elements)
 };
 
 // Component Structs

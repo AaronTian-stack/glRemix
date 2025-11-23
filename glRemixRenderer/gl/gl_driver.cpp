@@ -3,27 +3,12 @@
 
 #include <chrono>
 
-glRemix::glDriver::glDriver()
-{
-    init();
-}
-
 namespace glRemix
 {
-static void handle_wgl_create_context(const GLCommandContext& ctx, const void* data)
-{
-    const auto* cmd = static_cast<const WGLCreateContextCommand*>(data);
-    ctx.state.hwnd = cmd->hwnd;
-    ctx.state.m_create_context = true;
-}
-
-// -----------------------------------------------------------------------------
-// GEOMETRY COMMANDS
-// -----------------------------------------------------------------------------
-
+// CORE IMMEDIATE MODE
 static void handle_begin(const GLCommandContext& ctx, const void* data)
 {
-    const auto* cmd = reinterpret_cast<const GLBeginCommand*>(data);
+    const auto* cmd = static_cast<const GLBeginCommand*>(data);
     ctx.state.m_topology = cmd->mode;
 
     ctx.state.t_vertices.clear();
@@ -170,32 +155,26 @@ static void handle_end(const GLCommandContext& ctx, const void* data)
     state.m_meshes.push_back(*mesh);
 }
 
-static void handle_vertex3f(const GLCommandContext& ctx, const void* data)
-{
-    const auto* cmd = static_cast<const GLVertex3fCommand*>(data);
-
-    Vertex vertex{ .position = fv_to_xmf3(*cmd),
-                   .color = ctx.state.m_color,
-                   .normal = ctx.state.m_normal,
-                   .uv = ctx.state.m_uv };
-    ctx.state.t_vertices.push_back(vertex);
-}
-
 static void handle_vertex2f(const GLCommandContext& ctx, const void* data)
 {
     const auto* cmd = static_cast<const GLVertex2fCommand*>(data);
 
-    Vertex vertex{ .position = fv_to_xmf3(GLVec3f{ cmd->x, cmd->y, 0.0f }),
-                   .color = ctx.state.m_color,
-                   .normal = ctx.state.m_normal,
-                   .uv = ctx.state.m_uv };
+    const Vertex vertex{ .position = fv_to_xmf3(GLVec3f{ cmd->x, cmd->y, 0.0f }),
+                         .color = ctx.state.m_color,
+                         .normal = ctx.state.m_normal,
+                         .uv = ctx.state.m_uv };
     ctx.state.t_vertices.push_back(vertex);
 }
 
-static void handle_normal3f(const GLCommandContext& ctx, const void* data)
+static void handle_vertex3f(const GLCommandContext& ctx, const void* data)
 {
-    const auto* cmd = static_cast<const GLNormal3fCommand*>(data);
-    ctx.state.m_normal = fv_to_xmf3(*cmd);
+    const auto* cmd = static_cast<const GLVertex3fCommand*>(data);
+
+    const Vertex vertex{ .position = fv_to_xmf3(*cmd),
+                         .color = ctx.state.m_color,
+                         .normal = ctx.state.m_normal,
+                         .uv = ctx.state.m_uv };
+    ctx.state.t_vertices.push_back(vertex);
 }
 
 static void handle_color3f(const GLCommandContext& ctx, const void* data)
@@ -210,6 +189,12 @@ static void handle_color4f(const GLCommandContext& ctx, const void* data)
     ctx.state.m_color = fv_to_xmf4(*cmd);
 }
 
+static void handle_normal3f(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLNormal3fCommand*>(data);
+    ctx.state.m_normal = fv_to_xmf3(*cmd);
+}
+
 static void handle_texcoord2f(const GLCommandContext& ctx, const void* data)
 {
     const auto* cmd = static_cast<const GLTexCoord2fCommand*>(data);
@@ -220,116 +205,57 @@ static void handle_texcoord2f(const GLCommandContext& ctx, const void* data)
 // MATERIAL COLOR
 // -----------------------------------------------------------------------------
 
-static void handle_materialf(const GLCommandContext& ctx, const void* data)
+static void handle_call_list(const GLCommandContext& ctx, const void* data)
 {
-    const auto* cmd = static_cast<const GLMaterialfCommand*>(data);
+    const auto* cmd = static_cast<const GLCallListCommand*>(data);
 
-    switch (cmd->pname)
+    if (ctx.state.m_display_lists.contains(cmd->list))
     {
-        case GL_AMBIENT: ctx.state.m_material.ambient = f_to_xmf4(cmd->param); break;
-        case GL_DIFFUSE: ctx.state.m_material.diffuse = f_to_xmf4(cmd->param); break;
-        case GL_SPECULAR: ctx.state.m_material.specular = f_to_xmf4(cmd->param); break;
-        default:
-            switch (cmd->pname)
-            {
-                case GL_EMISSION: ctx.state.m_material.emission = f_to_xmf4(cmd->param); break;
-                case GL_SHININESS: ctx.state.m_material.shininess = cmd->param; break;
-                default: break;
-            }
-            break;
+        auto& list_buf = ctx.state.m_display_lists[cmd->list];
+
+        size_t offset = 0;
+        const UINT32 list_size = static_cast<UINT32>(list_buf.size());
+
+        ctx.state.m_in_call = true;
+        ctx.driver.read_buffer(ctx, list_buf.data(), list_size, offset);
+    }
+    else
+    {
+        char buffer[256];
+        sprintf_s(buffer, "CALL_LIST missing id %u\n", cmd->list);
+        OutputDebugStringA(buffer);
     }
 }
 
-static void handle_materiali(const GLCommandContext& ctx, const void* data)
+static void handle_new_list(const GLCommandContext& ctx, const void* data)
 {
-    const auto* cmd = static_cast<const GLMaterialiCommand*>(data);
+    const auto* cmd = static_cast<const GLNewListCommand*>(data);
 
-    float param = static_cast<float>(cmd->param);
+    ctx.state.m_list_index = cmd->list;
+    ctx.state.m_execution_mode = cmd->mode;
 
-    switch (cmd->pname)
-    {
-        case GL_AMBIENT: ctx.state.m_material.ambient = f_to_xmf4(param); break;
-        case GL_DIFFUSE: ctx.state.m_material.diffuse = f_to_xmf4(param); break;
-        case GL_SPECULAR: ctx.state.m_material.specular = f_to_xmf4(param); break;
-        default:
-            switch (cmd->pname)
-            {
-                case GL_EMISSION: ctx.state.m_material.emission = f_to_xmf4(param); break;
-                case GL_SHININESS: ctx.state.m_material.shininess = param; break;
-                default: break;
-            }
-            break;
-    }
+    ctx.state.m_display_list_begin = ctx.state.m_offset;
 }
 
-static void handle_materialfv(const GLCommandContext& ctx, const void* data)
+static void handle_end_list(const GLCommandContext& ctx, const void* data)
 {
-    const auto* cmd = static_cast<const GLMaterialfvCommand*>(data);
-
-    switch (cmd->pname)
+    if (ctx.state.m_in_call)
     {
-        case GL_AMBIENT: ctx.state.m_material.ambient = fv_to_xmf4(cmd->params); break;
-        case GL_DIFFUSE: ctx.state.m_material.diffuse = fv_to_xmf4(cmd->params); break;
-        case GL_SPECULAR: ctx.state.m_material.specular = fv_to_xmf4(cmd->params); break;
-        default:
-            switch (cmd->pname)
-            {
-                case GL_EMISSION: ctx.state.m_material.emission = fv_to_xmf4(cmd->params); break;
-                case GL_SHININESS: ctx.state.m_material.shininess = cmd->params.x; break;
-                case GL_AMBIENT_AND_DIFFUSE:
-                    ctx.state.m_material.ambient = fv_to_xmf4(cmd->params);
-                    ctx.state.m_material.diffuse = fv_to_xmf4(cmd->params);
-                    break;
-                default: break;
-            }
-            break;
+        ctx.state.m_in_call = false;
+        return;
     }
-}
 
-static void handle_lightf(const GLCommandContext& ctx, const void* data)
-{
-    const auto* cmd = static_cast<const GLLightCommand*>(data);
+    const auto* cmd = static_cast<const GLEndListCommand*>(data);
 
-    uint32_t light_index = cmd->light - GL_LIGHT0;
-    Light& m_light = ctx.state.m_lights[light_index];
+    const auto display_list_end = ctx.state
+                                      .m_offset;  // record GL_END_LIST to mark end of display list
 
-    switch (cmd->pname)
-    {
-        case GL_SPOT_EXPONENT: m_light.spot_exponent = cmd->param; break;
-        case GL_SPOT_CUTOFF: m_light.spot_cutoff = cmd->param; break;
-        case GL_CONSTANT_ATTENUATION: m_light.constant_attenuation = cmd->param; break;
-        case GL_LINEAR_ATTENUATION: m_light.linear_attenuation = cmd->param; break;
-        case GL_QUADRATIC_ATTENUATION: m_light.quadratic_attenuation = cmd->param; break;
-        default: break;
-    }
-}
+    // record new list in respective index
+    std::vector new_list(ctx.driver.get_command_buffer_data() + ctx.state.m_display_list_begin,
+                         ctx.driver.get_command_buffer_data() + display_list_end);
+    ctx.state.m_display_lists[ctx.state.m_list_index] = std::move(new_list);
 
-static void handle_lightfv(const GLCommandContext& ctx, const void* data)
-{
-    const auto* cmd = static_cast<const GLLightfvCommand*>(data);
-
-    uint32_t light_index = cmd->light - GL_LIGHT0;
-    Light& m_light = ctx.state.m_lights[light_index];
-
-    switch (cmd->pname)
-    {
-        case GL_POSITION: m_light.position = fv_to_xmf4(cmd->params); break;
-        case GL_AMBIENT: m_light.ambient = fv_to_xmf4(cmd->params); break;
-        case GL_DIFFUSE: m_light.diffuse = fv_to_xmf4(cmd->params); break;
-        case GL_SPECULAR: m_light.specular = fv_to_xmf4(cmd->params); break;
-        case GL_SPOT_DIRECTION:
-            m_light.spot_direction = fv_to_xmf3(
-                GLVec3f{ cmd->params.x, cmd->params.y, cmd->params.z });
-            break;
-        default: break;
-    }
-}
-
-static void handle_clear_color(const GLCommandContext& ctx, const void* data)
-{
-    const auto* cmd = static_cast<const GLClearColorCommand*>(data);
-
-    ctx.state.m_clear_color = fv_to_xmf4(cmd->color);
+    ctx.state.m_execution_mode = GL_COMPILE_AND_EXECUTE;  // reset execution state
 }
 
 // -----------------------------------------------------------------------------
@@ -395,21 +321,14 @@ static void handle_tex_envf(const GLCommandContext& ctx, const void* data)
 // MATRIX COMMANDS
 // -----------------------------------------------------------------------------
 
+static void handle_draw_elements(const GLCommandContext& ctx, const void* data) {}
+
+// MATRIX OPERATIONS
 static void handle_matrix_mode(const GLCommandContext& ctx, const void* data)
 {
     const auto* cmd = static_cast<const GLMatrixModeCommand*>(data);
 
     ctx.state.m_matrix_mode = cmd->mode;
-}
-
-static void handle_push_matrix(const GLCommandContext& ctx, const void* data)
-{
-    ctx.state.m_matrix_stack.push(ctx.state.m_matrix_mode);
-}
-
-static void handle_pop_matrix(const GLCommandContext& ctx, const void* data)
-{
-    ctx.state.m_matrix_stack.pop(ctx.state.m_matrix_mode);
 }
 
 static void handle_load_identity(const GLCommandContext& ctx, const void* data)
@@ -429,7 +348,26 @@ static void handle_mult_matrix(const GLCommandContext& ctx, const void* data)
     ctx.state.m_matrix_stack.mul_set(ctx.state.m_matrix_mode, cmd->m);
 }
 
-//////////////// MATRIX OPERATIONS ////////////////////////////////
+static void handle_push_matrix(const GLCommandContext& ctx, const void* data)
+{
+    ctx.state.m_matrix_stack.push(ctx.state.m_matrix_mode);
+}
+
+static void handle_pop_matrix(const GLCommandContext& ctx, const void* data)
+{
+    ctx.state.m_matrix_stack.pop(ctx.state.m_matrix_mode);
+}
+
+static void handle_translate(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLTranslateCommand*>(data);
+
+    const float x = cmd->t.x;
+    const float y = cmd->t.y;
+    const float z = cmd->t.z;
+
+    ctx.state.m_matrix_stack.translate(ctx.state.m_matrix_mode, x, y, z);
+}
 
 static void handle_rotate(const GLCommandContext& ctx, const void* data)
 {
@@ -452,17 +390,6 @@ static void handle_scale(const GLCommandContext& ctx, const void* data)
     const float z = cmd->s.z;
 
     ctx.state.m_matrix_stack.scale(ctx.state.m_matrix_mode, x, y, z);
-}
-
-static void handle_translate(const GLCommandContext& ctx, const void* data)
-{
-    const auto* cmd = static_cast<const GLTranslateCommand*>(data);
-
-    const float x = cmd->t.x;
-    const float y = cmd->t.y;
-    const float z = cmd->t.z;
-
-    ctx.state.m_matrix_stack.translate(ctx.state.m_matrix_mode, x, y, z);
 }
 
 static void handle_ortho(const GLCommandContext& ctx, const void* data)
@@ -489,67 +416,121 @@ static void handle_perspective(const GLCommandContext& ctx, const void* data)
                                          cmd->zNear, cmd->zFar);
 }
 
-// -----------------------------------------------------------------------------
-// DISPLAY LISTS
-// -----------------------------------------------------------------------------
-
-static void handle_new_list(const GLCommandContext& ctx, const void* data)
+// RENDERING
+static void handle_clear_color(const GLCommandContext& ctx, const void* data)
 {
-    const auto* cmd = static_cast<const GLNewListCommand*>(data);
+    const auto* cmd = static_cast<const GLClearColorCommand*>(data);
 
-    ctx.state.m_list_index = cmd->list;
-    ctx.state.m_execution_mode = cmd->mode;
-
-    ctx.state.m_display_list_begin = ctx.state.m_offset;
+    ctx.state.m_clear_color = fv_to_xmf4(cmd->color);
 }
 
-static void handle_call_list(const GLCommandContext& ctx, const void* data)
+// FIXED FUNCTION
+static void handle_lightf(const GLCommandContext& ctx, const void* data)
 {
-    const auto* cmd = static_cast<const GLCallListCommand*>(data);
+    const auto* cmd = static_cast<const GLLightCommand*>(data);
 
-    if (ctx.state.m_display_lists.contains(cmd->list))
+    uint32_t light_index = cmd->light - GL_LIGHT0;
+    Light& m_light = ctx.state.m_lights[light_index];
+
+    switch (cmd->pname)
     {
-        auto& list_buf = ctx.state.m_display_lists[cmd->list];
-
-        size_t offset = 0;
-        const UINT32 list_size = static_cast<UINT32>(list_buf.size());
-
-        ctx.state.m_in_call = true;
-        ctx.driver.read_buffer(ctx, list_buf.data(), list_size, offset);
-    }
-    else
-    {
-        char buffer[256];
-        sprintf_s(buffer, "CALL_LIST missing id %u\n", cmd->list);
-        OutputDebugStringA(buffer);
+        case GL_SPOT_EXPONENT: m_light.spot_exponent = cmd->param; break;
+        case GL_SPOT_CUTOFF: m_light.spot_cutoff = cmd->param; break;
+        case GL_CONSTANT_ATTENUATION: m_light.constant_attenuation = cmd->param; break;
+        case GL_LINEAR_ATTENUATION: m_light.linear_attenuation = cmd->param; break;
+        case GL_QUADRATIC_ATTENUATION: m_light.quadratic_attenuation = cmd->param; break;
+        default: break;
     }
 }
 
-static void handle_end_list(const GLCommandContext& ctx, const void* data)
+static void handle_lightfv(const GLCommandContext& ctx, const void* data)
 {
-    if (ctx.state.m_in_call)
+    const auto* cmd = static_cast<const GLLightfvCommand*>(data);
+
+    uint32_t light_index = cmd->light - GL_LIGHT0;
+    Light& m_light = ctx.state.m_lights[light_index];
+
+    switch (cmd->pname)
     {
-        ctx.state.m_in_call = false;
-        return;
+        case GL_POSITION: m_light.position = fv_to_xmf4(cmd->params); break;
+        case GL_AMBIENT: m_light.ambient = fv_to_xmf4(cmd->params); break;
+        case GL_DIFFUSE: m_light.diffuse = fv_to_xmf4(cmd->params); break;
+        case GL_SPECULAR: m_light.specular = fv_to_xmf4(cmd->params); break;
+        case GL_SPOT_DIRECTION:
+            m_light.spot_direction = fv_to_xmf3(
+                GLVec3f{ cmd->params.x, cmd->params.y, cmd->params.z });
+            break;
+        default: break;
     }
-
-    const auto* cmd = static_cast<const GLEndListCommand*>(data);
-
-    const auto display_list_end = ctx.state
-                                      .m_offset;  // record GL_END_LIST to mark end of display list
-
-    // record new list in respective index
-    std::vector new_list(ctx.driver.command_buffer.begin() + ctx.state.m_display_list_begin,
-                         ctx.driver.command_buffer.begin() + display_list_end);
-    ctx.state.m_display_lists[ctx.state.m_list_index] = std::move(new_list);
-
-    ctx.state.m_execution_mode = GL_COMPILE_AND_EXECUTE;  // reset execution state
 }
 
-// -----------------------------------------------------------------------------
-// STATE COMMANDS
-// -----------------------------------------------------------------------------
+static void handle_materiali(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLMaterialiCommand*>(data);
 
+    float param = static_cast<float>(cmd->param);
+
+    switch (cmd->pname)
+    {
+        case GL_AMBIENT: ctx.state.m_material.ambient = f_to_xmf4(param); break;
+        case GL_DIFFUSE: ctx.state.m_material.diffuse = f_to_xmf4(param); break;
+        case GL_SPECULAR: ctx.state.m_material.specular = f_to_xmf4(param); break;
+        default:
+            switch (cmd->pname)
+            {
+                case GL_EMISSION: ctx.state.m_material.emission = f_to_xmf4(param); break;
+                case GL_SHININESS: ctx.state.m_material.shininess = param; break;
+                default: break;
+            }
+            break;
+    }
+}
+
+static void handle_materialf(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLMaterialfCommand*>(data);
+
+    switch (cmd->pname)
+    {
+        case GL_AMBIENT: ctx.state.m_material.ambient = f_to_xmf4(cmd->param); break;
+        case GL_DIFFUSE: ctx.state.m_material.diffuse = f_to_xmf4(cmd->param); break;
+        case GL_SPECULAR: ctx.state.m_material.specular = f_to_xmf4(cmd->param); break;
+        default:
+            switch (cmd->pname)
+            {
+                case GL_EMISSION: ctx.state.m_material.emission = f_to_xmf4(cmd->param); break;
+                case GL_SHININESS: ctx.state.m_material.shininess = cmd->param; break;
+                default: break;
+            }
+            break;
+    }
+}
+
+static void handle_materialfv(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLMaterialfvCommand*>(data);
+
+    switch (cmd->pname)
+    {
+        case GL_AMBIENT: ctx.state.m_material.ambient = fv_to_xmf4(cmd->params); break;
+        case GL_DIFFUSE: ctx.state.m_material.diffuse = fv_to_xmf4(cmd->params); break;
+        case GL_SPECULAR: ctx.state.m_material.specular = fv_to_xmf4(cmd->params); break;
+        default:
+            switch (cmd->pname)
+            {
+                case GL_EMISSION: ctx.state.m_material.emission = fv_to_xmf4(cmd->params); break;
+                case GL_SHININESS: ctx.state.m_material.shininess = cmd->params.x; break;
+                case GL_AMBIENT_AND_DIFFUSE:
+                    ctx.state.m_material.ambient = fv_to_xmf4(cmd->params);
+                    ctx.state.m_material.diffuse = fv_to_xmf4(cmd->params);
+                    break;
+                default: break;
+            }
+            break;
+    }
+}
+
+// STATE MANAGEMENT
 static void set_state(const GLCommandContext& ctx, unsigned int cap, bool value)
 {
     // light handling
@@ -589,15 +570,13 @@ static void handle_disable(const GLCommandContext& ctx, const void* data)
     set_state(ctx, cmd->cap, false);
 }
 
-// -----------------------------------------------------------------------------
-// DRAW CALLS
-// -----------------------------------------------------------------------------
-
-// TODO (implementations coming soon)
-static void handle_draw_arrays(const GLCommandContext& ctx, const void* data) {}
-
-static void handle_draw_elements(const GLCommandContext& ctx, const void* data) {}
-
+// OTHER
+static void handle_wgl_create_context(const GLCommandContext& ctx, const void* data)
+{
+    const auto cmd = static_cast<const WGLCreateContextCommand*>(data);
+    ctx.state.hwnd = cmd->hwnd;
+    ctx.state.m_create_context = true;
+}
 }  // namespace glRemix
 
 void glRemix::glDriver::init_handlers()
@@ -606,17 +585,14 @@ void glRemix::glDriver::init_handlers()
 
     gl_command_handlers.fill(nullptr);
 
-    gl_command_handlers[static_cast<size_t>(WGLCMD_CREATE_CONTEXT)] = &handle_wgl_create_context;
-
-    // GEOMETRY COMMANDS
+    // CORE IMMEDIATE MODE
     gl_command_handlers[static_cast<size_t>(GLCMD_BEGIN)] = &handle_begin;
     gl_command_handlers[static_cast<size_t>(GLCMD_END)] = &handle_end;
-
-    gl_command_handlers[static_cast<size_t>(GLCMD_VERTEX3F)] = &handle_vertex3f;
     gl_command_handlers[static_cast<size_t>(GLCMD_VERTEX2F)] = &handle_vertex2f;
-    gl_command_handlers[static_cast<size_t>(GLCMD_NORMAL3F)] = &handle_normal3f;
+    gl_command_handlers[static_cast<size_t>(GLCMD_VERTEX3F)] = &handle_vertex3f;
     gl_command_handlers[static_cast<size_t>(GLCMD_COLOR3F)] = &handle_color3f;
     gl_command_handlers[static_cast<size_t>(GLCMD_COLOR4F)] = &handle_color4f;
+    gl_command_handlers[static_cast<size_t>(GLCMD_NORMAL3F)] = &handle_normal3f;
     gl_command_handlers[static_cast<size_t>(GLCMD_TEXCOORD2F)] = &handle_texcoord2f;
 
     // MATERIALS LIGHTS
@@ -636,39 +612,53 @@ void glRemix::glDriver::init_handlers()
     gl_command_handlers[static_cast<size_t>(GLCMD_TEX_ENV_I)] = &handle_tex_envi;
     gl_command_handlers[static_cast<size_t>(GLCMD_TEX_ENV_F)] = &handle_tex_envf;
 
-    // MATRIX COMMANDS
+    // MATRIX OPERATIONS
     gl_command_handlers[static_cast<size_t>(GLCMD_MATRIX_MODE)] = &handle_matrix_mode;
-    gl_command_handlers[static_cast<size_t>(GLCMD_PUSH_MATRIX)] = &handle_push_matrix;
-    gl_command_handlers[static_cast<size_t>(GLCMD_POP_MATRIX)] = &handle_pop_matrix;
     gl_command_handlers[static_cast<size_t>(GLCMD_LOAD_IDENTITY)] = &handle_load_identity;
     gl_command_handlers[static_cast<size_t>(GLCMD_LOAD_MATRIX)] = &handle_load_matrix;
     gl_command_handlers[static_cast<size_t>(GLCMD_MULT_MATRIX)] = &handle_mult_matrix;
-
+    gl_command_handlers[static_cast<size_t>(GLCMD_PUSH_MATRIX)] = &handle_push_matrix;
+    gl_command_handlers[static_cast<size_t>(GLCMD_POP_MATRIX)] = &handle_pop_matrix;
+    gl_command_handlers[static_cast<size_t>(GLCMD_TRANSLATE)] = &handle_translate;
     gl_command_handlers[static_cast<size_t>(GLCMD_ROTATE)] = &handle_rotate;
     gl_command_handlers[static_cast<size_t>(GLCMD_SCALE)] = &handle_scale;
-    gl_command_handlers[static_cast<size_t>(GLCMD_TRANSLATE)] = &handle_translate;
     gl_command_handlers[static_cast<size_t>(GLCMD_ORTHO)] = &handle_ortho;
     gl_command_handlers[static_cast<size_t>(GLCMD_FRUSTUM)] = &handle_frustum;
     gl_command_handlers[static_cast<size_t>(GLCMD_PERSPECTIVE)] = &handle_perspective;
+
+    // RENDERING
+    gl_command_handlers[static_cast<size_t>(GLCMD_CLEAR_COLOR)] = &handle_clear_color;
+
+    // FIXED FUNCTION
+    gl_command_handlers[static_cast<size_t>(GLCMD_LIGHTF)] = &handle_lightf;
+    gl_command_handlers[static_cast<size_t>(GLCMD_LIGHTFV)] = &handle_lightfv;
+    gl_command_handlers[static_cast<size_t>(GLCMD_MATERIALI)] = &handle_materiali;
+    gl_command_handlers[static_cast<size_t>(GLCMD_MATERIALF)] = &handle_materialf;
+    gl_command_handlers[static_cast<size_t>(GLCMD_MATERIALIV)] = &handle_materialfv;
+    gl_command_handlers[static_cast<size_t>(GLCMD_MATERIALFV)] = &handle_materialfv;
+
+    // STATE MANAGEMENT
+    gl_command_handlers[static_cast<size_t>(GLCMD_ENABLE)] = &handle_enable;
+    gl_command_handlers[static_cast<size_t>(GLCMD_DISABLE)] = &handle_disable;
 
     // DISPLAY LISTS
     gl_command_handlers[static_cast<size_t>(GLCMD_NEW_LIST)] = &handle_new_list;
     gl_command_handlers[static_cast<size_t>(GLCMD_CALL_LIST)] = &handle_call_list;
     gl_command_handlers[static_cast<size_t>(GLCMD_END_LIST)] = &handle_end_list;
 
-    // STATE COMMANDS
-    gl_command_handlers[static_cast<size_t>(GLCMD_ENABLE)] = &handle_enable;
-    gl_command_handlers[static_cast<size_t>(GLCMD_DISABLE)] = &handle_disable;
+    // OTHER
+    gl_command_handlers[static_cast<size_t>(WGLCMD_CREATE_CONTEXT)] = &handle_wgl_create_context;
+}
 
-    // DRAW CALLS
-    gl_command_handlers[static_cast<size_t>(GLCMD_DRAW_ARRAYS)] = &handle_draw_arrays;
-    gl_command_handlers[static_cast<size_t>(GLCMD_DRAW_ELEMENTS)] = &handle_draw_elements;
+glRemix::glDriver::glDriver()
+{
+    init();
 }
 
 void glRemix::glDriver::init()
 {
-    ipc.init_reader();
-    command_buffer.resize(ipc.get_max_payload_size());
+    m_ipc.init_reader();
+    m_command_buffer.resize(m_ipc.get_max_payload_size());
 
     init_handlers();
 }
@@ -677,26 +667,26 @@ void glRemix::glDriver::process_stream()
 {
     UINT32 buffer_size = 0;
     UINT32 frame_index = 0;
-    ipc.consume_frame_or_wait(command_buffer.data(), &buffer_size, &frame_index);
+    m_ipc.consume_frame_or_wait(m_command_buffer.data(), &buffer_size, &frame_index);
 
     if (buffer_size == 0)
     {
         return;
     }
 
-    state.m_current_frame = frame_index;
+    m_state.m_current_frame = frame_index;
 
     // reset per frames
-    state.m_create_context = false;
-    state.m_meshes.clear();              // per frame meshes
-    state.m_matrix_pool.clear();         // reset matrix pool each frame
-    state.m_materials.clear();
-    state.m_pending_geometries.clear();  // clear pending geometry data
-    state.m_pending_textures.clear();
+    m_state.m_create_context = false;
+    m_state.m_meshes.clear();              // per frame meshes
+    m_state.m_matrix_pool.clear();         // reset matrix pool each frame
+    m_state.m_materials.clear();
+    m_state.m_pending_geometries.clear();  // clear pending geometry data
+    m_state.m_pending_textures.clear();
 
-    state.m_offset = 0;
-    GLCommandContext ctx{ state, *this };
-    read_buffer(ctx, command_buffer.data(), buffer_size, state.m_offset);
+    m_state.m_offset = 0;
+    GLCommandContext ctx{ m_state, *this };
+    read_buffer(ctx, m_command_buffer.data(), buffer_size, m_state.m_offset);
 }
 
 void glRemix::glDriver::read_buffer(const GLCommandContext& ctx, const UINT8* buffer,

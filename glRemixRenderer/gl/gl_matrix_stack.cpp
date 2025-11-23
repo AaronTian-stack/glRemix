@@ -43,7 +43,7 @@ void glMatrixStack::identity(const UINT32 mode)
     XMStoreFloat4x4(&stack->top(), XMMatrixIdentity());
 }
 
-void glMatrixStack::push(UINT32 mode)
+void glMatrixStack::push(const UINT32 mode)
 {
     switch (mode)
     {
@@ -184,21 +184,21 @@ void glMatrixStack::rotate(const UINT32 mode, const float angle, const float x, 
     mul_set(mode, r);
 }
 
-void glMatrixStack::translate(UINT32 mode, float x, float y, float z)
+void glMatrixStack::translate(const UINT32 mode, const float x, const float y, const float z)
 {
     const auto t = XMMatrixTranslation(x, y, z);
 
     mul_set(mode, t);
 }
 
-void glRemix::gl::glMatrixStack::scale(UINT32 mode, float x, float y, float z)
+void glMatrixStack::scale(const UINT32 mode, const float x, const float y, const float z)
 {
     const auto s = XMMatrixScaling(x, y, z);
     mul_set(mode, s);
 }
 
-void glRemix::gl::glMatrixStack::ortho(UINT32 mode, double l, double r, double b, double t,
-                                       double n, double f)
+void glMatrixStack::ortho(const UINT32 mode, const double l, const double r, const double b,
+                          const double t, const double n, const double f)
 {
     const auto L = static_cast<float>(l);
     const auto R = static_cast<float>(r);
@@ -245,10 +245,10 @@ void glMatrixStack::frustum(const UINT32 mode, const double l, const double r, c
     mul_set(mode, p);
 }
 
-void glRemix::gl::glMatrixStack::perspective(UINT32 mode, double fovY, double aspect, double n,
-                                             double f)
+void glMatrixStack::perspective(const UINT32 mode, const double fov_y, const double aspect,
+                                const double n, const double f)
 {
-    const auto fov = static_cast<float>(fovY);
+    const auto fov = static_cast<float>(fov_y);
     const auto asp = static_cast<float>(aspect);
     const auto N = static_cast<float>(n);
     const auto F = static_cast<float>(f);
@@ -258,7 +258,7 @@ void glRemix::gl::glMatrixStack::perspective(UINT32 mode, double fovY, double as
     mul_set(mode, p);
 }
 
-void glRemix::gl::glMatrixStack::load(UINT32 mode, const float* m)
+void glMatrixStack::load(const UINT32 mode, const float* m)
 {
     std::stack<XMFLOAT4X4>* stack;
     switch (mode)
