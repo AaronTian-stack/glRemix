@@ -415,7 +415,6 @@ void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7
         mesh->last_frame = m_current_frame;
 
         state.m_meshes.push_back(*mesh);
-
     }
 
     // Build all BLAS in a single batch
@@ -651,7 +650,7 @@ uint64_t glRemix::glRemixRenderer::create_hash(std::vector<Vertex> vertices,
 // replaces asset in scene based on file provided by user in ImGui
 void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& new_asset_path)
 {
-    glState state = m_driver.get_state();
+    glState& state = m_driver.get_state();
 
     XMFLOAT4X4 old_mesh_mv = state.m_matrix_pool[0];  // save for transforming new mesh
 
@@ -711,18 +710,18 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
 
     state.m_pending_geometries.push_back(std::move(pending));
 
-    //mesh = &m_mesh_map[new_mesh_hash];
+    // mesh = &m_mesh_map[new_mesh_hash];
 
     //// assign per-instance data for new mesh
-    //mesh->mat_idx = static_cast<UINT32>(m_materials.size());
-    //m_materials.push_back(m_material);
+    // mesh->mat_idx = static_cast<UINT32>(m_materials.size());
+    // m_materials.push_back(m_material);
 
-    //mesh->mv_idx = static_cast<UINT32>(m_matrix_pool.size());
-    //m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
+    // mesh->mv_idx = static_cast<UINT32>(m_matrix_pool.size());
+    // m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
 
-    //mesh->last_frame = m_current_frame;
+    // mesh->last_frame = m_current_frame;
 
-    //m_meshes.push_back(*mesh);
+    // m_meshes.push_back(*mesh);
 }
 
 void glRemix::glRemixRenderer::transform_replacement_vertices(std::vector<Vertex>& gltf_vertices,
@@ -733,6 +732,19 @@ void glRemix::glRemixRenderer::transform_replacement_vertices(std::vector<Vertex
         // vertex position transform
         XMVECTOR pos = XMVectorSet(v.position.x, v.position.y, v.position.z, 1.0f);
         XMVECTOR transformed_pos = XMVector4Transform(pos, XMLoadFloat4x4(&mv));
+
+        // debug z value
+        float z_val = XMVectorGetZ(transformed_pos);
+        if (z_val > 0)
+        {
+            z_val -= 40;
+        }
+        else
+        {
+            z_val += 40;
+        }
+        transformed_pos = XMVectorSetZ(transformed_pos, z_val);
+
         XMStoreFloat3(&v.position, transformed_pos);
 
         // vertex normal transform
@@ -989,15 +1001,6 @@ void glRemix::glRemixRenderer::render()
         m_context.unmap_buffer(&m_light_buffer[get_frame_index()].buffer);
     }
 
-    m_context.start_imgui_frame();
-
-    // set asset replacement callback
-    m_debug_window.set_replace_mesh_callback([this](uint32_t meshID, const std::string& path)
-                                             { this->replace_mesh(meshID, path); });
-
-    m_debug_window.set_mesh_buffer(state.m_meshes);
-    m_debug_window.render();
-
     // Be careful not to call the ID3D12Interface reset instead
     THROW_IF_FALSE(SUCCEEDED(m_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
 
@@ -1028,6 +1031,15 @@ void glRemix::glRemixRenderer::render()
     };
     cmd_list->RSSetViewports(1, &viewport);
     cmd_list->RSSetScissorRects(1, &scissor_rect);
+
+    m_context.start_imgui_frame();
+
+    // set asset replacement callback
+    m_debug_window.set_replace_mesh_callback([this](uint32_t meshID, const std::string& path)
+                                             { this->replace_mesh(meshID, path); });
+
+    m_debug_window.set_mesh_buffer(state.m_meshes);
+    m_debug_window.render();
 
     // Build all pending buffers from geometry collected in read_gl_command_stream
     create_pending_buffers(cmd_list.Get());

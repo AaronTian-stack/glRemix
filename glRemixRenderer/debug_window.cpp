@@ -78,23 +78,12 @@ void DebugWindow::render_mesh_ids()
         ImGui::EndListBox();
     }
 
-    /*if (debug_counter == 1)
-    {
-        m_meshID_to_replace = 337216395;
-        m_new_asset_path
-            = "C:/Users/anyaa/OneDrive/Desktop/UPenn/CIS5650/avocado_gltf/Avocado.gltf";
-
-        m_replace_mesh_callback(m_meshID_to_replace, m_new_asset_path);
-        debug_counter--;
-    }*/
-
     // handle asset replacement with selected mesh
     if (m_meshID_to_replace != -1)
     {
         ImGui::Separator();
 
         // get new asset path from user input
-        //char new_asset_path_char[256] = "";
         ImGui::InputText("Replacement Asset Path", m_asset_path_buffer, sizeof(m_asset_path_buffer));
 
         // if button is pressed to replace asset, call replace_mesh from rt_app
