@@ -406,15 +406,24 @@ void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7
         mesh = &state.m_mesh_map[pending.hash];
 
         // assign per-instance data for new mesh
-        mesh->mat_idx = static_cast<UINT32>(state.m_materials.size());
+        /*mesh->mat_idx = static_cast<UINT32>(state.m_materials.size());
         state.m_materials.push_back(state.m_material);
 
         mesh->mv_idx = static_cast<UINT32>(state.m_matrix_pool.size());
-        state.m_matrix_pool.push_back(state.m_matrix_stack.top(GL_MODELVIEW));
+        state.m_matrix_pool.push_back(state.m_matrix_stack.top(GL_MODELVIEW));*/
 
         mesh->last_frame = m_current_frame;
 
-        state.m_meshes.push_back(*mesh);
+        // update m_mesh_replacement_tracker
+        if (pending.replace_idx != -1)
+        {
+            // add mesh to m_mesh_replacement_tracker
+            state.m_mesh_replacement_tracker.emplace(pending.replace_idx, *mesh);
+        }
+        else
+        {
+            state.m_meshes.push_back(*mesh);
+        }
     }
 
     // Build all BLAS in a single batch
@@ -647,12 +656,38 @@ uint64_t glRemix::glRemixRenderer::create_hash(std::vector<Vertex> vertices,
     return seed;
 }
 
+void glRemix::glRemixRenderer::handle_per_frame_replacement()
+{
+    glState& state = m_driver.get_state();
+
+    if (state.m_mesh_replacement_tracker.empty())
+    {
+        return;
+    }
+
+    for (auto& kv : state.m_mesh_replacement_tracker)
+    {
+        uint32_t index = kv.first;                  // index for m_meshes
+        const MeshRecord& replacement = kv.second;  // mesh to replace with
+
+        // check if the index is valid
+        if (index >= state.m_meshes.size())
+        {
+            continue;
+        }
+
+        state.m_meshes[index] = replacement;
+    }
+}
+
 // replaces asset in scene based on file provided by user in ImGui
 void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& new_asset_path)
 {
     glState& state = m_driver.get_state();
 
-    XMFLOAT4X4 old_mesh_mv = state.m_matrix_pool[0];  // save for transforming new mesh
+    uint32_t old_mesh_mv_idx = -1;
+    uint32_t old_mesh_mat_idx = -1;
+    uint32_t removed_index = -1;
 
     // erase mesh that needs to be replaced
     for (auto it = state.m_mesh_map.begin(); it != state.m_mesh_map.end();)
@@ -661,8 +696,10 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
 
         if (mesh.mesh_id == meshID)
         {
-            old_mesh_mv = state.m_matrix_pool[mesh.mv_idx];
+            old_mesh_mv_idx = mesh.mv_idx;  // save for transforming new mesh
+            old_mesh_mat_idx = mesh.mat_idx;
 
+            // erase mesh from m_mesh_map
             auto& resource = m_mesh_resources[mesh.blas_vb_ib_idx];
             m_mesh_resources.free(mesh.blas_vb_ib_idx);
             m_descriptor_pager.free_descriptor(dx::DescriptorPager::VB_IB,
@@ -671,7 +708,14 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
                                                &resource.index_buffer.descriptor);
             it = state.m_mesh_map.erase(it);
 
-            std::erase_if(state.m_meshes, [&](const MeshRecord& m) { return m.mesh_id == meshID; });
+            // erase mesh from m_meshes and get its index for m_mesh_replacement_tracker
+            auto it2 = std::find_if(state.m_meshes.begin(), state.m_meshes.end(),
+                                    [&](const MeshRecord& m) { return m.mesh_id == meshID; });
+            if (it2 != state.m_meshes.end())
+            {
+                removed_index = std::distance(state.m_meshes.begin(), it2);
+                state.m_meshes.erase(it2);
+            }
 
             break;
         }
@@ -690,6 +734,7 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
     THROW_IF_FALSE(load_mesh_from_path(new_asset_path_fs, new_vertices, new_indices));
 
     // transform new vertices by replaced mesh's modelview matrix
+    XMFLOAT4X4 old_mesh_mv = state.m_matrix_pool[old_mesh_mv_idx];
     transform_replacement_vertices(new_vertices, old_mesh_mv);
 
     // put new mesh into pending geometries
@@ -703,14 +748,27 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
     pending.hash = new_mesh_hash;
     pending.mat_idx = static_cast<UINT32>(state.m_materials.size());
     pending.mv_idx = static_cast<UINT32>(state.m_matrix_pool.size());
+    pending.replace_idx = removed_index;
 
     new_mesh.blas_vb_ib_idx = m_mesh_resources.size() - m_mesh_resources.m_free_indices.size()
                               + state.m_pending_geometries.size();
+
+    // added
+    new_mesh.mat_idx = old_mesh_mat_idx;
+    new_mesh.mv_idx = old_mesh_mv_idx;
+
     state.m_mesh_map.emplace(new_mesh_hash, new_mesh);
 
     state.m_pending_geometries.push_back(std::move(pending));
 
-    // mesh = &m_mesh_map[new_mesh_hash];
+    // add mesh to m_mesh_replacement_tracker
+    /*new_mesh.mesh_id = new_mesh_hash;
+    state.m_mesh_replacement_tracker.emplace(removed_index, new_mesh);*/
+
+    /*mesh = &state.m_mesh_map[new_mesh_hash];
+    mesh->mat_idx = old_mesh_mat_idx;
+    mesh->mv_idx = old_mesh_mv_idx;
+    mesh->last_frame = m_current_frame;*/
 
     //// assign per-instance data for new mesh
     // mesh->mat_idx = static_cast<UINT32>(m_materials.size());
@@ -1043,6 +1101,9 @@ void glRemix::glRemixRenderer::render()
 
     // Build all pending buffers from geometry collected in read_gl_command_stream
     create_pending_buffers(cmd_list.Get());
+
+    // replace meshes in m_meshes if applicable
+    handle_per_frame_replacement();
 
     // Currently reserve TLAS, 1 UAV RT, 2 CBV, and (for now) 1 MeshRecord buffer per frame
     constexpr auto reserved_descriptor_offset = 5;

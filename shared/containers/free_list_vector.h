@@ -51,7 +51,6 @@ public:
 
     std::vector<unsigned> m_free_indices;
 
-
 private:
     std::vector<T> m_elements;
 };

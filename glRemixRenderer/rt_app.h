@@ -101,6 +101,7 @@ protected:
     bool load_mesh_from_path(std::filesystem::path asset_path, std::vector<Vertex>& out_vertices,
                              std::vector<uint32_t>& out_indices);
     void transform_replacement_vertices(std::vector<Vertex>& gltf_vertices, XMFLOAT4X4 mv);
+    void handle_per_frame_replacement();
 
 public:
     glRemixRenderer() = default;

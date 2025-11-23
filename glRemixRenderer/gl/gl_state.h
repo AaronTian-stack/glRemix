@@ -54,5 +54,8 @@ public:
     tsl::robin_map<UINT64, MeshRecord> m_mesh_map;
     UINT32 m_num_mesh_resources;
     std::vector<PendingGeometry> m_pending_geometries;
+    tsl::robin_map<UINT32, MeshRecord>
+        m_mesh_replacement_tracker;  // maps index in m_meshes of mesh to be replaced, with
+                                     // replacement mesh
 };
 }  // namespace glRemix

@@ -43,5 +43,6 @@ struct PendingGeometry
     UINT64 hash;
     UINT32 mat_idx;
     UINT32 mv_idx;
+    UINT32 replace_idx = -1;
 };
 }  // namespace glRemix
