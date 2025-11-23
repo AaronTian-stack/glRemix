@@ -53,7 +53,8 @@ class glRemixRenderer : public Application
     dx::D3D12Texture m_uav_rt{};
     dx::D3D12Descriptor m_uav_rt_descriptor{};
 
-    BufferAndDescriptor m_gpu_mesh_record;
+    // This is written to by CPU potentially in two consecutive frames so we need to double buffer it
+    FreeListVector<std::array<BufferAndDescriptor, m_frames_in_flight>> m_gpu_meshrecord_buffers;
 
     // BLAS, VB, IB per mesh
     // VB and IB have descriptors for SRV to be allocated from pager
@@ -61,12 +62,10 @@ class glRemixRenderer : public Application
     // Since VB/IB/BLAS are destroyed and created so often we would like them to be placed resources
     FreeListVector<MeshResources> m_mesh_resources;
 
-    // Textures
     std::vector<dx::D3D12Buffer> m_texture_upload_buffers;
     FreeListVector<TextureAndDescriptor> m_textures;
 
-    // Materials per buffer
-    // TODO: Make this a macro instead?
+    static constexpr UINT MESHRECORDS_PER_BUFFER = 256;
     static constexpr UINT MATERIALS_PER_BUFFER = 256;
 
     // This is written to by CPU potentially in two consecutive frames so we need to double buffer it
@@ -78,6 +77,7 @@ class glRemixRenderer : public Application
     DebugWindow m_debug_window;
 
     void create_material_buffer();
+    void create_mesh_record_buffer();
 
     // TODO: Expose this parameter in debug window?
     static constexpr UINT FRAME_LENIENCY = 10;
