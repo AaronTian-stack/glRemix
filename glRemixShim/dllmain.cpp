@@ -7,7 +7,7 @@ BOOL APIENTRY DllMain(HMODULE h_module, DWORD ul_reason_for_call, LPVOID lp_rese
     {
         case DLL_PROCESS_ATTACH:
             DisableThreadLibraryCalls(h_module);
-            glRemix::gl::initialize();
+            //glRemix::gl::initialize();
             glRemix::hooks::install_overrides();
             break;
         case DLL_THREAD_ATTACH:

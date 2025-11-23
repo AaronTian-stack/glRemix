@@ -47,9 +47,27 @@ FakePixelFormat create_default_pixel_format(const PIXELFORMATDESCRIPTOR* request
                                             | PFD_DOUBLEBUFFER,
                                  .iPixelType = PFD_TYPE_RGBA,
                                  .cColorBits = 32,
+                                 .cRedBits = 8,
+                                 .cRedShift = 16,
+                                 .cGreenBits = 8,
+                                 .cGreenShift = 8,
+                                 .cBlueBits = 8,
+                                 .cBlueShift = 0,
+                                 .cAlphaBits = 8,
+                                 .cAlphaShift = 24,
+                                 .cAccumBits = 0,
+                                 .cAccumRedBits = 0,
+                                 .cAccumGreenBits = 0,
+                                 .cAccumBlueBits = 0,
+                                 .cAccumAlphaBits = 0,
                                  .cDepthBits = 24,
                                  .cStencilBits = 8,
-                                 .iLayerType = PFD_MAIN_PLANE } };
+                                 .cAuxBuffers = 0,
+                                 .iLayerType = PFD_MAIN_PLANE,
+                                 .bReserved = 0,
+                                 .dwLayerMask = 0,
+                                 .dwVisibleMask = 0,
+                                 .dwDamageMask = 0 } };
     }
     FakePixelFormat result;
     result.descriptor = *requested;
@@ -510,20 +528,37 @@ int WINAPI choose_pixel_format_ovr(HDC dc, const PIXELFORMATDESCRIPTOR* descript
 int WINAPI describe_pixel_format_ovr(HDC dc, int pixel_format, UINT bytes,
                                      LPPIXELFORMATDESCRIPTOR descriptor)
 {
-    if (dc == nullptr || pixel_format <= 0 || descriptor == nullptr)
+    if (dc == nullptr || pixel_format <= 0)
     {
         return 0;
     }
 
-    std::scoped_lock lock(g_mutex);
-    if (!g_pixel_formats.contains(dc))
+    // When descriptor is NULL, return the maximum pixel format index
+    if (descriptor == nullptr)
     {
-        *descriptor = create_default_pixel_format(nullptr).descriptor;
-        return pixel_format;
+        return 1;  // We only support one pixel format
     }
 
-    *descriptor = g_pixel_formats[dc].descriptor;
-    return pixel_format;
+    // Only pixel format 1 is valid for us
+    if (pixel_format > 1)
+    {
+        return 0;  // Invalid pixel format index
+    }
+
+    // Fill in the descriptor with our default pixel format
+    // Use the stored format if available, otherwise use default
+    std::scoped_lock lock(g_mutex);
+    auto it = g_pixel_formats.find(dc);
+    if (it != g_pixel_formats.end())
+    {
+        *descriptor = it.value().descriptor;
+    }
+    else
+    {
+        *descriptor = create_default_pixel_format(nullptr).descriptor;
+    }
+    
+    return 1;  // Return max number of formats available
 }
 
 int WINAPI get_pixel_format_ovr(HDC dc)
@@ -552,11 +587,14 @@ BOOL WINAPI set_pixel_format_ovr(HDC dc, int pixel_format, const PIXELFORMATDESC
     std::scoped_lock lock(g_mutex);
     g_pixel_formats[dc] = create_default_pixel_format(descriptor);
     g_pixel_formats[dc].id = pixel_format;
+    
     return TRUE;
 }
 
 HGLRC WINAPI create_context_ovr(HDC dc)
 {
+    gl::initialize();
+
     // Derive HWND from HDC for swapchain creation
     HWND hwnd = WindowFromDC(dc);
     assert(hwnd);
