@@ -176,7 +176,7 @@ endif()
 # Create the source groups for source tree with root at CMAKE_CURRENT_SOURCE_DIR
 set(ALL_RENDERER_FILES ${RENDERER_SOURCES} ${RENDERER_HEADERS})
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${ALL_RENDERER_FILES})
-source_group("shared" FILES ${SHARED_HEADERS} ${SHARED_SOURCES})
+source_group(TREE "${GLREMIX_SHARED_DIR}" PREFIX "shared" FILES ${SHARED_HEADERS} ${SHARED_SOURCES})
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/shaders" PREFIX "shaders" FILES ${SHADER_FILES})
 
 # Exclude shader files from build
