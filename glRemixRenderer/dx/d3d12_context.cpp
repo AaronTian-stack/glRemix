@@ -486,11 +486,11 @@ void D3D12Context::set_descriptor_heap(ID3D12GraphicsCommandList7* cmd_list,
 }
 
 void D3D12Context::set_descriptor_heaps(ID3D12GraphicsCommandList7* cmd_list,
-                                        const D3D12DescriptorHeap& cbv_srv_uav_heap,
+                                        const D3D12DescriptorHeap& gpu_heap,
                                         const D3D12DescriptorHeap& sampler_heap) const
 {
     assert(cmd_list);
-    ID3D12DescriptorHeap* heaps[] = { cbv_srv_uav_heap.m_heap.Get(), sampler_heap.m_heap.Get() };
+    ID3D12DescriptorHeap* heaps[] = { gpu_heap.m_heap.Get(), sampler_heap.m_heap.Get() };
     cmd_list->SetDescriptorHeaps(2, heaps);
 }
 
@@ -1121,6 +1121,25 @@ void D3D12Context::create_unordered_access_view_texture(const D3D12Texture& text
 
     m_device->CreateUnorderedAccessView(texture.allocation->GetResource(), nullptr, &uav_desc,
                                         cpu_handle);
+}
+
+void glRemix::dx::D3D12Context::create_shader_resource_view_texture(
+    const D3D12Texture& texture, const DXGI_FORMAT format, const D3D12Descriptor& descriptor) const
+{
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
+    descriptor.heap->get_cpu_descriptor(&cpu_handle, descriptor.offset);
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc{
+        .Format = format,
+        .ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D,
+        .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+        .Texture2D{ .MostDetailedMip = 0,
+                    .MipLevels = texture.desc.mip_levels,
+                    .PlaneSlice = 0,
+                    .ResourceMinLODClamp = 0.0f }
+    };
+
+    m_device->CreateShaderResourceView(texture.allocation->GetResource(), &srv_desc, cpu_handle);
 }
 
 void D3D12Context::copy_descriptors(const D3D12Descriptor& dest_start,

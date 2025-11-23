@@ -136,6 +136,8 @@ static void handle_end(const GLCommandContext& ctx, const void* data)
 
         new_mesh.blas_vb_ib_idx = state.m_num_mesh_resources + state.m_pending_geometries.size();
 
+        new_mesh.tex_idx = 0xFFFFFFFFu;  // default global texture index
+
         state.m_mesh_map.emplace(hash, new_mesh);
 
         state.m_pending_geometries.push_back(std::move(pending));
@@ -152,6 +154,16 @@ static void handle_end(const GLCommandContext& ctx, const void* data)
     mesh->mv_idx = static_cast<UINT32>(state.m_matrix_pool.size());
 
     state.m_matrix_pool.push_back(state.m_matrix_stack.top(GL_MODELVIEW));
+
+    if (ctx.state.m_texture_2d)
+    {
+        auto& map = ctx.state.m_texture_indices;
+        auto it = map.find(ctx.state.m_texture_index);
+        if (it != map.end())
+        {
+            mesh->tex_idx = it->second;
+        }
+    }
 
     mesh->last_frame = state.m_current_frame;
 
@@ -205,7 +217,7 @@ static void handle_texcoord2f(const GLCommandContext& ctx, const void* data)
 }
 
 // -----------------------------------------------------------------------------
-// MATERIAL TEXTURE COLOR
+// MATERIAL COLOR
 // -----------------------------------------------------------------------------
 
 static void handle_materialf(const GLCommandContext& ctx, const void* data)
@@ -318,6 +330,65 @@ static void handle_clear_color(const GLCommandContext& ctx, const void* data)
     const auto* cmd = static_cast<const GLClearColorCommand*>(data);
 
     ctx.state.m_clear_color = fv_to_xmf4(cmd->color);
+}
+
+// -----------------------------------------------------------------------------
+// TEXTURE
+// -----------------------------------------------------------------------------
+
+static void handle_bind_texture(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLBindTextureCommand*>(data);
+    ctx.state.m_texture_index = cmd->texture;
+}
+
+static void handle_delete_textures(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLDeleteTexturesCommand*>(data);
+
+    UINT32 index = ctx.state.m_texture_indices[cmd->n];
+
+    // TODO (delete textures)
+}
+
+static void handle_tex_image_2d(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLTexImage2DCommand*>(data);
+
+    const auto* bytes = static_cast<const UINT8*>(data);
+    const void* data_ptr = bytes + sizeof(GLTexImage2DCommand);
+
+    PendingTexture tex;
+    tex.desc = { cmd->width,
+                 cmd->height,
+                 1,  // depth of array size is always 1 (gl does not support non 2d)
+                 1,
+                 gl_format_to_dxgi(cmd->internalFormat, cmd->format, cmd->type),
+                 D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+                 false };
+    tex.pixels = data_ptr;
+
+    glState& state = ctx.state;
+    const UINT32 global_tex_index = state.m_num_textures
+                                    + static_cast<UINT32>(state.m_pending_textures.size());
+    state.m_texture_indices[state.m_texture_index] = global_tex_index;
+
+    state.m_pending_textures.push_back(std::move(tex));
+}
+
+static void handle_tex_param(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLTexParameterCommand*>(data);
+}
+
+static void handle_tex_envi(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLTexEnviCommand*>(data);
+}
+
+static void handle_tex_envf(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLTexEnvfCommand*>(data);
 }
 
 // -----------------------------------------------------------------------------
@@ -494,6 +565,12 @@ static void set_state(const GLCommandContext& ctx, unsigned int cap, bool value)
         case GL_LIGHTING:
         {
             ctx.state.m_lighting = value;
+            break;
+        }
+        case GL_TEXTURE_2D:
+        {
+            ctx.state.m_texture_2d = value;
+            break;
         }
         // TODO add support for more params when encountered (but large majority will be ignored likely)
         break;
@@ -542,15 +619,22 @@ void glRemix::glDriver::init_handlers()
     gl_command_handlers[static_cast<size_t>(GLCMD_COLOR4F)] = &handle_color4f;
     gl_command_handlers[static_cast<size_t>(GLCMD_TEXCOORD2F)] = &handle_texcoord2f;
 
-    // MATERIALS LIGHTS TEXTURES
+    // MATERIALS LIGHTS
     gl_command_handlers[static_cast<size_t>(GLCMD_LIGHTF)] = &handle_lightf;
     gl_command_handlers[static_cast<size_t>(GLCMD_LIGHTFV)] = &handle_lightfv;
     gl_command_handlers[static_cast<size_t>(GLCMD_MATERIALI)] = &handle_materiali;
     gl_command_handlers[static_cast<size_t>(GLCMD_MATERIALF)] = &handle_materialf;
     gl_command_handlers[static_cast<size_t>(GLCMD_MATERIALIV)] = &handle_materialfv;
     gl_command_handlers[static_cast<size_t>(GLCMD_MATERIALFV)] = &handle_materialfv;
-
     gl_command_handlers[static_cast<size_t>(GLCMD_CLEAR_COLOR)] = &handle_clear_color;
+
+    // TEXTURES
+    gl_command_handlers[static_cast<size_t>(GLCMD_BIND_TEXTURE)] = &handle_bind_texture;
+    gl_command_handlers[static_cast<size_t>(GLCMD_DELETE_TEXTURES)] = &handle_delete_textures;
+    gl_command_handlers[static_cast<size_t>(GLCMD_TEX_IMAGE_2D)] = &handle_tex_image_2d;
+    gl_command_handlers[static_cast<size_t>(GLCMD_TEX_PARAMETER)] = &handle_tex_param;
+    gl_command_handlers[static_cast<size_t>(GLCMD_TEX_ENV_I)] = &handle_tex_envi;
+    gl_command_handlers[static_cast<size_t>(GLCMD_TEX_ENV_F)] = &handle_tex_envf;
 
     // MATRIX COMMANDS
     gl_command_handlers[static_cast<size_t>(GLCMD_MATRIX_MODE)] = &handle_matrix_mode;
@@ -608,6 +692,7 @@ void glRemix::glDriver::process_stream()
     state.m_matrix_pool.clear();         // reset matrix pool each frame
     state.m_materials.clear();
     state.m_pending_geometries.clear();  // clear pending geometry data
+    state.m_pending_textures.clear();
 
     state.m_offset = 0;
     GLCommandContext ctx{ state, *this };
