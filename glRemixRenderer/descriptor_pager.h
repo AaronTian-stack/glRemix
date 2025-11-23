@@ -15,8 +15,8 @@ public:
     {
         MATERIALS,
 
-        VB_IB,
         TEXTURES,
+        VB_IB,
         MESH_RECORDS,
 
         END,
