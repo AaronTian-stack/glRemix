@@ -447,9 +447,8 @@ void glRemix::glRemixRenderer::create_pending_textures(ID3D12GraphicsCommandList
         TextureAndDescriptor texture;
         texture.texture.desc = pending.desc;
 
-        D3D12_CLEAR_VALUE clear_value{};
         THROW_IF_FALSE(m_context.create_texture(pending.desc, D3D12_BARRIER_LAYOUT_COPY_DEST,
-                                                &texture.texture, &clear_value, "texture"));
+                                                &texture.texture, nullptr, "texture"));
 
         m_texture_upload_buffers.emplace_back();
         dx::D3D12Buffer& staging = m_texture_upload_buffers.back();

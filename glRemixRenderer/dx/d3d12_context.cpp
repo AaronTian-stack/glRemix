@@ -486,11 +486,11 @@ void D3D12Context::set_descriptor_heap(ID3D12GraphicsCommandList7* cmd_list,
 }
 
 void D3D12Context::set_descriptor_heaps(ID3D12GraphicsCommandList7* cmd_list,
-                                        const D3D12DescriptorHeap& gpu_heap,
+                                        const D3D12DescriptorHeap& cbv_srv_uav_heap,
                                         const D3D12DescriptorHeap& sampler_heap) const
 {
     assert(cmd_list);
-    ID3D12DescriptorHeap* heaps[] = { gpu_heap.m_heap.Get(), sampler_heap.m_heap.Get() };
+    ID3D12DescriptorHeap* heaps[] = { cbv_srv_uav_heap.m_heap.Get(), sampler_heap.m_heap.Get() };
     cmd_list->SetDescriptorHeaps(2, heaps);
 }
 
