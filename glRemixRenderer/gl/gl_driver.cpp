@@ -5,69 +5,8 @@
 
 namespace glRemix
 {
-// CORE IMMEDIATE MODE
-static void handle_begin(const GLCommandContext& ctx, const void* data)
+static void hash_and_commit_geometry(glState& state)
 {
-    const auto* cmd = static_cast<const GLBeginCommand*>(data);
-    ctx.state.m_topology = cmd->mode;
-
-    ctx.state.t_vertices.clear();
-    ctx.state.t_indices.clear();
-}
-
-static void handle_end(const GLCommandContext& ctx, const void* data)
-{
-    const auto* cmd = static_cast<const GLEndCommand*>(data);
-    glState& state = ctx.state;
-    switch (state.m_topology)
-    {
-        case GL_QUAD_STRIP:
-        {
-            const size_t quad_count = state.t_vertices.size() >= 4
-                                          ? (state.t_vertices.size() - 2) / 2
-                                          : 0;
-            state.t_indices.reserve(quad_count * 6);
-
-            for (UINT32 k = 0; k + 3 < state.t_vertices.size(); k += 2)
-            {
-                UINT32 a = k + 0;
-                UINT32 b = k + 1;
-                UINT32 c = k + 2;
-                UINT32 d = k + 3;
-
-                state.t_indices.push_back(a);
-                state.t_indices.push_back(b);
-                state.t_indices.push_back(d);
-                state.t_indices.push_back(a);
-                state.t_indices.push_back(d);
-                state.t_indices.push_back(c);
-            }
-            break;
-        }
-        case GL_QUADS:
-        {
-            const size_t quad_count = state.t_vertices.size() / 4;
-            state.t_indices.reserve(quad_count * 6);
-
-            for (UINT32 k = 0; k + 3 < state.t_vertices.size(); k += 4)
-            {
-                UINT32 a = k + 0;
-                UINT32 b = k + 1;
-                UINT32 c = k + 2;
-                UINT32 d = k + 3;
-
-                state.t_indices.push_back(a);
-                state.t_indices.push_back(b);
-                state.t_indices.push_back(c);
-                state.t_indices.push_back(a);
-                state.t_indices.push_back(c);
-                state.t_indices.push_back(d);
-            }
-            break;
-        }
-        default: break;
-    }
-
     // hashing - logic from boost::hash_combine
     size_t seed = 0;
     auto hash_combine = [&seed](auto const& v)
@@ -141,6 +80,78 @@ static void handle_end(const GLCommandContext& ctx, const void* data)
     mesh->last_frame = state.m_current_frame;
 
     state.m_meshes.push_back(*mesh);
+}
+
+static void triangulate(glState& state)
+{
+    switch (state.m_topology)
+    {
+        case GL_QUAD_STRIP:
+        {
+            const size_t quad_count = state.t_vertices.size() >= 4
+                                          ? (state.t_vertices.size() - 2) / 2
+                                          : 0;
+            state.t_indices.reserve(quad_count * 6);
+
+            for (UINT32 k = 0; k + 3 < state.t_vertices.size(); k += 2)
+            {
+                UINT32 a = k + 0;
+                UINT32 b = k + 1;
+                UINT32 c = k + 2;
+                UINT32 d = k + 3;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(d);
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(d);
+                state.t_indices.push_back(c);
+            }
+            break;
+        }
+        case GL_QUADS:
+        {
+            const size_t quad_count = state.t_vertices.size() / 4;
+            state.t_indices.reserve(quad_count * 6);
+
+            for (UINT32 k = 0; k + 3 < state.t_vertices.size(); k += 4)
+            {
+                UINT32 a = k + 0;
+                UINT32 b = k + 1;
+                UINT32 c = k + 2;
+                UINT32 d = k + 3;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(c);
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(c);
+                state.t_indices.push_back(d);
+            }
+            break;
+        }
+        default: break;
+    }
+}
+
+// CORE IMMEDIATE MODE
+static void handle_begin(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLBeginCommand*>(data);
+    ctx.state.m_topology = cmd->mode;
+
+    ctx.state.t_vertices.clear();
+    ctx.state.t_indices.clear();
+}
+
+static void handle_end(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLEndCommand*>(data);
+    glState& state = ctx.state;
+
+    triangulate(state);
+
+    hash_and_commit_geometry(state);
 }
 
 static void handle_vertex2f(const GLCommandContext& ctx, const void* data)
@@ -244,10 +255,29 @@ static void handle_end_list(const GLCommandContext& ctx, const void* data)
 }
 
 // CLIENT STATE
-// TODO (implementations coming soon)
-static void handle_draw_arrays(const GLCommandContext& ctx, const void* data) {}
+static void handle_draw_arrays(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLRemixDrawArraysCommand*>(data);
+    glState& state = ctx.state;
 
-static void handle_draw_elements(const GLCommandContext& ctx, const void* data) {}
+    // TODO: assemble vertices
+
+    triangulate(state);
+
+    hash_and_commit_geometry(state);
+}
+
+static void handle_draw_elements(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLRemixDrawArraysCommand*>(data);
+    glState& state = ctx.state;
+
+    // TODO: assemble vertices
+
+    triangulate(state);
+
+    hash_and_commit_geometry(state);
+}
 
 // MATRIX OPERATIONS
 static void handle_matrix_mode(const GLCommandContext& ctx, const void* data)
