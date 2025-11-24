@@ -82,7 +82,7 @@ bool glRemix::SharedMemory::write(const void* src, const UINT32 offset, const UI
             "SharedMemory.WRITER - Writer has exceeded current `k_DEFAULT_CAPACITY`.");
 #else
         DBG_PRINT("SharedMemory.WRITER - Writer has exceeded capacity of allocated memory space. "
-                  "Will not write.");
+                  "Will not write_simple.");
 #endif
         return false;
     }

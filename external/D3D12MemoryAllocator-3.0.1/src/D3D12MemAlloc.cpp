@@ -8733,7 +8733,7 @@ HRESULT DefragmentationContextPimpl::DefragmentPassEnd(DEFRAGMENTATION_PASS_MOVE
     HRESULT result = S_OK;
     Vector<FragmentedBlock> immovableBlocks(m_Moves.GetAllocs());
 
-    for (uint32_t i = 0; i < moveInfo.MoveCount; ++i)
+    for (UINT32 i = 0; i < moveInfo.MoveCount; ++i)
     {
         DEFRAGMENTATION_MOVE& move = moveInfo.pMoves[i];
         size_t prevCount = 0, currentCount = 0;
@@ -9375,7 +9375,7 @@ ULONG STDMETHODCALLTYPE IUnknownImpl::Release()
 {
     D3D12MA_DEBUG_GLOBAL_MUTEX_LOCK
 
-    const uint32_t newRefCount = --m_RefCount;
+    const UINT32 newRefCount = --m_RefCount;
     if (newRefCount == 0)
         ReleaseThis();
     return newRefCount;

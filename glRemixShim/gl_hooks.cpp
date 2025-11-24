@@ -138,70 +138,174 @@ GLuint APIENTRY gl_gen_lists_ovr(GLsizei range)
 /* CLIENT STATE */
 void APIENTRY gl_enable_client_state_ovr(GLenum array)
 {
-    GLEnableClientStateCommand payload{ array };
-    g_ipc.write_command(GLCommandType::GLCMD_ENABLE_CLIENT_STATE, payload);
+    GLRemixClientArrayInterface* target = nullptr;
+
+    GLRemixClientArrayKind kind = utils::MapTo(array);
+    if (kind == GLRemixClientArrayKind::_INVALID)
+    {
+        return;  // TODO: handle this better
+    }
+
+    target = &g_client_arrays[static_cast<UINT32>(kind)];
+
+    if (target && !target->enabled)
+    {
+        target->enabled = true;
+        g_client_count++;
+    }
+
+    return;  // do NOT send to IPC
 }
 
 void APIENTRY gl_disable_client_state_ovr(GLenum array)
 {
-    GLDisableClientStateCommand payload{ array };
-    g_ipc.write_command(GLCommandType::GLCMD_DISABLE_CLIENT_STATE, payload);
+    GLRemixClientArrayInterface* target = nullptr;
+
+    GLRemixClientArrayKind kind = utils::MapTo(array);
+    if (kind == GLRemixClientArrayKind::_INVALID)
+    {
+        return;
+    }
+
+    target = &g_client_arrays[static_cast<UINT32>(kind)];
+
+    if (target && target->enabled)
+    {
+        target->enabled = false;
+        g_client_count--;
+    }
+
+    return;
 }
 
 void APIENTRY gl_vertex_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
-    GLVertexPointerCommand payload{ static_cast<UINT32>(size), type, static_cast<UINT32>(stride) };
-
-    UINT32 bytes = utils::ComputeClientArraySize(4, size, type, stride);  // TODO
-
-    g_ipc.write_command(GLCommandType::GLCMD_VERTEX_POINTER, payload, pointer != nullptr, pointer,
-                        bytes);
+    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayKind::VERTEX)];
+    a.size = static_cast<UINT32>(size);
+    a.type = static_cast<UINT32>(type);
+    a.stride = static_cast<UINT32>(stride);
+    a.ptr = pointer;
+    return;
 }
 
 void APIENTRY gl_normal_pointer_ovr(GLenum type, GLsizei stride, const void* pointer)
 {
-    GLNormalPointerCommand payload{ type, static_cast<UINT32>(stride) };
-
-    UINT32 bytes = utils::ComputeClientArraySize(4, 3, type, stride);
-
-    g_ipc.write_command(GLCommandType::GLCMD_NORMAL_POINTER, payload, pointer != nullptr, pointer,
-                        bytes);
-}
-
-void APIENTRY gl_tex_coord_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
-{
-    GLTexCoordPointerCommand payload{ static_cast<UINT32>(size), type, static_cast<UINT32>(stride) };
-
-    UINT32 bytes = utils::ComputeClientArraySize(4, size, type, stride);
-
-    g_ipc.write_command(GLCommandType::GLCMD_TEXCOORD_POINTER, payload, pointer != nullptr, pointer,
-                        bytes);
+    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayKind::NORMAL)];
+    a.size = 3;
+    a.type = static_cast<UINT32>(type);
+    a.stride = static_cast<UINT32>(stride);
+    a.ptr = pointer;
+    return;
 }
 
 void APIENTRY gl_color_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
-    GLColorPointerCommand payload{ static_cast<UINT32>(size), type, static_cast<UINT32>(stride) };
+    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayKind::COLOR)];
+    a.size = static_cast<UINT32>(size);
+    a.type = static_cast<UINT32>(type);
+    a.stride = static_cast<UINT32>(stride);
+    a.ptr = pointer;
+    return;
+}
 
-    UINT32 bytes = utils::ComputeClientArraySize(4, size, type, stride);
+void APIENTRY gl_tex_coord_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
+{
+    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayKind::TEXCOORD)];
+    a.size = static_cast<UINT32>(size);
+    a.type = static_cast<UINT32>(type);
+    a.stride = static_cast<UINT32>(stride);
+    a.ptr = pointer;
+    return;
+}
 
-    g_ipc.write_command(GLCommandType::GLCMD_COLOR_POINTER, payload, pointer != nullptr, pointer,
-                        bytes);
+void APIENTRY gl_index_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
+{
+    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayKind::COLORIDX)];
+    a.size = static_cast<UINT32>(size);
+    a.type = static_cast<UINT32>(type);
+    a.stride = static_cast<UINT32>(stride);
+    a.ptr = pointer;
+    return;
+}
+
+void APIENTRY gl_edge_flag_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
+{
+    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayKind::EDGEFLAG)];
+    a.size = static_cast<UINT32>(size);
+    a.type = static_cast<UINT32>(type);
+    a.stride = static_cast<UINT32>(stride);
+    a.ptr = pointer;
+    return;
 }
 
 void APIENTRY gl_draw_arrays_ovr(GLenum mode, GLint first, GLsizei count)
 {
-    GLDrawArraysCommand payload{ mode, static_cast<UINT32>(first), static_cast<UINT32>(count) };
-    g_ipc.write_command(GLCommandType::GLCMD_DRAW_ARRAYS, payload);
+    GLRemixDrawArraysCommand header{
+        static_cast<UINT32>(mode),           // mode
+        static_cast<UINT32>(first),          // first
+        static_cast<UINT32>(count),          // count
+        static_cast<UINT32>(g_client_count)  // enabled
+    };
+
+    g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_ARRAYS, header, false, nullptr, 0);
+
+    for (const GLRemixClientArrayInterface& a : g_client_arrays)
+    {
+        if (!a.enabled)
+        {
+            continue;
+        }
+
+        GLRemixClientArrayUnifs a_header{ a.size, a.type, a.stride };
+        g_ipc.write_simple(&a_header,
+                           sizeof(GLRemixClientArrayUnifs));  // write pointer directly
+
+        UINT32 a_bytes = utils::ComputeClientArraySize(count, a.size, a.type, a.stride);
+
+        // factor in desired offset
+        const void* a_ptr = reinterpret_cast<const UINT8*>(a.ptr)
+                            + (first * utils::ComputeStride(a.size, a.type, a.stride));
+
+        g_ipc.write_simple(a_ptr, a_bytes);  // write pointer directly
+    }
 }
 
 void APIENTRY gl_draw_elements_ovr(GLenum mode, GLsizei count, GLenum type, const void* indices)
 {
-    GLDrawElementsCommand payload{ mode, static_cast<UINT32>(count), type };
+    GLRemixDrawElementsCommand header{ static_cast<UINT32>(mode), static_cast<UINT32>(count),
+                                       static_cast<UINT32>(type), g_client_count };
 
-    UINT32 bytes = utils::ComputeIndexArraySize(count, type);
+    g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_ELEMENTS, header, false, nullptr, 0);
 
-    g_ipc.write_command(GLCommandType::GLCMD_DRAW_ELEMENTS, payload, indices != nullptr, indices,
-                        bytes);
+    uint32_t max_index = utils::FindMaxIndexValue(indices, count, type);
+    const uint32_t ranged_count = max_index + 1;
+
+    const UINT32 index_stride = utils::_BytesPerComponentType(type);
+
+    const UINT32 index_bytes = utils::ComputeClientArraySize(count,          // count
+                                                             1,              // size
+                                                             type,           // type
+                                                             index_stride);  // stride
+
+    g_ipc.write_simple(indices, index_bytes);
+
+    for (const GLRemixClientArrayInterface& a : g_client_arrays)
+    {
+        if (!a.enabled)
+        {
+            continue;
+        }
+
+        GLRemixClientArrayUnifs a_header{ a.size, a.type, a.stride };
+        g_ipc.write_simple(&a_header,
+                           sizeof(GLRemixClientArrayUnifs));  // write pointer directly
+
+        UINT32 a_bytes = utils::ComputeClientArraySize(ranged_count, a.size, a.type, a.stride);
+
+        const void* a_ptr = reinterpret_cast<const UINT8*>(a.ptr);
+
+        g_ipc.write_simple(a_ptr, a_bytes);  // write pointer directly
+    }
 }
 
 /* MATRIX OPERATIONS */
@@ -631,6 +735,8 @@ void install_overrides()
         gl::register_hook("glNormalPointer", reinterpret_cast<PROC>(&gl_normal_pointer_ovr));
         gl::register_hook("glTexCoordPointer", reinterpret_cast<PROC>(&gl_tex_coord_pointer_ovr));
         gl::register_hook("glColorPointer", reinterpret_cast<PROC>(&gl_color_pointer_ovr));
+        gl::register_hook("glIndexPointer", reinterpret_cast<PROC>(&gl_index_pointer_ovr));
+        gl::register_hook("glEdgeFlagPointer", reinterpret_cast<PROC>(&gl_edge_flag_pointer_ovr));
         gl::register_hook("glDrawArrays", reinterpret_cast<PROC>(&gl_draw_arrays_ovr));
         gl::register_hook("glDrawElements", reinterpret_cast<PROC>(&gl_draw_elements_ovr));
 

@@ -7,6 +7,18 @@
 
 namespace glRemix
 {
+enum class GLRemixClientArrayKind : UINT32
+{
+    VERTEX,    // GL_VERTEX_ARRAY
+    NORMAL,    // GL_NORMAL_ARRAY
+    COLOR,     // GL_COLOR_ARRAY
+    TEXCOORD,  // GL_TEXCOORD_ARRAY
+    COLORIDX,  // GL_INDEX_ARRAY
+    EDGEFLAG,  // GL_EDGEFLAG_ARRAY
+    _COUNT,
+    _INVALID
+};
+
 enum class GLCommandType : UINT32
 {
     // Core Immediate Mode
@@ -25,15 +37,6 @@ enum class GLCommandType : UINT32
     GLCMD_END_LIST,
 
     // Client State
-    GLCMD_ENABLE_CLIENT_STATE,
-    GLCMD_DISABLE_CLIENT_STATE,
-    GLCMD_VERTEX_POINTER,
-    GLCMD_NORMAL_POINTER,
-    GLCMD_TEXCOORD_POINTER,
-    GLCMD_COLOR_POINTER,
-    GLCMD_DRAW_ARRAYS,    // within fixed-function scope
-    GLCMD_DRAW_ELEMENTS,  // within fixed-function scope
-
     GLREMIXCMD_DRAW_ARRAYS,
     GLREMIXCMD_DRAW_ELEMENTS,
 
@@ -163,61 +166,11 @@ struct GLNewListCommand
 using GLEndListCommand = GLEmptyCommand;
 
 /* CLIENT STATE */
-struct GLEnableClientStateCommand
-{
-    UINT32 array;
-};
-
-struct GLDisableClientStateCommand
-{
-    UINT32 array;
-};
-
-struct GLVertexPointerCommand
-{
-    UINT32 size;
-    UINT32 type;
-    UINT32 stride;
-};
-
-struct GLNormalPointerCommand
-{
-    UINT32 type;
-    UINT32 stride;
-};
-
-struct GLTexCoordPointerCommand
-{
-    UINT32 size;
-    UINT32 type;
-    UINT32 stride;
-};
-
-struct GLColorPointerCommand
-{
-    UINT32 size;
-    UINT32 type;
-    UINT32 stride;
-};
-
-struct GLDrawArraysCommand
-{
-    UINT32 mode;
-    UINT32 first;
-    UINT32 count;
-};
-
-struct GLDrawElementsCommand
-{
-    UINT32 mode;
-    UINT32 count;
-    UINT32 type;
-};
-
 struct GLRemixClientArrayUnifs
 {
     UINT32 size;
     UINT32 type;
+    UINT32 stride;
 };
 
 struct GLRemixDrawArraysCommand

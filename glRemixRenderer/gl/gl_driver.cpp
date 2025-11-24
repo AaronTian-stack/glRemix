@@ -355,7 +355,7 @@ static void handle_lightf(const GLCommandContext& ctx, const void* data)
 {
     const auto* cmd = static_cast<const GLLightCommand*>(data);
 
-    uint32_t light_index = cmd->light - GL_LIGHT0;
+    UINT32 light_index = cmd->light - GL_LIGHT0;
     Light& m_light = ctx.state.m_lights[light_index];
 
     switch (cmd->pname)
@@ -373,7 +373,7 @@ static void handle_lightfv(const GLCommandContext& ctx, const void* data)
 {
     const auto* cmd = static_cast<const GLLightfvCommand*>(data);
 
-    uint32_t light_index = cmd->light - GL_LIGHT0;
+    UINT32 light_index = cmd->light - GL_LIGHT0;
     Light& m_light = ctx.state.m_lights[light_index];
 
     switch (cmd->pname)
@@ -462,7 +462,7 @@ static void set_state(const GLCommandContext& ctx, unsigned int cap, bool value)
     // light handling
     if (cap >= GL_LIGHT0 && cap <= GL_LIGHT7)
     {
-        uint32_t light_index = cap - GL_LIGHT0;
+        UINT32 light_index = cap - GL_LIGHT0;
         ctx.state.m_lights[light_index].enabled = value;
         return;
     }
@@ -521,8 +521,8 @@ void glRemix::glDriver::init_handlers()
     gl_command_handlers[static_cast<size_t>(GLCMD_END_LIST)] = &handle_end_list;
 
     // CLIENT STATE
-    gl_command_handlers[static_cast<size_t>(GLCMD_DRAW_ARRAYS)] = &handle_draw_arrays;
-    gl_command_handlers[static_cast<size_t>(GLCMD_DRAW_ELEMENTS)] = &handle_draw_elements;
+    gl_command_handlers[static_cast<size_t>(GLREMIXCMD_DRAW_ARRAYS)] = &handle_draw_arrays;
+    gl_command_handlers[static_cast<size_t>(GLREMIXCMD_DRAW_ELEMENTS)] = &handle_draw_elements;
 
     // MATRIX OPERATIONS
     gl_command_handlers[static_cast<size_t>(GLCMD_MATRIX_MODE)] = &handle_matrix_mode;

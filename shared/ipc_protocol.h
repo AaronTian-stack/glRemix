@@ -36,15 +36,6 @@ public:
     void init_writer();
     void start_frame_or_wait();  // uses `WaitForMultipleObjects` to stall thread here
 
-    template<typename GLCommand>
-    inline void write_command(GLCommandType type, const GLCommand& command, bool has_data = false,
-                              const void* data_ptr = nullptr, const UINT32 data_bytes = 0)
-    {
-        const uint32_t command_bytes = sizeof(GLCommand);
-
-        this->write_command_base(type, command, command_bytes, has_data, data_ptr, data_bytes);
-    }
-
     /*
      * Writes `GLFrameUnifs` at 0 offset of IPC file-mapped object.
      * Signals write event when complete
@@ -55,6 +46,10 @@ public:
     void init_reader();
     // uses `WaitForMultipleObjects` to stall thread here. signals read event when complete.
     void consume_frame_or_wait(void* payload, UINT32* payload_size, UINT32* frame_index);
+
+    void write_simple(const void* ptr, SIZE_T bytes);
+
+#include "ipc_protocol.inl"
 
 private:
     struct MemorySlot
@@ -77,7 +72,5 @@ private:
     MemorySlot* m_curr_slot = nullptr;
 
     UINT32 m_offset = 0;
-
-#include "ipc_protocol.inl"
 };
 }  // namespace glRemix

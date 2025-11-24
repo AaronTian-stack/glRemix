@@ -45,7 +45,8 @@ void glRemix::IPCProtocol::start_frame_or_wait()
         {
             case WAIT_OBJECT_0:
                 m_curr_slot = oldest;
-                DBG_PRINT("IPCProtocol.WRITER - Oldest SharedMemory slot became available to write "
+                DBG_PRINT("IPCProtocol.WRITER - Oldest SharedMemory slot became available to "
+                          "write_simple "
                           "before latest.");  // theoretically should not occur
                 break;
             case WAIT_OBJECT_0 + 1: m_curr_slot = latest; break;
@@ -170,4 +171,10 @@ void glRemix::IPCProtocol::consume_frame_or_wait(void* payload, UINT32* payload_
     }
 
     m_curr_slot->smem.signal_read_event();
+}
+
+void glRemix::IPCProtocol::write_simple(const void* ptr, SIZE_T bytes)
+{
+    m_curr_slot->smem.write(ptr, m_offset, bytes);
+    m_offset += bytes;
 }
