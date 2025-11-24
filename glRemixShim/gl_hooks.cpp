@@ -557,7 +557,7 @@ int WINAPI describe_pixel_format_ovr(HDC dc, int pixel_format, UINT bytes,
     {
         *descriptor = create_default_pixel_format(nullptr).descriptor;
     }
-    
+
     return 1;  // Return max number of formats available
 }
 
@@ -587,7 +587,7 @@ BOOL WINAPI set_pixel_format_ovr(HDC dc, int pixel_format, const PIXELFORMATDESC
     std::scoped_lock lock(g_mutex);
     g_pixel_formats[dc] = create_default_pixel_format(descriptor);
     g_pixel_formats[dc].id = pixel_format;
-    
+
     return TRUE;
 }
 
