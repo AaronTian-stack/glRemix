@@ -64,7 +64,9 @@ class glRemixRenderer : public Application
     // Since VB/IB/BLAS are destroyed and created so often we would like them to be placed resources
     FreeListVector<MeshResources> m_mesh_resources;
 
-    // TODO: Make these a macro instead?
+    std::vector<dx::D3D12Buffer> m_texture_upload_buffers;
+    FreeListVector<TextureAndDescriptor> m_textures;
+
     static constexpr UINT MESHRECORDS_PER_BUFFER = 256;
     static constexpr UINT MATERIALS_PER_BUFFER = 256;
 
@@ -91,6 +93,7 @@ class glRemixRenderer : public Application
     void build_mesh_blas_batch(std::vector<size_t> pending_indices, size_t count,
                                ID3D12GraphicsCommandList7* cmd_list);
     void create_pending_buffers(ID3D12GraphicsCommandList7* cmd_list);
+    void create_pending_textures(ID3D12GraphicsCommandList7* cmd_list);
     void build_tlas(ID3D12GraphicsCommandList7* cmd_list);
 
 protected:

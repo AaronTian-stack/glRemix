@@ -80,6 +80,7 @@ struct GPUMeshRecord
     UINT32 ib_idx;
     UINT32 mat_buffer_idx;
     UINT32 mat_idx;
+    UINT32 tex_idx;
 };
 
 struct RayPayload

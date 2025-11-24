@@ -1123,6 +1123,25 @@ void D3D12Context::create_unordered_access_view_texture(const D3D12Texture& text
                                         cpu_handle);
 }
 
+void glRemix::dx::D3D12Context::create_shader_resource_view_texture(
+    const D3D12Texture& texture, const DXGI_FORMAT format, const D3D12Descriptor& descriptor) const
+{
+    D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle{};
+    descriptor.heap->get_cpu_descriptor(&cpu_handle, descriptor.offset);
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc{
+        .Format = format,
+        .ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D,
+        .Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING,
+        .Texture2D{ .MostDetailedMip = 0,
+                    .MipLevels = texture.desc.mip_levels,
+                    .PlaneSlice = 0,
+                    .ResourceMinLODClamp = 0.0f }
+    };
+
+    m_device->CreateShaderResourceView(texture.allocation->GetResource(), &srv_desc, cpu_handle);
+}
+
 void D3D12Context::copy_descriptors(const D3D12Descriptor& dest_start,
                                     const D3D12Descriptor& src_start, UINT count) const
 {

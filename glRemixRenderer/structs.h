@@ -3,6 +3,7 @@
 #include <vector>
 #include "dx/d3d12_buffer.h"
 #include "dx/d3d12_descriptor.h"
+#include "dx/d3d12_texture.h"
 
 using namespace DirectX;
 
@@ -17,6 +18,7 @@ struct MeshRecord
     UINT32 blas_vb_ib_idx;
     UINT32 mv_idx;  // index into model view array
     UINT32 mat_idx;
+    UINT32 tex_idx;
 
     // bounding box info
     XMFLOAT3 min_bb;
@@ -29,6 +31,13 @@ struct MeshRecord
 struct BufferAndDescriptor
 {
     dx::D3D12Buffer buffer;
+    dx::D3D12Descriptor descriptor;
+    UINT page_index = -1;
+};
+
+struct TextureAndDescriptor
+{
+    dx::D3D12Texture texture;
     dx::D3D12Descriptor descriptor;
     UINT page_index = -1;
 };
@@ -49,4 +58,12 @@ struct PendingGeometry
     UINT32 mv_idx;
     UINT32 replace_idx = -1;
 };
+
+struct PendingTexture
+{
+    UINT32 index;
+    dx::TextureDesc desc;
+    const void* pixels;
+};
+
 }  // namespace glRemix
