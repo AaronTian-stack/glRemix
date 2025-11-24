@@ -687,7 +687,12 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
 
     uint32_t old_mesh_mv_idx = -1;
     uint32_t old_mesh_mat_idx = -1;
+    std::array<float, 3> old_min_bb = { 1000.0, 1000.0, 1000.0 };
+    std::array<float, 3> old_max_bb = { -1000.0, -1000.0, -1000.0 };
     uint32_t removed_index = -1;
+
+    XMFLOAT3 min_bb = { 1000.0, 1000.0, 1000.0 };
+    XMFLOAT3 max_bb = { -1000.0, -1000.0, -1000.0 };
 
     // erase mesh that needs to be replaced
     for (auto it = state.m_mesh_map.begin(); it != state.m_mesh_map.end();)
@@ -698,6 +703,8 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
         {
             old_mesh_mv_idx = mesh.mv_idx;  // save for transforming new mesh
             old_mesh_mat_idx = mesh.mat_idx;
+            old_min_bb = { mesh.min_bb.x, mesh.min_bb.y, mesh.min_bb.z };
+            old_max_bb = { mesh.max_bb.x, mesh.max_bb.y, mesh.max_bb.z };
 
             // erase mesh from m_mesh_map
             auto& resource = m_mesh_resources[mesh.blas_vb_ib_idx];
@@ -731,11 +738,28 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
     // load new asset from given file path
     std::vector<Vertex> new_vertices;
     std::vector<uint32_t> new_indices;
-    THROW_IF_FALSE(load_mesh_from_path(new_asset_path_fs, new_vertices, new_indices));
+    THROW_IF_FALSE(
+        load_mesh_from_path(new_asset_path_fs, new_vertices, new_indices, min_bb, max_bb));
+
+    // get value to scale imported mesh vertices
+    std::array<float, 3> old_bb_size = { old_max_bb[0] - old_min_bb[0],
+                                         old_max_bb[1] - old_min_bb[1],
+                                         old_max_bb[2] - old_min_bb[2] };
+    std::array<float, 3> new_bb_size = { max_bb.x - min_bb.x, max_bb.y - min_bb.y,
+                                         max_bb.z - min_bb.z };
+
+    std::array<float, 3> scale_factors = { 1.0f, 1.0f, 1.0f };
+    for (int i = 0; i < 3; ++i)
+    {
+        if (new_bb_size[i] > 0.0f)
+        {
+            scale_factors[i] = old_bb_size[i] / new_bb_size[i];
+        }
+    }
 
     // transform new vertices by replaced mesh's modelview matrix
     XMFLOAT4X4 old_mesh_mv = state.m_matrix_pool[old_mesh_mv_idx];
-    transform_replacement_vertices(new_vertices, old_mesh_mv);
+    transform_replacement_vertices(new_vertices, old_mesh_mv, scale_factors);
 
     // put new mesh into pending geometries
     uint64_t new_mesh_hash = create_hash(new_vertices, new_indices);
@@ -756,66 +780,30 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
     // added
     new_mesh.mat_idx = old_mesh_mat_idx;
     new_mesh.mv_idx = old_mesh_mv_idx;
+    new_mesh.min_bb = min_bb;
+    new_mesh.max_bb = max_bb;
 
     state.m_mesh_map.emplace(new_mesh_hash, new_mesh);
 
     state.m_pending_geometries.push_back(std::move(pending));
-
-    // add mesh to m_mesh_replacement_tracker
-    /*new_mesh.mesh_id = new_mesh_hash;
-    state.m_mesh_replacement_tracker.emplace(removed_index, new_mesh);*/
-
-    /*mesh = &state.m_mesh_map[new_mesh_hash];
-    mesh->mat_idx = old_mesh_mat_idx;
-    mesh->mv_idx = old_mesh_mv_idx;
-    mesh->last_frame = m_current_frame;*/
-
-    //// assign per-instance data for new mesh
-    // mesh->mat_idx = static_cast<UINT32>(m_materials.size());
-    // m_materials.push_back(m_material);
-
-    // mesh->mv_idx = static_cast<UINT32>(m_matrix_pool.size());
-    // m_matrix_pool.push_back(m_matrix_stack.top(gl::GLMatrixMode::MODELVIEW));
-
-    // mesh->last_frame = m_current_frame;
-
-    // m_meshes.push_back(*mesh);
 }
 
 void glRemix::glRemixRenderer::transform_replacement_vertices(std::vector<Vertex>& gltf_vertices,
-                                                              XMFLOAT4X4 mv)
+                                                              XMFLOAT4X4 mv,
+                                                              std::array<float, 3> scale_val)
 {
     for (auto& v : gltf_vertices)
     {
-        // vertex position transform
-        XMVECTOR pos = XMVectorSet(v.position.x, v.position.y, v.position.z, 1.0f);
-        XMVECTOR transformed_pos = XMVector4Transform(pos, XMLoadFloat4x4(&mv));
-
-        // debug z value
-        float z_val = XMVectorGetZ(transformed_pos);
-        if (z_val > 0)
-        {
-            z_val -= 40;
-        }
-        else
-        {
-            z_val += 40;
-        }
-        transformed_pos = XMVectorSetZ(transformed_pos, z_val);
-
-        XMStoreFloat3(&v.position, transformed_pos);
-
-        // vertex normal transform
-        XMVECTOR norm = XMVectorSet(v.normal.x, v.normal.y, v.normal.z, 0.0f);
-        XMVECTOR transformed_norm = XMVector3TransformNormal(norm, XMLoadFloat4x4(&mv));
-        transformed_norm = XMVector3Normalize(transformed_norm);
-        XMStoreFloat3(&v.normal, transformed_norm);
+        v.position.x *= scale_val[0];
+        v.position.y *= scale_val[1];
+        v.position.z *= scale_val[2];
     }
 }
 
 bool glRemix::glRemixRenderer::load_mesh_from_path(std::filesystem::path asset_path,
                                                    std::vector<Vertex>& out_vertices,
-                                                   std::vector<uint32_t>& out_indices)
+                                                   std::vector<uint32_t>& out_indices,
+                                                   XMFLOAT3& out_min_bb, XMFLOAT3& out_max_bb)
 {
     fastgltf::Parser parser;
 
@@ -893,6 +881,23 @@ bool glRemix::glRemixRenderer::load_mesh_from_path(std::filesystem::path asset_p
                 asset.get(), normal_acc, [&](fastgltf::math::fvec3 n, size_t idx)
                 { out_vertices[vertex_offset + idx].normal = { n.x(), n.y(), n.z() }; });
         }
+    }
+
+    // get info for bounding box
+    for (const auto& vertex : out_vertices)
+    {
+        XMVECTOR p = XMLoadFloat3(&vertex.position);
+        XMVECTOR minv = XMLoadFloat3(&out_min_bb);
+        XMVECTOR maxv = XMLoadFloat3(&out_max_bb);
+
+        minv = XMVectorMin(minv, p);
+        maxv = XMVectorMax(maxv, p);
+
+        XMStoreFloat3(&out_min_bb, minv);
+        XMStoreFloat3(&out_max_bb, maxv);
+
+        /*out_min_bb = XMMin(out_min_bb, vertex.position);
+        out_max_bb = XMMax(out_max_bb, vertex.position);*/
     }
 
     return true;

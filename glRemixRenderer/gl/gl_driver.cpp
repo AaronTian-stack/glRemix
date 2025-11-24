@@ -83,6 +83,10 @@ static void handle_end(const GLCommandContext& ctx, const void* data)
         default: break;
     }
 
+    // bounding box variables
+    XMFLOAT3 min_bb = { 100.0, 100.0, 100.0 };
+    XMFLOAT3 max_bb = { -100.0, -100.0, -100.0 };
+
     // hashing - logic from boost::hash_combine
     size_t seed = 0;
     auto hash_combine = [&seed](auto const& v)
@@ -105,6 +109,20 @@ static void handle_end(const GLCommandContext& ctx, const void* data)
         hash_combine(quantize(vertex.color.x));
         hash_combine(quantize(vertex.color.y));
         hash_combine(quantize(vertex.color.z));
+
+        // add bounding box info
+        XMVECTOR p = XMLoadFloat3(&vertex.position);
+        XMVECTOR minv = XMLoadFloat3(&min_bb);
+        XMVECTOR maxv = XMLoadFloat3(&max_bb);
+
+        minv = XMVectorMin(minv, p);
+        maxv = XMVectorMax(maxv, p);
+
+        XMStoreFloat3(&min_bb, minv);
+        XMStoreFloat3(&max_bb, maxv);
+
+        /*min_bb = XMMin(min_bb, vertex.position);
+        max_bb = XMMax(max_bb, vertex.position);*/
     }
 
     // get index data to hash
@@ -154,6 +172,9 @@ static void handle_end(const GLCommandContext& ctx, const void* data)
     state.m_matrix_pool.push_back(state.m_matrix_stack.top(GL_MODELVIEW));
 
     mesh->last_frame = state.m_current_frame;
+
+    mesh->min_bb = min_bb;
+    mesh->max_bb = max_bb;
 
     state.m_meshes.push_back(*mesh);
 }

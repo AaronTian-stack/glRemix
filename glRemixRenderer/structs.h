@@ -18,6 +18,10 @@ struct MeshRecord
     UINT32 mv_idx;  // index into model view array
     UINT32 mat_idx;
 
+    // bounding box info
+    XMFLOAT3 min_bb;
+    XMFLOAT3 max_bb;
+
     // For garbage collection, last frame this mesh record was accessed
     UINT32 last_frame;
 };
