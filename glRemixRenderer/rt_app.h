@@ -17,6 +17,8 @@
 #include "structs.h"
 #include <shared/containers/free_list_vector.h>
 
+#include "gl/gl_driver.h"
+
 namespace glRemix
 {
 class glRemixRenderer : public Application
@@ -51,18 +53,8 @@ class glRemixRenderer : public Application
     dx::D3D12Texture m_uav_rt{};
     dx::D3D12Descriptor m_uav_rt_descriptor{};
 
-    IPCProtocol m_ipc;
-    std::vector<UINT8> m_ipc_buffer;
-
-    // mesh resources
-    tsl::robin_map<UINT64, MeshRecord> m_mesh_map;
-
-    std::vector<MeshRecord> m_meshes;
-
-    BufferAndDescriptor m_gpu_mesh_record;
-
-    // Geometry to be built in current frame (mesh resource)
-    std::vector<PendingGeometry> m_pending_geometries;
+    // This is written to by CPU potentially in two consecutive frames so we need to double buffer it
+    FreeListVector<std::array<BufferAndDescriptor, m_frames_in_flight>> m_gpu_meshrecord_buffers;
 
     // BLAS, VB, IB per mesh
     // VB and IB have descriptors for SRV to be allocated from pager
@@ -70,52 +62,27 @@ class glRemixRenderer : public Application
     // Since VB/IB/BLAS are destroyed and created so often we would like them to be placed resources
     FreeListVector<MeshResources> m_mesh_resources;
 
-    // Materials per buffer
-    // TODO: Make this a macro instead?
+    // TODO: Make these a macro instead?
+    static constexpr UINT MESHRECORDS_PER_BUFFER = 256;
     static constexpr UINT MATERIALS_PER_BUFFER = 256;
 
     // This is written to by CPU potentially in two consecutive frames so we need to double buffer it
     FreeListVector<std::array<BufferAndDescriptor, m_frames_in_flight>> m_material_buffers;
-
-    // matrix stack
-    gl::glMatrixStack m_matrix_stack;
-
-    std::vector<XMFLOAT4X4> m_matrix_pool;  // reset each frame
-
-    // display lists
-    tsl::robin_map<int, std::vector<UINT8>> m_display_lists;
-
-    // state trackers
-    gl::GLMatrixMode matrix_mode
-        = gl::GLMatrixMode::MODELVIEW;  // "The initial matrix mode is MODELVIEW" - glspec pg. 29
-    gl::GLListMode list_mode_ = gl::GLListMode::COMPILE_AND_EXECUTE;
-
-    // Global states
-    // Current color (may need to be tracked globally)
-    XMFLOAT4 m_color = { 1.0f, 1.0f, 1.0f, 1.0f };
-    // Default according to spec
-    XMFLOAT3 m_normal = { 0.0f, 0.0f, 1.0f };
-    Material m_material;
-
     std::array<BufferAndDescriptor, m_frames_in_flight> m_light_buffer;
-    std::array<Light, 8> m_lights{};
-    std::vector<Material> m_materials;
+
+    glDriver m_driver;
 
     DebugWindow m_debug_window;
 
     void create_material_buffer();
+    void create_mesh_record_buffer();
 
     // TODO: Expose this parameter in debug window?
     static constexpr UINT FRAME_LENIENCY = 10;
     UINT m_current_frame = 0;
 
+    void create_swapchain_and_rts(HWND hwnd);
     void create_uav_rt();
-
-    void read_gl_command_stream();
-    void read_ipc_buffer(std::vector<UINT8>& ipc_buf, size_t start_offset, UINT32 bytes_read,
-                         bool call_list = false);
-    void read_geometry(void* ipc_buf, size_t* offset, GLTopology topology, UINT32 bytes_read,
-                       bool call_list);
 
     // This should only be called from create_pending_buffers
     void build_mesh_blas_batch(size_t start_idx, size_t count, ID3D12GraphicsCommandList7* cmd_list);
