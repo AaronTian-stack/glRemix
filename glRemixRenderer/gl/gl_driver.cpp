@@ -565,7 +565,6 @@ glRemix::glDriver::glDriver()
 void glRemix::glDriver::init()
 {
     m_ipc.init_reader();
-    m_command_buffer.resize(m_ipc.get_max_payload_size());
 
     init_handlers();
 }

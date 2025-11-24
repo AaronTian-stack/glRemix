@@ -23,6 +23,8 @@ namespace glRemix
 {
 class glRemixRenderer : public Application
 {
+    static glDriver sm_driver;
+
     std::array<dx::D3D12CommandAllocator, m_frames_in_flight> m_cmd_pools{};
 
     ComPtr<ID3D12RootSignature> m_root_signature{};
@@ -69,8 +71,6 @@ class glRemixRenderer : public Application
     // This is written to by CPU potentially in two consecutive frames so we need to double buffer it
     FreeListVector<std::array<BufferAndDescriptor, m_frames_in_flight>> m_material_buffers;
     std::array<BufferAndDescriptor, m_frames_in_flight> m_light_buffer;
-
-    glDriver m_driver;
 
     DebugWindow m_debug_window;
 

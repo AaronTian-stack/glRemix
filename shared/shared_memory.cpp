@@ -77,8 +77,13 @@ bool glRemix::SharedMemory::write(const void* src, const UINT32 offset, const UI
 {
     if (offset + bytes_to_write > this->get_capacity())
     {
+#ifdef _DEBUG
+        throw std::runtime_error(
+            "SharedMemory.WRITER - Writer has exceeded current `k_DEFAULT_CAPACITY`.");
+#else
         DBG_PRINT("SharedMemory.WRITER - Writer has exceeded capacity of allocated memory space. "
                   "Will not write.");
+#endif
         return false;
     }
     memcpy(m_payload + offset, src, bytes_to_write);
@@ -91,8 +96,8 @@ UINT32 glRemix::SharedMemory::read(void* dst, const UINT32 offset, const UINT32 
     UINT32 bytes_read = bytes_to_read;
     if (offset + bytes_to_read > this->get_capacity())
     {
-        bytes_read = (this->get_capacity()
-                      - offset);  // error handle externally. for now just update bytes_read
+        // error handle externally. for now just update bytes_read
+        bytes_read = (this->get_capacity() - offset);
     }
 
     memcpy(dst, m_payload + offset, bytes_read);

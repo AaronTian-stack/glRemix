@@ -33,7 +33,7 @@ class glDriver
 {
     glState m_state;
     IPCProtocol m_ipc;
-    std::vector<UINT8> m_command_buffer;
+    std::array<UINT8, k_MAX_IPC_PAYLOAD> m_command_buffer;
 
     using GLCommandHandler = void (*)(const GLCommandContext&, const void* data);
     std::array<GLCommandHandler, NUM_COMMANDS> gl_command_handlers{};

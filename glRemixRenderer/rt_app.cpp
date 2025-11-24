@@ -13,6 +13,8 @@
 
 #include "dx/d3d12_barrier.h"
 
+glRemix::glDriver glRemix::glRemixRenderer::sm_driver;
+
 void glRemix::glRemixRenderer::create_material_buffer()
 {
     std::array<BufferAndDescriptor, m_frames_in_flight> bds;
@@ -348,7 +350,7 @@ void glRemix::glRemixRenderer::create()
 
 void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7* cmd_list)
 {
-    glState& state = m_driver.get_state();
+    glState& state = sm_driver.get_state();
     if (state.m_pending_geometries.empty())
     {
         return;
@@ -603,7 +605,7 @@ static D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const XMFLOAT4X4& mv)
 // builds top level acceleration structure with blas buffer (can be called each frame likely)
 void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
 {
-    const auto state = m_driver.get_state();
+    const auto state = sm_driver.get_state();
     // create an instance descriptor for all geometry
     // TODO: Check if this truncates size_t -> UINT
     const UINT instance_count = static_cast<UINT>(state.m_meshes.size());  // this frame's meshes
@@ -717,11 +719,11 @@ void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
 void glRemix::glRemixRenderer::render()
 {
     // Read GL stream and set resources accordingly
-    auto& state = m_driver.get_state();
+    auto& state = sm_driver.get_state();
     state.m_num_mesh_resources
         = m_mesh_resources
               .size();  // required for setting mesh record pointers properly within driver
-    m_driver.process_stream();
+    sm_driver.process_stream();
 
     if (state.m_create_context)
     {

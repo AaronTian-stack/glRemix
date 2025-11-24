@@ -3,6 +3,4 @@
 namespace glRemix::staging
 {
 
-    
-
 }  // namespace glRemix::staging
