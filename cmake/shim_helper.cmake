@@ -69,4 +69,8 @@ function(set_shim_compile_specifications target)
     if (GLREMIX_OVERRIDE_RENDERER_PATH)
         target_compile_definitions(${target} PRIVATE GLREMIX_CUSTOM_RENDERER_EXE_PATH="${GLREMIX_CUSTOM_RENDERER_EXE_PATH}")
     endif()
+
+    if(GLREMIX_AUTO_LAUNCH_RENDERER)
+        target_compile_definitions(${target} PRIVATE GLREMIX_AUTO_LAUNCH_RENDERER)
+    endif()
 endfunction()
