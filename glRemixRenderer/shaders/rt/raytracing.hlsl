@@ -52,7 +52,7 @@ float3 transform_to_world(float3 local_dir, float3 N)
     uint seed = uint(DispatchRaysIndex().x * 1973 + DispatchRaysIndex().y * 9277 + 891);
     
     uint max_bounces = 3;
-    int num_samples_per_pixel = 5;
+    int num_samples_per_pixel = 15;
     float3 final_color = float3(0, 0, 0);
     
     for (int sample = 0; sample < num_samples_per_pixel; ++sample)
@@ -157,6 +157,7 @@ float3 transform_to_world(float3 local_dir, float3 N)
     bary.x = 1.0f - bary.y - bary.z;
 
     // Interpolate attributes
+    float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
     float3 albedo = v0.color.rgb * bary.x + v1.color.rgb * bary.y + v2.color.rgb * bary.z;
     float3 n_obj = normalize(v0.normal * bary.x + v1.normal * bary.y + v2.normal * bary.z);
 
@@ -165,10 +166,6 @@ float3 transform_to_world(float3 local_dir, float3 N)
     float3 n_world = normalize(mul(n_obj, o2w3x3));
 
     const float3 hit_pos = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
-
-    // Just grab light index 0 for now
-    // TODO: Should loop through all 8 lights and check if each is enabled
-    
 
     Material mat;
     mat.ambient = float4(1.0, 1.0, 1.0, 1.0);
@@ -183,6 +180,16 @@ float3 transform_to_world(float3 local_dir, float3 N)
         StructuredBuffer<Material> mat_buf
             = ResourceDescriptorHeap[NonUniformResourceIndex(mesh.mat_buffer_idx)];
         mat = mat_buf[mesh.mat_idx];
+    }
+    
+    float3 tex_albedo = float3(1.0, 1.0, 1.0);
+    
+    // Fetch texture
+    if (mesh.tex_idx != 0xFFFFFFFFu)
+    {
+        Texture2D tex = ResourceDescriptorHeap[NonUniformResourceIndex(mesh.tex_idx)];
+        float4 tex_sample = tex.SampleLevel(g_sampler, uv, 0.0f);
+        tex_albedo = tex_sample.rgb;
     }
         
     float3 final_color = float3(0, 0, 0);
@@ -208,29 +215,14 @@ float3 transform_to_world(float3 local_dir, float3 N)
 
         // diffuse
         float n_dot_l = max(dot(n_world, light_dir), 0.0);
-        float3 diffuse = mat.diffuse.rgb * curr_light.diffuse.rgb * albedo * n_dot_l;
+        float3 diffuse = mat.diffuse.rgb * tex_albedo * curr_light.diffuse.rgb * albedo * n_dot_l;
         
         // ambient
-        float3 ambient = mat.ambient.rgb * curr_light.ambient.rgb * albedo;
+        float3 ambient = mat.ambient.rgb * tex_albedo * curr_light.ambient.rgb * albedo;
 
         float3 color = (diffuse + ambient) * attenuation;
         final_color += color;
     }
-    
-    /*float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
-    
-    // Fetch texture
-    if (mesh.tex_idx != 0xFFFFFFFFu)
-    {
-        Texture2D tex = ResourceDescriptorHeap[NonUniformResourceIndex(mesh.tex_idx)];
-        float4 tex_sample = tex.SampleLevel(g_sampler, uv, 0.0f);
-        albedo = tex_sample.rgb;
-    }
-
-    const float n_dot_l = max(dot(n_world, light_vec), 0.0);
-    float3 ambient = mat.ambient.rgb * albedo;
-    float3 diffuse = mat.diffuse.rgb * albedo * n_dot_l * light_color;
-    float3 color = diffuse;*/
 
     payload.hit_pos = hit_pos;
     payload.normal = n_world;

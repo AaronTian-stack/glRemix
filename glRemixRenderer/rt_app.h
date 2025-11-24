@@ -104,7 +104,8 @@ protected:
     // asset replacement
     void replace_mesh(uint64_t meshID, const std::string& new_asset_path);
     bool load_mesh_from_path(std::filesystem::path asset_path, std::vector<Vertex>& out_vertices,
-                             std::vector<uint32_t>& out_indices, XMFLOAT3& out_min_bb,
+                             std::vector<uint32_t>& out_indices,
+                             std::vector<Material>& out_materials, XMFLOAT3& out_min_bb,
                              XMFLOAT3& out_max_bb);
     void transform_replacement_vertices(std::vector<Vertex>& gltf_vertices, XMFLOAT4X4 mv,
                                         std::array<float, 3> scale_val);

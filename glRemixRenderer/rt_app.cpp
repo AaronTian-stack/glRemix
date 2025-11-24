@@ -808,8 +808,9 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
     // load new asset from given file path
     std::vector<Vertex> new_vertices;
     std::vector<uint32_t> new_indices;
+    std::vector<Material> new_materials;
     THROW_IF_FALSE(
-        load_mesh_from_path(new_asset_path_fs, new_vertices, new_indices, min_bb, max_bb));
+        load_mesh_from_path(new_asset_path_fs, new_vertices, new_indices, new_materials, min_bb, max_bb));
 
     // get value to scale imported mesh vertices
     std::array<float, 3> old_bb_size = { old_max_bb[0] - old_min_bb[0],
@@ -873,6 +874,7 @@ void glRemix::glRemixRenderer::transform_replacement_vertices(std::vector<Vertex
 bool glRemix::glRemixRenderer::load_mesh_from_path(std::filesystem::path asset_path,
                                                    std::vector<Vertex>& out_vertices,
                                                    std::vector<uint32_t>& out_indices,
+                                                   std::vector<Material>& out_materials,
                                                    XMFLOAT3& out_min_bb, XMFLOAT3& out_max_bb)
 {
     fastgltf::Parser parser;
