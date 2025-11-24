@@ -34,6 +34,9 @@ enum class GLCommandType : UINT32
     GLCMD_DRAW_ARRAYS,    // within fixed-function scope
     GLCMD_DRAW_ELEMENTS,  // within fixed-function scope
 
+    GLREMIXCMD_DRAW_ARRAYS,
+    GLREMIXCMD_DRAW_ELEMENTS,
+
     // Matrix Operations
     GLCMD_MATRIX_MODE,
     GLCMD_LOAD_IDENTITY,
@@ -209,6 +212,28 @@ struct GLDrawElementsCommand
     UINT32 mode;
     UINT32 count;
     UINT32 type;
+};
+
+struct GLRemixClientArrayUnifs
+{
+    UINT32 size;
+    UINT32 type;
+};
+
+struct GLRemixDrawArraysCommand
+{
+    UINT32 mode;
+    UINT32 first;
+    UINT32 count;
+    UINT32 enabled;  // amount of currently enabled client array kinds (<= 7)
+};
+
+struct GLRemixDrawElementsCommand
+{
+    UINT32 mode;
+    UINT32 count;
+    UINT32 type;
+    UINT32 enabled;
 };
 
 /* MATRIX OPERATIONS */
