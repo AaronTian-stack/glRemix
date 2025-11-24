@@ -30,8 +30,8 @@ private:
 
     const std::array<UINT, PAGE_CATEGORIES> m_descriptors_per_page{
         64,  // MATERIALS
-        64,  // VB_IB
         64,  // TEXTURES
+        64,  // VB_IB
         64,  // MESH_RECORDS
     };
 
