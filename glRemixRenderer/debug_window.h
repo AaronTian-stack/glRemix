@@ -32,6 +32,11 @@ class DebugWindow
     void render_mesh_ids();
 
 public:
+    struct
+    {
+        bool unlocked = false;
+    } m_parameters;
+
     void render();
 
     void set_mesh_buffer(std::vector<MeshRecord> meshes);

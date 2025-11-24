@@ -105,10 +105,23 @@ void DebugWindow::render_performance_stats()
     m_fps = io.Framerate;
 
     ImGui::Text("FPS: %.1f (%.3f ms/frame)", m_fps, 1000.0f / m_fps);
+    // TODO: More stats like heap allocations, allocate descriptors, memory usage, etc
 }
 
 void DebugWindow::render_settings()
 {
+    ImGui::Checkbox("Unlock FPS", &m_parameters.unlocked);
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+    {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+        ImGui::TextUnformatted(
+            "Turn Vsync off and unlock the framerate (assuming your device supports tearing)");
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
     // TODO: Reload environment map, shaders, etc
 }
 
