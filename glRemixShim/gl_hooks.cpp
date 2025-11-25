@@ -238,6 +238,25 @@ void APIENTRY gl_edge_flag_pointer_ovr(GLint size, GLenum type, GLsizei stride, 
     return;
 }
 
+static UINT32 s_precompute_client_payload_bytes(GLsizei count)
+{
+    UINT32 total_bytes = 0;
+    for (GLRemixClientArrayInterface& a : g_client_arrays)
+    {
+        if (!a.enabled)
+        {
+            continue;
+        }
+
+        const UINT32 a_bytes = utils::ComputeClientArraySize(count, a.size, a.type, a.stride);
+
+        a.computed_bytes = a_bytes;
+        total_bytes += a_bytes;
+    }
+
+    return total_bytes;
+}
+
 void APIENTRY gl_draw_arrays_ovr(GLenum mode, GLint first, GLsizei count)
 {
     GLRemixDrawArraysCommand header{
@@ -247,7 +266,12 @@ void APIENTRY gl_draw_arrays_ovr(GLenum mode, GLint first, GLsizei count)
         static_cast<UINT32>(g_client_count)  // enabled
     };
 
-    g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_ARRAYS, header, false, nullptr, 0);
+    // precompute size of all currently enabled client arrays
+    const UINT32 extra_data_bytes = s_precompute_client_payload_bytes(count);
+
+    // pass in `extra_data_bytes` but pass in the actual extra data pointers later
+    g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_ARRAYS, header, extra_data_bytes, false,
+                        nullptr);
 
     for (const GLRemixClientArrayInterface& a : g_client_arrays)
     {
@@ -257,16 +281,15 @@ void APIENTRY gl_draw_arrays_ovr(GLenum mode, GLint first, GLsizei count)
         }
 
         GLRemixClientArrayUnifs a_header{ a.size, a.type, a.stride };
-        g_ipc.write_simple(&a_header,
-                           sizeof(GLRemixClientArrayUnifs));  // write pointer directly
 
-        UINT32 a_bytes = utils::ComputeClientArraySize(count, a.size, a.type, a.stride);
+        // now write the actual extra data bytes as we iterate through all enabled client arrays.
+        g_ipc.write_simple(&a_header, sizeof(GLRemixClientArrayUnifs));
 
         // factor in desired offset
         const void* a_ptr = reinterpret_cast<const UINT8*>(a.ptr)
                             + (first * utils::ComputeStride(a.size, a.type, a.stride));
 
-        g_ipc.write_simple(a_ptr, a_bytes);  // write pointer directly
+        g_ipc.write_simple(a_ptr, a.computed_bytes);  // write pointer to this extra data directly
     }
 }
 
@@ -275,7 +298,7 @@ void APIENTRY gl_draw_elements_ovr(GLenum mode, GLsizei count, GLenum type, cons
     GLRemixDrawElementsCommand header{ static_cast<UINT32>(mode), static_cast<UINT32>(count),
                                        static_cast<UINT32>(type), g_client_count };
 
-    g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_ELEMENTS, header, false, nullptr, 0);
+    g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_ELEMENTS, header, 0, false, nullptr);
 
     uint32_t max_index = utils::FindMaxIndexValue(indices, count, type);
     const uint32_t ranged_count = max_index + 1;
@@ -448,8 +471,8 @@ void APIENTRY gl_tex_image_2d_ovr(GLenum target, GLint level, GLint internalForm
 
     const UINT32 pixels_bytes = utils::ComputePixelDataSize(width, height, format, type);
 
-    g_ipc.write_command(GLCommandType::GLCMD_TEX_IMAGE_2D, payload, pixels != nullptr, pixels,
-                        pixels_bytes);
+    g_ipc.write_command(GLCommandType::GLCMD_TEX_IMAGE_2D, payload, pixels_bytes, pixels != nullptr,
+                        pixels);
 }
 
 void APIENTRY gl_tex_parameterf_ovr(GLenum target, GLenum pname, GLfloat param)

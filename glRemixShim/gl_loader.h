@@ -17,6 +17,10 @@ struct GLRemixClientArrayInterface
     UINT32 stride = 0;
     const void* ptr = nullptr;
     bool enabled = false;
+
+    /* updated during "precompute" steps of `gl_draw_arrays_ovr`
+     * and `gl_draw_elements_ovr` */
+    UINT32 computed_bytes = 0;
 };
 
 extern std::array<GLRemixClientArrayInterface, NUMCLIENTARRAYS> g_client_arrays;

@@ -134,7 +134,7 @@ struct GLEmptyCommand
 struct GLCommandUnifs
 {
     GLCommandType type;
-    UINT32 dataSize;
+    UINT32 data_size;
 };
 
 /* CORE IMMEDIATE MODE */

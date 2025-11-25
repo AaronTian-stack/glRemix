@@ -257,10 +257,21 @@ static void handle_end_list(const GLCommandContext& ctx, const void* data)
 // CLIENT STATE
 static void handle_draw_arrays(const GLCommandContext& ctx, const void* data)
 {
-    const auto* cmd = static_cast<const GLRemixDrawArraysCommand*>(data);
+    const GLRemixDrawArraysCommand* cmd = static_cast<const GLRemixDrawArraysCommand*>(data);
     glState& state = ctx.state;
 
+    state.t_vertices.clear();
+    state.t_indices.clear();
+
+    state.m_topology = cmd->mode;
+    state.t_vertices.resize(cmd->count);
+
     // TODO: assemble vertices
+    GLRemixClientArrayUnifs* unifs;
+    for (int i = 0; i < cmd->enabled; i++)
+    {
+        continue;
+    }
 
     triangulate(state);
 
@@ -269,7 +280,7 @@ static void handle_draw_arrays(const GLCommandContext& ctx, const void* data)
 
 static void handle_draw_elements(const GLCommandContext& ctx, const void* data)
 {
-    const auto* cmd = static_cast<const GLRemixDrawArraysCommand*>(data);
+    const auto* cmd = static_cast<const GLRemixDrawElementsCommand*>(data);
     glState& state = ctx.state;
 
     // TODO: assemble vertices
@@ -670,15 +681,15 @@ bool glRemix::glDriver::read_next_command(const UINT8* buffer, size_t buffer_siz
     offset += sizeof(GLCommandUnifs);
 
     // ensure that we are not reading out of bounds
-    if (offset + header->dataSize > buffer_size)
+    if (offset + header->data_size > buffer_size)
     {
         return false;
     }
 
     out.type = header->type;
-    out.data_size = header->dataSize;
+    out.data_size = header->data_size;
     out.data = buffer + offset;
 
-    offset += header->dataSize;  // move header after extracting latest command
+    offset += header->data_size;  // move header after extracting latest command
     return true;
 }
