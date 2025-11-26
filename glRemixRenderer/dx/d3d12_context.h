@@ -66,7 +66,7 @@ public:
     bool create_swapchain(HWND window, D3D12Queue* queue, UINT* frame_index);
     bool create_swapchain_descriptors(D3D12Descriptor* descriptors, D3D12DescriptorHeap* rtv_heap);
     UINT get_swapchain_index() const;
-    bool present();
+    bool present(bool unlocked);
 
     void set_barrier_swapchain(D3D12_TEXTURE_BARRIER* barrier);
 

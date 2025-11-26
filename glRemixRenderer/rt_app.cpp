@@ -1,7 +1,6 @@
 #include "rt_app.h"
 
 #include <cstdio>
-#include <cmath>
 
 #include <thread>
 #include <chrono>
@@ -11,7 +10,6 @@
 #include <imgui.h>
 
 #include <shared/math_utils.h>
-#include <shared/gl_commands.h>
 
 #include "dx/d3d12_barrier.h"
 
@@ -34,8 +32,29 @@ void glRemix::glRemixRenderer::create_material_buffer()
 
         m_context.create_shader_resource_view(bd.buffer, bd.descriptor);
     }
-    // TODO: When this material is freed, free descriptor from pager
     m_material_buffers.push_back(std::move(bds));
+}
+
+void glRemix::glRemixRenderer::create_mesh_record_buffer()
+{
+    std::array<BufferAndDescriptor, m_frames_in_flight> bds;
+    constexpr dx::BufferDesc desc{
+        .size = sizeof(GPUMeshRecord) * MESHRECORDS_PER_BUFFER,
+        .stride = sizeof(GPUMeshRecord),
+        .visibility = dx::CPU | dx::GPU,
+    };
+
+    for (auto& bd : bds)
+    {
+        m_context.create_buffer(desc, &bd.buffer, "mesh record buffer");
+
+        bd.page_index = m_descriptor_pager.allocate_descriptor(m_context,
+                                                               dx::DescriptorPager::MESH_RECORDS,
+                                                               &bd.descriptor);
+
+        m_context.create_shader_resource_view(bd.buffer, bd.descriptor);
+    }
+    m_gpu_meshrecord_buffers.push_back(std::move(bds));
 }
 
 void glRemix::glRemixRenderer::create()
@@ -342,15 +361,6 @@ void glRemix::glRemixRenderer::create()
         m_context.create_constant_buffer_view(&m_light_buffer[i].buffer,
                                               m_light_buffer[i].descriptor);
     }
-
-    // TODO: Allocate in slab fashion like materials
-    // This should be managed by pager
-    dx::BufferDesc mesh_record_desc{ .size = sizeof(GPUMeshRecord) * 128,
-                                     .stride = sizeof(GPUMeshRecord),
-                                     .visibility = dx::CPU | dx::GPU };
-    m_context.create_buffer(mesh_record_desc, &m_gpu_mesh_record.buffer, "mesh record buffer");
-    THROW_IF_FALSE(m_CPU_descriptor_heap.allocate(&m_gpu_mesh_record.descriptor));
-    m_context.create_shader_resource_view(m_gpu_mesh_record.buffer, m_gpu_mesh_record.descriptor);
 }
 
 void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7* cmd_list)
@@ -654,7 +664,7 @@ static D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const XMFLOAT4X4& mv)
 // builds top level acceleration structure with blas buffer (can be called each frame likely)
 void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
 {
-    glState state = m_driver.get_state();
+    const auto state = m_driver.get_state();
     // create an instance descriptor for all geometry
     // TODO: Check if this truncates size_t -> UINT
     const UINT instance_count = static_cast<UINT>(state.m_meshes.size());  // this frame's meshes
@@ -768,7 +778,7 @@ void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
 void glRemix::glRemixRenderer::render()
 {
     // Read GL stream and set resources accordingly
-    glState& state = m_driver.get_state();
+    auto& state = m_driver.get_state();
     state.m_num_mesh_resources
         = m_mesh_resources
               .size();  // required for setting mesh record pointers properly within driver
@@ -781,6 +791,8 @@ void glRemix::glRemixRenderer::render()
         create_swapchain_and_rts(state.hwnd);
     }
 
+    // TODO: In general resource creation should be moved to its own dedicated thread
+
     while (state.m_materials.size() > m_material_buffers.size() * MATERIALS_PER_BUFFER)
     {
         // TODO: Issue huge warning when this happens
@@ -788,6 +800,7 @@ void glRemix::glRemixRenderer::render()
     }
 
     // Update material buffers every frame
+    // We iterate through buffers because we assume that materials does not shrink ever
     for (UINT i = 0; i < m_material_buffers.size(); i++)
     {
         // TODO: Update material texture indices
@@ -804,6 +817,11 @@ void glRemix::glRemixRenderer::render()
         const auto mat_count = end_idx - start_idx;
         memcpy(mat_ptr, state.m_materials.data() + start_idx, sizeof(Material) * mat_count);
         m_context.unmap_buffer(&mat_buffer.buffer);
+    }
+
+    while (state.m_meshes.size() > m_gpu_meshrecord_buffers.size() * MESHRECORDS_PER_BUFFER)
+    {
+        create_mesh_record_buffer();
     }
 
     // Update light buffer
@@ -853,8 +871,8 @@ void glRemix::glRemixRenderer::render()
     create_pending_buffers(cmd_list.Get());
     create_pending_textures(cmd_list.Get());
 
-    // Currently reserve TLAS, 1 UAV RT, 2 CBV, and (for now) 1 MeshRecord buffer per frame
-    constexpr auto reserved_descriptor_offset = 5;
+    // Currently reserve TLAS, 1 UAV RT, 2 CBV
+    constexpr auto reserved_descriptor_offset = 4;
     // Update mesh records vector with global indices based off current paging status
     // This is done in place on the per frame vector of MeshRecords
     static std::vector<GPUMeshRecord> gpu_mesh_records_to_copy;
@@ -905,15 +923,21 @@ void glRemix::glRemixRenderer::render()
         }
         gpu_mesh_records_to_copy.push_back(gpu_mesh);
     }
+
+    // Copy the processed GPU mesh records to the GPU buffers
+    for (UINT i = 0; i < m_gpu_meshrecord_buffers.size(); i++)
     {
-        // TODO: Allocate in slab fashion like materials
-        assert(m_gpu_mesh_record.buffer.desc.size / m_gpu_mesh_record.buffer.desc.stride
-               > gpu_mesh_records_to_copy.size());
+        const auto& mesh_record_buffer = m_gpu_meshrecord_buffers[i][get_frame_index()];
         void* mesh_record_ptr;
-        THROW_IF_FALSE(m_context.map_buffer(&m_gpu_mesh_record.buffer, &mesh_record_ptr));
-        memcpy(mesh_record_ptr, gpu_mesh_records_to_copy.data(),
-               sizeof(GPUMeshRecord) * gpu_mesh_records_to_copy.size());
-        m_context.unmap_buffer(&m_gpu_mesh_record.buffer);
+        THROW_IF_FALSE(m_context.map_buffer(&mesh_record_buffer.buffer, &mesh_record_ptr));
+        const auto start_idx = i * MESHRECORDS_PER_BUFFER;
+        assert(!u64_overflows_u32(gpu_mesh_records_to_copy.size()));
+        const auto end_idx = std::min(start_idx + MESHRECORDS_PER_BUFFER,
+                                      static_cast<UINT>(gpu_mesh_records_to_copy.size()));
+        const auto mesh_record_count = end_idx - start_idx;
+        memcpy(mesh_record_ptr, gpu_mesh_records_to_copy.data() + start_idx,
+               sizeof(GPUMeshRecord) * mesh_record_count);
+        m_context.unmap_buffer(&mesh_record_buffer.buffer);
     }
 
     m_descriptor_pager.copy_pages_to_gpu(m_context, &m_GPU_descriptor_heap,
@@ -969,17 +993,16 @@ void glRemix::glRemixRenderer::render()
         // Light CBV
         ++gpu_heap.offset;
         m_context.copy_descriptors(gpu_heap, m_light_buffer[get_frame_index()].descriptor, 1);
-        // MeshRecord(s)
-        // TODO: Copy multiple MeshRecord buffer descriptors if needed
-        ++gpu_heap.offset;
-        m_context.copy_descriptors(gpu_heap, m_gpu_mesh_record.descriptor, 1);
 
         D3D12_GPU_DESCRIPTOR_HANDLE descriptor_table_handle{};
         m_GPU_descriptor_heap.get_gpu_descriptor(&descriptor_table_handle, 0);
         // RT is compute
         cmd_list->SetComputeRootDescriptorTable(0, descriptor_table_handle);
 
-        m_GPU_descriptor_heap.get_gpu_descriptor(&descriptor_table_handle, 4);
+        m_GPU_descriptor_heap.get_gpu_descriptor(
+            &descriptor_table_handle,
+            reserved_descriptor_offset
+                + m_descriptor_pager.calculate_global_offset(dx::DescriptorPager::MESH_RECORDS, 0));
         cmd_list->SetComputeRootDescriptorTable(1, descriptor_table_handle);
 
         D3D12_GPU_VIRTUAL_ADDRESS shader_table_base_address = m_shader_table.get_gpu_address();
@@ -1129,7 +1152,7 @@ void glRemix::glRemixRenderer::render()
         ImGui::RenderPlatformWindowsDefault();
     }
 
-    m_context.present();
+    m_context.present(m_debug_window.m_parameters.unlocked);
 
     increment_frame_index();
 

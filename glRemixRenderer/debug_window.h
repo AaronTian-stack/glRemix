@@ -11,6 +11,11 @@ class DebugWindow
     void render_debug_log();
 
 public:
+    struct
+    {
+        bool unlocked = false;
+    } m_parameters;
+
     void render();
 };
 }  // namespace glRemix
