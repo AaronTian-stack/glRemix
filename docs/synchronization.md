@@ -16,11 +16,11 @@ IPC Milestone 2 Deliverables:
 
 ### GLXGears
 
-|         | Original App | No Sync or Stalling  | Milestone 1 | Milestone 2 | Milestone 3 |
-| ------- | ------------ | -------------------- | ----------- | ----------- | ----------- |
-| Debug   | 1926.2       | 8076.7 (ImGUI ~500)  | 486.5       | 492.7       | 739.6       |
-| Release | 1980.5       | 39774.3 (ImGUI ~800) | 774.4       | 785.5       | 1390.8      |
-
+|         | Original App | Framerate Synchronization | Double-buffered IPC | O(n) CPU data transfer | TLAS Optimization |
+| ------- | ------------ | ----------- | ----------- | ----------- | ------- |
+| Debug   | 1926.2       | 486.5       | 502.7       | 739.6       | 2101.9 |
+| Release | 1980.5       | 774.4       | 855.5       | 1390.8      | 2409.7 |
+ 
 ## Refactor Milestones
 
 ### Milestone 1 - Host-to-glRemixRenderer Framerate Synchronization
