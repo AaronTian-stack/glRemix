@@ -9,8 +9,8 @@
 
 namespace glRemix
 {
-// maintains per-frame uniforms for OpenGL commands sent via IPC
-struct GLFrameUnifs
+// per-frame uniforms for OpenGL commands sent via IPC
+struct GLFrameHeader
 {
     UINT32 payload_size = 0;  // bytes following this header
     UINT32 frame_index = 0;   // incremental frame counter
@@ -26,7 +26,7 @@ constexpr const wchar_t* k_MAP_B = L"Local\\glRemix_Map_B";
 constexpr const wchar_t* k_WRITE_EVENT_B = L"Local\\glRemix_WriteEvent_B";
 constexpr const wchar_t* k_READ_EVENT_B = L"Local\\glRemix_ReadEvent_B";
 
-constexpr UINT32 k_MAX_IPC_PAYLOAD = k_DEFAULT_CAPACITY - sizeof(GLFrameUnifs);
+constexpr UINT32 k_MAX_IPC_PAYLOAD = k_DEFAULT_CAPACITY - sizeof(GLFrameHeader);
 
 // For now, a simple manager for `SharedMemory
 class IPCProtocol
@@ -37,7 +37,7 @@ public:
     void start_frame_or_wait();  // uses `WaitForMultipleObjects` to stall thread here
 
     /*
-     * Writes `GLFrameUnifs` at 0 offset of IPC file-mapped object.
+     * Writes `GLFrameHeader` at 0 offset of IPC file-mapped object.
      * Signals write event when complete
      */
     void end_frame();

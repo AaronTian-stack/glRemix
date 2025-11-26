@@ -61,7 +61,7 @@ void glRemix::IPCProtocol::start_frame_or_wait()
     g_frame_index++;
     m_curr_slot->frame_index = g_frame_index;
 
-    m_offset = sizeof(GLFrameUnifs);  // reset to just the size of GLFrameUnifs
+    m_offset = sizeof(GLFrameHeader);  // reset to just the size of GLFrameHeader
 }
 
 void glRemix::IPCProtocol::end_frame()
@@ -71,11 +71,11 @@ void glRemix::IPCProtocol::end_frame()
         throw std::logic_error("IPCProtocol.WRITER - `m_curr_slot` is null at time of frame end.");
     }
 
-    GLFrameUnifs unifs;
-    unifs.payload_size = m_offset - sizeof(GLFrameUnifs);
-    unifs.frame_index = m_curr_slot->frame_index;
+    GLFrameHeader header;
+    header.payload_size = m_offset - sizeof(GLFrameHeader);
+    header.frame_index = m_curr_slot->frame_index;
 
-    m_curr_slot->smem.write(&unifs, 0, sizeof(GLFrameUnifs));
+    m_curr_slot->smem.write(&header, 0, sizeof(GLFrameHeader));
 
     m_curr_slot->smem.signal_write_event();
 }

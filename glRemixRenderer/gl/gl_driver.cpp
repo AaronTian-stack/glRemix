@@ -267,7 +267,7 @@ static void handle_draw_arrays(const GLCommandContext& ctx, const void* data)
     state.t_vertices.resize(cmd->count);
 
     // TODO: assemble vertices
-    GLRemixClientArrayUnifs* unifs;
+    GLRemixClientArrayHeader* header;
     for (int i = 0; i < cmd->enabled; i++)
     {
         continue;
@@ -672,13 +672,13 @@ bool glRemix::glDriver::read_next_command(const UINT8* buffer, size_t buffer_siz
                                           GLCommandView& out)
 {
     // ensure that we are not reading out of bounds
-    if (offset + sizeof(GLCommandUnifs) > buffer_size)
+    if (offset + sizeof(GLCommandHeader) > buffer_size)
     {
         return false;
     }
 
-    const auto* header = reinterpret_cast<const GLCommandUnifs*>(buffer + offset);
-    offset += sizeof(GLCommandUnifs);
+    const auto* header = reinterpret_cast<const GLCommandHeader*>(buffer + offset);
+    offset += sizeof(GLCommandHeader);
 
     // ensure that we are not reading out of bounds
     if (offset + header->data_size > buffer_size)

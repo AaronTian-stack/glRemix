@@ -14,7 +14,7 @@
  * @param extra_data_bytes: Can be > 0 even if `has_extra_data` is `false`.
  * i.e. should ALWAYS be set to the total desired byte size of extra data associated with this
  * command. This effectively lets us avoid temporary data allocations while still passing the
- * correct `total_bytes` to `GLCommandUnifs`.
+ * correct `total_bytes` to `GLCommandHeader`.
  * @param has_extra_data: whether contents of `p_extra_data == nullptr`.
  * @param p_extra_data: pointer to extra data
  */
@@ -34,14 +34,14 @@ inline void write_command(glRemix::GLCommandType type, const GLCommand& command,
 
     const UINT32 command_bytes = sizeof(GLCommand);
 
-    constexpr const SIZE_T unifs_bytes = sizeof(GLCommandUnifs);
+    constexpr const SIZE_T header_bytes = sizeof(GLCommandHeader);
 
     // always write `total_bytes`
     const SIZE_T total_bytes = command_bytes + extra_data_bytes;
 
-    GLCommandUnifs unifs = { type, static_cast<UINT32>(total_bytes) };
+    GLCommandHeader header = { type, static_cast<UINT32>(total_bytes) };
 
-    this->write_simple(&unifs, unifs_bytes);
+    this->write_simple(&header, header_bytes);
 
     this->write_simple(&command, command_bytes);
 

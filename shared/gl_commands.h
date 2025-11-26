@@ -129,9 +129,8 @@ struct GLEmptyCommand
     UINT32 reserved = 0;  // to maintain alignment. think of as padding GPUBuffers
 };
 
-// Named *Unifs for clear association
 // Header for all commands
-struct GLCommandUnifs
+struct GLCommandHeader
 {
     GLCommandType type;
     UINT32 data_size;
@@ -166,7 +165,7 @@ struct GLNewListCommand
 using GLEndListCommand = GLEmptyCommand;
 
 /* CLIENT STATE */
-struct GLRemixClientArrayUnifs
+struct GLRemixClientArrayHeader
 {
     UINT32 size;
     UINT32 type;

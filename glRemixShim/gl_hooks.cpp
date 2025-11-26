@@ -280,10 +280,10 @@ void APIENTRY gl_draw_arrays_ovr(GLenum mode, GLint first, GLsizei count)
             continue;
         }
 
-        GLRemixClientArrayUnifs a_header{ a.size, a.type, a.stride };
+        GLRemixClientArrayHeader a_header{ a.size, a.type, a.stride };
 
         // now write the actual extra data bytes as we iterate through all enabled client arrays.
-        g_ipc.write_simple(&a_header, sizeof(GLRemixClientArrayUnifs));
+        g_ipc.write_simple(&a_header, sizeof(GLRemixClientArrayHeader));
 
         // factor in desired offset
         const void* a_ptr = reinterpret_cast<const UINT8*>(a.ptr)
@@ -319,9 +319,9 @@ void APIENTRY gl_draw_elements_ovr(GLenum mode, GLsizei count, GLenum type, cons
             continue;
         }
 
-        GLRemixClientArrayUnifs a_header{ a.size, a.type, a.stride };
+        GLRemixClientArrayHeader a_header{ a.size, a.type, a.stride };
         g_ipc.write_simple(&a_header,
-                           sizeof(GLRemixClientArrayUnifs));  // write pointer directly
+                           sizeof(GLRemixClientArrayHeader));  // write pointer directly
 
         UINT32 a_bytes = utils::ComputeClientArraySize(ranged_count, a.size, a.type, a.stride);
 
