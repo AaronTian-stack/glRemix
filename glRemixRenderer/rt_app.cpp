@@ -1,8 +1,6 @@
 #include "rt_app.h"
 #include "mesh_loader.h"
 
-#include <cstdio>
-
 #include <thread>
 #include <chrono>
 #include <vector>

@@ -23,18 +23,72 @@ struct FakeContext
     HDC last_dc = nullptr;
 };
 
-// WGL/OpenGL might be called from multiple threads
-std::mutex g_mutex;
+// Assume WGL/OpenGL not called from multiple threads
 
 static GLuint g_list_id_counter;  // monotonic id used in `glGenLists` and passed back to host app
 
-// wglSetPixelFormat will only be called once per context
-// Or if there are multiple contexts they can share the same format since they're fake anyway...
-// TODO: Make the above assumption?
+// Assume wglSetPixelFormat will only be called once per context
 tsl::robin_map<HDC, FakePixelFormat> g_pixel_formats;
 
 thread_local HGLRC g_current_context = nullptr;
 thread_local HDC g_current_dc = nullptr;
+
+// Window procedure subclassing
+static WNDPROC g_original_wndproc = nullptr;
+
+// Window procedure to capture input events and forward to IPC
+static LRESULT CALLBACK InputCaptureWndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+    bool should_send = false;
+    switch (msg)
+    {
+        case WM_MOUSEMOVE:
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP:
+        case WM_RBUTTONDOWN:
+        case WM_RBUTTONUP:
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONUP:
+        case WM_MOUSEWHEEL:
+        case WM_MOUSEHWHEEL:
+        case WM_XBUTTONDOWN:
+        case WM_XBUTTONUP:
+        case WM_LBUTTONDBLCLK:
+        case WM_RBUTTONDBLCLK:
+        case WM_MBUTTONDBLCLK:
+        case WM_XBUTTONDBLCLK:
+
+        case WM_KEYDOWN:
+        case WM_KEYUP:
+        case WM_SYSKEYDOWN:
+        case WM_SYSKEYUP:
+        case WM_CHAR:
+
+        case WM_SETFOCUS:
+        case WM_KILLFOCUS:
+
+        case WM_SETCURSOR:
+        case WM_MOUSELEAVE: should_send = true; break;
+    }
+
+    if (should_send)
+    {
+        const WGLInputEventCommand payload{
+            .msg = msg,
+            .wparam = wparam,
+            .lparam = static_cast<UINT64>(lparam),
+        };
+
+        g_ipc.write_command(GLCommandType::WGLCMD_INPUT_EVENT, payload);
+    }
+
+    // Call the original window procedure
+    if (g_original_wndproc)
+    {
+        return CallWindowProc(g_original_wndproc, hwnd, msg, wparam, lparam);
+    }
+    return DefWindowProc(hwnd, msg, wparam, lparam);
+}
 
 FakePixelFormat create_default_pixel_format(const PIXELFORMATDESCRIPTOR* requested)
 {
@@ -47,9 +101,27 @@ FakePixelFormat create_default_pixel_format(const PIXELFORMATDESCRIPTOR* request
                                             | PFD_DOUBLEBUFFER,
                                  .iPixelType = PFD_TYPE_RGBA,
                                  .cColorBits = 32,
+                                 .cRedBits = 8,
+                                 .cRedShift = 16,
+                                 .cGreenBits = 8,
+                                 .cGreenShift = 8,
+                                 .cBlueBits = 8,
+                                 .cBlueShift = 0,
+                                 .cAlphaBits = 8,
+                                 .cAlphaShift = 24,
+                                 .cAccumBits = 0,
+                                 .cAccumRedBits = 0,
+                                 .cAccumGreenBits = 0,
+                                 .cAccumBlueBits = 0,
+                                 .cAccumAlphaBits = 0,
                                  .cDepthBits = 24,
                                  .cStencilBits = 8,
-                                 .iLayerType = PFD_MAIN_PLANE } };
+                                 .cAuxBuffers = 0,
+                                 .iLayerType = PFD_MAIN_PLANE,
+                                 .bReserved = 0,
+                                 .dwLayerMask = 0,
+                                 .dwVisibleMask = 0,
+                                 .dwDamageMask = 0 } };
     }
     FakePixelFormat result;
     result.descriptor = *requested;
@@ -502,7 +574,6 @@ int WINAPI choose_pixel_format_ovr(HDC dc, const PIXELFORMATDESCRIPTOR* descript
         return 0;
     }
 
-    std::scoped_lock lock(g_mutex);
     g_pixel_formats[dc] = create_default_pixel_format(descriptor);
     return g_pixel_formats[dc].id;
 }
@@ -510,20 +581,36 @@ int WINAPI choose_pixel_format_ovr(HDC dc, const PIXELFORMATDESCRIPTOR* descript
 int WINAPI describe_pixel_format_ovr(HDC dc, int pixel_format, UINT bytes,
                                      LPPIXELFORMATDESCRIPTOR descriptor)
 {
-    if (dc == nullptr || pixel_format <= 0 || descriptor == nullptr)
+    if (dc == nullptr || pixel_format <= 0)
     {
         return 0;
     }
 
-    std::scoped_lock lock(g_mutex);
-    if (!g_pixel_formats.contains(dc))
+    // When descriptor is NULL, return the maximum pixel format index
+    if (descriptor == nullptr)
     {
-        *descriptor = create_default_pixel_format(nullptr).descriptor;
-        return pixel_format;
+        return 1;  // We only support one pixel format
     }
 
-    *descriptor = g_pixel_formats[dc].descriptor;
-    return pixel_format;
+    // Only pixel format 1 is valid for us
+    if (pixel_format > 1)
+    {
+        return 0;  // Invalid pixel format index
+    }
+
+    // Fill in the descriptor with our default pixel format
+    // Use the stored format if available, otherwise use default
+    auto it = g_pixel_formats.find(dc);
+    if (it != g_pixel_formats.end())
+    {
+        *descriptor = it.value().descriptor;
+    }
+    else
+    {
+        *descriptor = create_default_pixel_format(nullptr).descriptor;
+    }
+
+    return 1;  // Return max number of formats available
 }
 
 int WINAPI get_pixel_format_ovr(HDC dc)
@@ -533,7 +620,6 @@ int WINAPI get_pixel_format_ovr(HDC dc)
         return 0;
     }
 
-    std::scoped_lock lock(g_mutex);
     if (!g_pixel_formats.contains(dc))
     {
         return 0;
@@ -549,20 +635,30 @@ BOOL WINAPI set_pixel_format_ovr(HDC dc, int pixel_format, const PIXELFORMATDESC
         return FALSE;
     }
 
-    std::scoped_lock lock(g_mutex);
     g_pixel_formats[dc] = create_default_pixel_format(descriptor);
     g_pixel_formats[dc].id = pixel_format;
+
     return TRUE;
 }
 
 HGLRC WINAPI create_context_ovr(HDC dc)
 {
+    gl::initialize();
+
     // Derive HWND from HDC for swapchain creation
     HWND hwnd = WindowFromDC(dc);
     assert(hwnd);
 
+    // Install window procedure hook to capture input events
+    if (!g_original_wndproc)
+    {
+        g_original_wndproc = reinterpret_cast<WNDPROC>(
+            SetWindowLongPtr(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(InputCaptureWndProc)));
+    }
+
     WGLCreateContextCommand payload{ hwnd };
 
+    // TODO: Application can do multiple create/destroy context pairs, so we need to account for that
     g_ipc.write_command(GLCommandType::WGLCMD_CREATE_CONTEXT, payload);
 
     return reinterpret_cast<HGLRC>(static_cast<UINT_PTR>(0xDEADBEEF));  // Dummy context handle
@@ -586,6 +682,7 @@ HDC WINAPI get_current_dc_ovr()
 BOOL WINAPI make_current_ovr(HDC dc, HGLRC context)
 {
     g_current_dc = dc;
+    g_current_context = context;
     return TRUE;
 }
 

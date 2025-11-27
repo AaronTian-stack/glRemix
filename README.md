@@ -1,6 +1,6 @@
 # glRemix
 
-<img src="docs\assets\glRemix_glxgears_barycentric.gif" alt="glxgears barycentric raytraced" width="600">
+<img src="docs\assets\glRemix_glxgears_textured.gif" alt="glxgears barycentric textured" width="600">
 
 ## Overview
 
@@ -43,3 +43,8 @@ On the other hand when enabled, by default `GLREMIX_CUSTOM_RENDERER_EXE_PATH` wi
 
 ### `format.ps1`
 The source files in this repository are formatted with Clang-Format according to the `.clang-format` file at the root of this repository. Run `powershell.exe -File "scripts\format.ps1"` from the root directory in Windows Powershell or Command Prompt to recurse over the `glRemixShim`, `glRemixRenderer`, and `shared` directories and format all `.cpp` and `.h` files.
+
+## Performance Snapshot
+
+![graph](docs/assets/performance_milestone2.png)
+
