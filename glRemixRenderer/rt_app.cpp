@@ -378,7 +378,7 @@ void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7
         return;
     }
 
-    const size_t start_idx = m_mesh_resources.size() - m_mesh_resources.freed_size();
+    // TODO: Replace with static allocator
     std::vector<size_t> pending_indices;
 
     // Create all vertex and index buffers first
@@ -827,13 +827,11 @@ void glRemix::glRemixRenderer::replace_mesh(UINT64 meshID, const char* new_asset
         }
     }
 
-    // transform new vertices by replaced mesh's modelview matrix
-    XMFLOAT4X4 old_mesh_mv = state.m_matrix_pool[old_mesh_mv_idx];
-    transform_replacement_vertices(new_vertices, old_mesh_mv, scale_factors);
+    // transform new vertices by replaced mesh's modelview matrix (uniform scale only)
+    transform_replacement_vertices(new_vertices, scale_factors);
 
     // put new mesh into pending geometries
     UINT64 new_mesh_hash = create_hash(new_vertices, new_indices);
-    MeshRecord* mesh;
     MeshRecord new_mesh;
 
     PendingGeometry pending;
@@ -859,7 +857,6 @@ void glRemix::glRemixRenderer::replace_mesh(UINT64 meshID, const char* new_asset
 }
 
 void glRemix::glRemixRenderer::transform_replacement_vertices(std::vector<Vertex>& gltf_vertices,
-                                                              XMFLOAT4X4 mv,
                                                               std::array<float, 3> scale_val)
 {
     for (auto& v : gltf_vertices)
