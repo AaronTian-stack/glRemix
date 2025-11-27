@@ -6,8 +6,8 @@
 namespace glRemix::hooks
 {
 
-static UINT32 g_gen_lists_count = 0;     // monotonic int, passed back to host app in `glGenLists`
-static UINT32 g_gen_textures_count = 0;  // monotonic int, passed back in `glGenTextures`
+static UINT32 g_gen_lists_count = 1;     // monotonic int, passed back to host app in `glGenLists`
+static UINT32 g_gen_textures_count = 1;  // monotonic int, passed back in `glGenTextures`
 
 thread_local std::array<GLRemixClientArrayInterface, NUM_CLIENT_ARRAYS> g_client_arrays{};
 static UINT32 g_enabled_client_arrays_count = 0;  // count of currently enabled client arrays
@@ -468,15 +468,28 @@ void APIENTRY gl_bind_texture_ovr(GLenum target, GLuint texture)
     g_ipc.write_command(GLCommandType::GLCMD_BIND_TEXTURE, payload);
 }
 
-void APIENTRY gl_gen_textures_ovr(GLsizei n, GLuint*)
+void APIENTRY gl_gen_textures_ovr(GLsizei n, GLuint* textures)
 {
-    GLGenTexturesCommand payload{ static_cast<UINT32>(n) };
+    GLGenTexturesCommand payload{ .n = static_cast<UINT32>(n) };
+
+    for (GLsizei i = 0; i < n; i++)
+    {
+        textures[i] = g_gen_textures_count++;
+        payload.ids[i] = textures[i];
+    }
+
     g_ipc.write_command(GLCommandType::GLCMD_GEN_TEXTURES, payload);
 }
 
-void APIENTRY gl_delete_textures_ovr(GLsizei n, const GLuint*)
+void APIENTRY gl_delete_textures_ovr(GLsizei n, const GLuint* textures)
 {
-    GLDeleteTexturesCommand payload{ static_cast<UINT32>(n) };
+    GLDeleteTexturesCommand payload{ .n = static_cast<UINT32>(n) };
+
+    for (GLsizei i = 0; i < n; i++)
+    {
+        payload.ids[i] = textures[i];
+    }
+
     g_ipc.write_command(GLCommandType::GLCMD_DELETE_TEXTURES, payload);
 }
 
@@ -641,8 +654,19 @@ void APIENTRY gl_stencil_op_separate_ATI_ovr(GLenum face, GLenum sfail, GLenum d
     g_ipc.write_command(GLCommandType::GLCMD_STENCIL_OP_SEPARATE_ATI, payload);
 }
 
-/* WGL (Windows Graphics Library) overrides */
+const GLubyte* APIENTRY gl_get_string_ovr(GLenum name)
+{
+    switch (name)
+    {
+        case GL_EXTENSIONS: return reinterpret_cast<const GLubyte*>("GL_ARB_multitexture");
+        case GL_VERSION: return reinterpret_cast<const GLubyte*>("1.0");
+        case GL_VENDOR: return reinterpret_cast<const GLubyte*>("glRemix");
+        case GL_RENDERER: return reinterpret_cast<const GLubyte*>("glRemixRenderer");
+        default: return reinterpret_cast<const GLubyte*>("");
+    }
+}
 
+/* WGL (Windows Graphics Library) overrides */
 BOOL WINAPI swap_buffers_ovr(HDC)
 {
     g_ipc.end_frame();
@@ -963,7 +987,10 @@ void install_overrides()
         gl::register_hook("glStencilOpSeparateATI",
                           reinterpret_cast<PROC>(&gl_stencil_op_separate_ATI_ovr));
 
-        // Override WGL for app to work. Return success and try to do nothing.
+        /* MISC */
+        gl::register_hook("glGetString", reinterpret_cast<PROC>(&gl_get_string_ovr));
+
+        /* WGL (Windows Graphics Library) overrides */
         gl::register_hook("wglChoosePixelFormat", reinterpret_cast<PROC>(&choose_pixel_format_ovr));
         gl::register_hook("wglDescribePixelFormat",
                           reinterpret_cast<PROC>(&describe_pixel_format_ovr));

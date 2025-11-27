@@ -280,14 +280,18 @@ struct GLBindTextureCommand
     UINT32 texture;
 };
 
+constexpr UINT32 k_MAX_TEXTURE_IDS_PER_COMMAND = 64;
+
 struct GLGenTexturesCommand
 {
     UINT32 n;
+    UINT32 ids[k_MAX_TEXTURE_IDS_PER_COMMAND];  // should usually be 1-4
 };
 
 struct GLDeleteTexturesCommand
 {
     UINT32 n;
+    UINT32 ids[k_MAX_TEXTURE_IDS_PER_COMMAND];
 };
 
 struct GLTexImage2DCommand
