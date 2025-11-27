@@ -9,6 +9,13 @@ namespace glRemix
 {
 static void hash_and_commit_geometry(glState& state, const size_t* client_indices = nullptr)
 {
+    if (state.t_indices.empty())
+    {
+        state.t_vertices.clear();
+        state.t_indices.clear();
+        return;
+    }
+
     // hashing - logic from boost::hash_combine
     size_t seed = 0;
     auto hash_combine = [&seed](auto const& v)
@@ -90,6 +97,85 @@ static void triangulate(glState& state)
 {
     switch (state.m_topology)
     {
+        case GL_POINTS:
+        {
+            break;
+        }
+        case GL_LINES:
+        {
+            const size_t vert_count = state.t_vertices.size();
+            if (vert_count < 2)
+            {
+                break;
+            }
+
+            const size_t seg_count = vert_count / 2;
+            state.t_indices.reserve(seg_count * 3);
+
+            for (uint32_t k = 0; k + 1 < vert_count; k += 2)
+            {
+                uint32_t a = k + 0;
+                uint32_t b = k + 1;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(b);
+            }
+            break;
+        }
+        case GL_LINE_STRIP:
+        {
+            const size_t vert_count = state.t_vertices.size();
+            if (vert_count < 2)
+            {
+                break;
+            }
+
+            const size_t seg_count = vert_count - 1;
+            state.t_indices.reserve(seg_count * 3);
+
+            for (uint32_t k = 0; k + 1 < vert_count; ++k)
+            {
+                uint32_t a = k;
+                uint32_t b = k + 1;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(b);
+            }
+            break;
+        }
+
+        case GL_LINE_LOOP:
+        {
+            const size_t vert_count = state.t_vertices.size();
+            if (vert_count < 2)
+            {
+                break;
+            }
+            const size_t seg_count = vert_count;
+            state.t_indices.reserve(seg_count * 3);
+
+            for (uint32_t k = 0; k + 1 < vert_count; ++k)
+            {
+                uint32_t a = k;
+                uint32_t b = k + 1;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(b);
+            }
+            {
+                uint32_t a = static_cast<uint32_t>(vert_count - 1);
+                uint32_t b = 0;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(b);
+            }
+            break;
+        }
+
         case GL_QUAD_STRIP:
         {
             const size_t quad_count = state.t_vertices.size() >= 4
@@ -113,6 +199,7 @@ static void triangulate(glState& state)
             }
             break;
         }
+
         case GL_QUADS:
         {
             const size_t quad_count = state.t_vertices.size() / 4;
@@ -134,6 +221,112 @@ static void triangulate(glState& state)
             }
             break;
         }
+
+        case GL_TRIANGLES:
+        {
+            const size_t vert_count = state.t_vertices.size();
+            if (vert_count < 3)
+            {
+                break;
+            }
+
+            const size_t tri_count = vert_count / 3;
+            state.t_indices.reserve(tri_count * 3);
+
+            for (uint32_t k = 0; k + 2 < vert_count; k += 3)
+            {
+                state.t_indices.push_back(k + 0);
+                state.t_indices.push_back(k + 1);
+                state.t_indices.push_back(k + 2);
+            }
+            break;
+        }
+
+        case GL_TRIANGLE_STRIP:
+        {
+            const size_t vert_count = state.t_vertices.size();
+            if (vert_count < 3)
+            {
+                break;
+            }
+
+            const size_t tri_count = vert_count - 2;
+            state.t_indices.reserve(tri_count * 3);
+
+            for (uint32_t k = 0; k + 2 < vert_count; ++k)
+            {
+                uint32_t a, b, c;
+
+                if ((k & 1) == 0)
+                {
+                    a = k;
+                    b = k + 1;
+                    c = k + 2;
+                }
+                else
+                {
+                    a = k + 1;
+                    b = k;
+                    c = k + 2;
+                }
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(c);
+            }
+            break;
+        }
+
+        case GL_TRIANGLE_FAN:
+        {
+            const size_t vert_count = state.t_vertices.size();
+            if (vert_count < 3)
+            {
+                break;
+            }
+
+            const size_t tri_count = vert_count - 2;
+            state.t_indices.reserve(tri_count * 3);
+
+            uint32_t center = 0;
+            for (uint32_t k = 1; k + 1 < vert_count; ++k)
+            {
+                uint32_t a = center;
+                uint32_t b = k;
+                uint32_t c = k + 1;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(c);
+            }
+            break;
+        }
+
+        case GL_POLYGON:
+        {
+            const size_t vert_count = state.t_vertices.size();
+            if (vert_count < 3)
+            {
+                break;
+            }
+
+            const size_t tri_count = vert_count - 2;
+            state.t_indices.reserve(tri_count * 3);
+
+            uint32_t center = 0;
+            for (uint32_t k = 1; k + 1 < vert_count; ++k)
+            {
+                uint32_t a = center;
+                uint32_t b = k;
+                uint32_t c = k + 1;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(c);
+            }
+            break;
+        }
+
         default: break;
     }
 }

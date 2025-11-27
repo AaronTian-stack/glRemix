@@ -638,8 +638,16 @@ void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
         instance_descs[i] = desc;
     }
 
-    assert(m_tlas.instance.desc.size >= sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instance_count);
-    // TODO: Recreate instance buffer if too small
+    if (m_tlas.instance.desc.size >= sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instance_count)
+    {
+        dx::BufferDesc instance_buffer_desc{
+            .size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instance_count,
+            .stride = sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
+            .visibility = dx::CPU | dx::GPU,
+        };
+        THROW_IF_FALSE(m_context.create_buffer(instance_buffer_desc, &m_tlas.instance,
+                                               "TLAS instance buffer"));
+    }
 
     void* cpu_ptr;
     THROW_IF_FALSE(m_context.map_buffer(&m_tlas.instance, &cpu_ptr));
