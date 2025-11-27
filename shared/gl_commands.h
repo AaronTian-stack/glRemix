@@ -29,6 +29,7 @@ enum class GLCommandType : UINT32
     // Client State
     GLREMIXCMD_DRAW_ARRAYS,
     GLREMIXCMD_DRAW_ELEMENTS,
+    GLREMIXCMD_DRAW_RANGE_ELEMENTS,
 
     // Matrix Operations
     GLCMD_MATRIX_MODE,
@@ -198,6 +199,17 @@ struct GLRemixDrawArraysCommand
 struct GLRemixDrawElementsCommand
 {
     UINT32 mode;
+    UINT32 count;
+    UINT32 type;
+    UINT32 enabled;
+    GLRemixClientArrayHeader headers[static_cast<UINT32>(GLRemixClientArrayType::_COUNT)];
+};
+
+struct GLRemixDrawRangeElementsCommand
+{
+    UINT32 mode;
+    UINT32 start;
+    UINT32 end;
     UINT32 count;
     UINT32 type;
     UINT32 enabled;
