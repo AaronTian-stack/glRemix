@@ -200,8 +200,7 @@ float3 transform_to_world(float3 local_dir, float3 N)
         Light curr_light = light_cb.lights[i];
         if (!curr_light.enabled)
         {
-            // TODO: fix lights so that it is able to be continue
-            break;
+            continue;
         }
         
         float3 light_pos = curr_light.position.xyz;
