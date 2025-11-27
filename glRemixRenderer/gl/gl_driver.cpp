@@ -266,7 +266,7 @@ static void handle_draw_arrays(const GLCommandContext& ctx, const void* data)
     state.m_topology = cmd->mode;
     state.t_vertices.resize(cmd->count);
 
-    // TODO: assemble vertices
+    UINT32 offset = sizeof(GLRemixDrawArraysCommand);
     GLRemixClientArrayHeader* header;
     for (int i = 0; i < cmd->enabled; i++)
     {

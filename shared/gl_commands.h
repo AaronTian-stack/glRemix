@@ -110,8 +110,8 @@ struct GLCommandHeader
 // per-frame uniforms for OpenGL commands sent via IPC
 struct GLFrameHeader
 {
-    UINT32 frame_index = 0;  // incremental frame counter
-    UINT32 frame_bytes = 0;  // bytes following this header
+    UINT32 frame_index;  // incremental frame counter
+    UINT32 frame_bytes;  // bytes following this ipc_payload
 };
 
 struct GLRemixClientArrayHeader

@@ -22,7 +22,7 @@ public:
     SharedMemory() = default;
     ~SharedMemory();
 
-    // writer creates or opens existing mapping and initializes header.
+    // writer creates or opens existing mapping and initializes frame header.
     bool create_for_writer(const wchar_t* map_name, const wchar_t* write_event_name,
                            const wchar_t* read_event_name);
 

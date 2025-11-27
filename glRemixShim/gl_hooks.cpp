@@ -1,62 +1,18 @@
 #include "gl_hooks.h"
 
 #include <gl_loader.h>
-#include <shared/gl_utils.h>  // shared
-
-#include <mutex>
-#include <tsl/robin_map.h>
+#include <shared/gl_utils.h>
 
 namespace glRemix::hooks
 {
-// If forwarding a call is needed for whatever reason, you can write a function to load the true
-// DLL, then use GetProcAddress or wglGetProcAddress to store the real function pointer. But we are
-// not using OpenGL functions, so this does not apply. Might be useful for DLL chaining though.
+thread_local std::array<GLRemixClientArrayInterface, NUM_CLIENT_ARRAYS> g_client_arrays{};
 
-struct FakePixelFormat
-{
-    PIXELFORMATDESCRIPTOR descriptor{};
-    int id = 1;
-};
-
-struct FakeContext
-{
-    HDC last_dc = nullptr;
-};
-
-// WGL/OpenGL might be called from multiple threads
 std::mutex g_mutex;
 
-static GLuint g_list_id_counter;  // monotonic id used in `glGenLists` and passed back to host app
-
-// wglSetPixelFormat will only be called once per context
-// Or if there are multiple contexts they can share the same format since they're fake anyway...
-// TODO: Make the above assumption?
 tsl::robin_map<HDC, FakePixelFormat> g_pixel_formats;
 
 thread_local HGLRC g_current_context = nullptr;
 thread_local HDC g_current_dc = nullptr;
-
-FakePixelFormat create_default_pixel_format(const PIXELFORMATDESCRIPTOR* requested)
-{
-    if (requested == nullptr)
-    {
-        // Standard 32-bit color 24-bit depth 8-bit stencil double buffered format
-        return { .descriptor = { .nSize = sizeof(PIXELFORMATDESCRIPTOR),
-                                 .nVersion = 1,
-                                 .dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL
-                                            | PFD_DOUBLEBUFFER,
-                                 .iPixelType = PFD_TYPE_RGBA,
-                                 .cColorBits = 32,
-                                 .cDepthBits = 24,
-                                 .cStencilBits = 8,
-                                 .iLayerType = PFD_MAIN_PLANE } };
-    }
-    FakePixelFormat result;
-    result.descriptor = *requested;
-    result.descriptor.nSize = sizeof(PIXELFORMATDESCRIPTOR);
-    result.descriptor.nVersion = 1;
-    return result;
-}
 
 /* CORE IMMEDIATE MODE */
 void APIENTRY gl_begin_ovr(GLenum mode)
@@ -129,8 +85,8 @@ void APIENTRY gl_end_list_ovr()
 GLuint APIENTRY gl_gen_lists_ovr(GLsizei range)
 {
     // fetchandadd
-    GLuint base = g_list_id_counter;
-    g_list_id_counter += range;
+    GLuint base = static_cast<GLuint>(g_gen_lists_counter);
+    g_gen_lists_counter += range;
 
     return base;
 }
@@ -140,18 +96,18 @@ void APIENTRY gl_enable_client_state_ovr(GLenum array)
 {
     GLRemixClientArrayInterface* target = nullptr;
 
-    GLRemixClientArrayType kind = utils::MapTo(array);
-    if (kind == GLRemixClientArrayType::_INVALID)
+    GLRemixClientArrayType array_type = utils::MapTo(array);
+    if (array_type == GLRemixClientArrayType::_INVALID)
     {
-        return;  // TODO: handle this better
+        return;
     }
 
-    target = &g_client_arrays[static_cast<UINT32>(kind)];
+    target = &g_client_arrays[static_cast<UINT32>(array_type)];
 
     if (target && !target->enabled)
     {
         target->enabled = true;
-        g_client_count++;
+        g_enabled_client_arrays_counter++;
     }
 
     return;  // do NOT send to IPC
@@ -161,18 +117,18 @@ void APIENTRY gl_disable_client_state_ovr(GLenum array)
 {
     GLRemixClientArrayInterface* target = nullptr;
 
-    GLRemixClientArrayType kind = utils::MapTo(array);
-    if (kind == GLRemixClientArrayType::_INVALID)
+    GLRemixClientArrayType array_type = utils::MapTo(array);
+    if (array_type == GLRemixClientArrayType::_INVALID)
     {
         return;
     }
 
-    target = &g_client_arrays[static_cast<UINT32>(kind)];
+    target = &g_client_arrays[static_cast<UINT32>(array_type)];
 
     if (target && target->enabled)
     {
         target->enabled = false;
-        g_client_count--;
+        g_enabled_client_arrays_counter--;
     }
 
     return;
@@ -180,9 +136,11 @@ void APIENTRY gl_disable_client_state_ovr(GLenum array)
 
 void APIENTRY gl_vertex_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
-    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::VERTEX)];
-    a.size = static_cast<UINT32>(size);
-    a.type = static_cast<UINT32>(type);
+    GLRemixClientArrayInterface& a
+        = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::VERTEX)];
+
+    a.ipc_payload.size = static_cast<UINT32>(size);
+    a.ipc_payload.type = static_cast<UINT32>(type);
     a.stride = static_cast<UINT32>(stride);
     a.ptr = pointer;
     return;
@@ -190,9 +148,11 @@ void APIENTRY gl_vertex_pointer_ovr(GLint size, GLenum type, GLsizei stride, con
 
 void APIENTRY gl_normal_pointer_ovr(GLenum type, GLsizei stride, const void* pointer)
 {
-    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::NORMAL)];
-    a.size = 3;
-    a.type = static_cast<UINT32>(type);
+    GLRemixClientArrayInterface& a
+        = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::NORMAL)];
+
+    a.ipc_payload.size = 3;
+    a.ipc_payload.type = static_cast<UINT32>(type);
     a.stride = static_cast<UINT32>(stride);
     a.ptr = pointer;
     return;
@@ -200,9 +160,11 @@ void APIENTRY gl_normal_pointer_ovr(GLenum type, GLsizei stride, const void* poi
 
 void APIENTRY gl_color_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
-    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::COLOR)];
-    a.size = static_cast<UINT32>(size);
-    a.type = static_cast<UINT32>(type);
+    GLRemixClientArrayInterface& a
+        = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::COLOR)];
+
+    a.ipc_payload.size = static_cast<UINT32>(size);
+    a.ipc_payload.type = static_cast<UINT32>(type);
     a.stride = static_cast<UINT32>(stride);
     a.ptr = pointer;
     return;
@@ -210,9 +172,11 @@ void APIENTRY gl_color_pointer_ovr(GLint size, GLenum type, GLsizei stride, cons
 
 void APIENTRY gl_tex_coord_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
-    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::TEXCOORD)];
-    a.size = static_cast<UINT32>(size);
-    a.type = static_cast<UINT32>(type);
+    GLRemixClientArrayInterface& a
+        = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::TEXCOORD)];
+
+    a.ipc_payload.size = static_cast<UINT32>(size);
+    a.ipc_payload.type = static_cast<UINT32>(type);
     a.stride = static_cast<UINT32>(stride);
     a.ptr = pointer;
     return;
@@ -220,9 +184,11 @@ void APIENTRY gl_tex_coord_pointer_ovr(GLint size, GLenum type, GLsizei stride, 
 
 void APIENTRY gl_index_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
-    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::COLORIDX)];
-    a.size = static_cast<UINT32>(size);
-    a.type = static_cast<UINT32>(type);
+    GLRemixClientArrayInterface& a
+        = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::COLORIDX)];
+
+    a.ipc_payload.size = static_cast<UINT32>(size);
+    a.ipc_payload.type = static_cast<UINT32>(type);
     a.stride = static_cast<UINT32>(stride);
     a.ptr = pointer;
     return;
@@ -230,9 +196,11 @@ void APIENTRY gl_index_pointer_ovr(GLint size, GLenum type, GLsizei stride, cons
 
 void APIENTRY gl_edge_flag_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
-    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::EDGEFLAG)];
-    a.size = static_cast<UINT32>(size);
-    a.type = static_cast<UINT32>(type);
+    GLRemixClientArrayInterface& a
+        = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::EDGEFLAG)];
+
+    a.ipc_payload.size = static_cast<UINT32>(size);
+    a.ipc_payload.type = static_cast<UINT32>(type);
     a.stride = static_cast<UINT32>(stride);
     a.ptr = pointer;
     return;
@@ -248,29 +216,40 @@ static UINT32 s_precompute_client_payload_bytes(GLsizei count)
             continue;
         }
 
-        const UINT32 a_bytes = utils::ComputeClientArraySize(count, a.size, a.type, a.stride);
+        const UINT32 a_bytes = utils::ComputeClientArraySize(count, a.ipc_payload.size,
+                                                             a.ipc_payload.type, a.stride);
 
-        a.computed_bytes = a_bytes;
+        a.ipc_payload.array_bytes = a_bytes;
         total_bytes += a_bytes;
     }
 
     return total_bytes;
 }
 
+static void s_fill_client_array_headers(GLRemixClientArrayHeader (&out)[NUM_CLIENT_ARRAYS])
+{
+    for (SIZE_T i = 0; i < NUM_CLIENT_ARRAYS; i++)
+    {
+        out[i] = g_client_arrays[i].ipc_payload;
+    }
+}
+
 void APIENTRY gl_draw_arrays_ovr(GLenum mode, GLint first, GLsizei count)
 {
-    GLRemixDrawArraysCommand header{
-        static_cast<UINT32>(mode),           // mode
-        static_cast<UINT32>(first),          // first
-        static_cast<UINT32>(count),          // count
-        static_cast<UINT32>(g_client_count)  // enabled
-    };
-
     // precompute size of all currently enabled client arrays
     const UINT32 extra_data_bytes = s_precompute_client_payload_bytes(count);
 
+    GLRemixDrawArraysCommand payload{
+        .mode = static_cast<UINT32>(mode),                               // mode
+        .first = static_cast<UINT32>(first),                             // first
+        .count = static_cast<UINT32>(count),                             // count
+        .enabled = static_cast<UINT32>(g_enabled_client_arrays_counter)  // enabled
+    };
+
+    s_fill_client_array_headers(payload.headers);
+
     // pass in `extra_data_bytes` but pass in the actual extra data pointers later
-    g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_ARRAYS, header, extra_data_bytes, false,
+    g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_ARRAYS, payload, extra_data_bytes, false,
                         nullptr);
 
     for (const GLRemixClientArrayInterface& a : g_client_arrays)
@@ -280,28 +259,29 @@ void APIENTRY gl_draw_arrays_ovr(GLenum mode, GLint first, GLsizei count)
             continue;
         }
 
-        GLRemixClientArrayHeader a_header{ a.size, a.type, a.stride };
-
-        // now write the actual extra data bytes as we iterate through all enabled client arrays.
-        g_ipc.write_simple(&a_header, sizeof(GLRemixClientArrayHeader));
-
         // factor in desired offset
         const void* a_ptr = reinterpret_cast<const UINT8*>(a.ptr)
-                            + (first * utils::ComputeStride(a.size, a.type, a.stride));
+                            + (first
+                               * utils::ComputeStride(a.ipc_payload.size, a.ipc_payload.type,
+                                                      a.stride));
 
-        g_ipc.write_simple(a_ptr, a.computed_bytes);  // write pointer to this extra data directly
+        // write pointer to this extra data directly
+        g_ipc.write_simple(a_ptr, a.ipc_payload.array_bytes);
     }
 }
 
 void APIENTRY gl_draw_elements_ovr(GLenum mode, GLsizei count, GLenum type, const void* indices)
 {
-    GLRemixDrawElementsCommand header{ static_cast<UINT32>(mode), static_cast<UINT32>(count),
-                                       static_cast<UINT32>(type), g_client_count };
-
-    g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_ELEMENTS, header, 0, false, nullptr);
-
     uint32_t max_index = utils::FindMaxIndexValue(indices, count, type);
     const uint32_t ranged_count = max_index + 1;
+    const UINT32 extra_data_bytes = s_precompute_client_payload_bytes(count);
+
+    GLRemixDrawElementsCommand header{ .mode = static_cast<UINT32>(mode),
+                                       .count = static_cast<UINT32>(count),
+                                       .type = static_cast<UINT32>(type),
+                                       .enabled = g_enabled_client_arrays_counter };
+
+    g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_ELEMENTS, header, 0, false, nullptr);
 
     const UINT32 index_stride = utils::_BytesPerComponentType(type);
 
@@ -319,15 +299,9 @@ void APIENTRY gl_draw_elements_ovr(GLenum mode, GLsizei count, GLenum type, cons
             continue;
         }
 
-        GLRemixClientArrayHeader a_header{ a.size, a.type, a.stride };
-        g_ipc.write_simple(&a_header,
-                           sizeof(GLRemixClientArrayHeader));  // write pointer directly
-
-        UINT32 a_bytes = utils::ComputeClientArraySize(ranged_count, a.size, a.type, a.stride);
-
         const void* a_ptr = reinterpret_cast<const UINT8*>(a.ptr);
 
-        g_ipc.write_simple(a_ptr, a_bytes);  // write pointer directly
+        g_ipc.write_simple(a_ptr, a.ipc_payload.array_bytes);  // write pointer directly
     }
 }
 
@@ -622,6 +596,28 @@ BOOL WINAPI swap_buffers_ovr(HDC)
     return TRUE;
 }
 
+static FakePixelFormat s_create_default_pixel_format(const PIXELFORMATDESCRIPTOR* requested)
+{
+    if (requested == nullptr)
+    {
+        // Standard 32-bit color 24-bit depth 8-bit stencil double buffered format
+        return { .descriptor = { .nSize = sizeof(PIXELFORMATDESCRIPTOR),
+                                 .nVersion = 1,
+                                 .dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL
+                                            | PFD_DOUBLEBUFFER,
+                                 .iPixelType = PFD_TYPE_RGBA,
+                                 .cColorBits = 32,
+                                 .cDepthBits = 24,
+                                 .cStencilBits = 8,
+                                 .iLayerType = PFD_MAIN_PLANE } };
+    }
+    FakePixelFormat result;
+    result.descriptor = *requested;
+    result.descriptor.nSize = sizeof(PIXELFORMATDESCRIPTOR);
+    result.descriptor.nVersion = 1;
+    return result;
+}
+
 int WINAPI choose_pixel_format_ovr(HDC dc, const PIXELFORMATDESCRIPTOR* descriptor)
 {
     if (dc == nullptr)
@@ -630,7 +626,7 @@ int WINAPI choose_pixel_format_ovr(HDC dc, const PIXELFORMATDESCRIPTOR* descript
     }
 
     std::scoped_lock lock(g_mutex);
-    g_pixel_formats[dc] = create_default_pixel_format(descriptor);
+    g_pixel_formats[dc] = s_create_default_pixel_format(descriptor);
     return g_pixel_formats[dc].id;
 }
 
@@ -645,7 +641,7 @@ int WINAPI describe_pixel_format_ovr(HDC dc, int pixel_format, UINT bytes,
     std::scoped_lock lock(g_mutex);
     if (!g_pixel_formats.contains(dc))
     {
-        *descriptor = create_default_pixel_format(nullptr).descriptor;
+        *descriptor = s_create_default_pixel_format(nullptr).descriptor;
         return pixel_format;
     }
 
@@ -677,7 +673,7 @@ BOOL WINAPI set_pixel_format_ovr(HDC dc, int pixel_format, const PIXELFORMATDESC
     }
 
     std::scoped_lock lock(g_mutex);
-    g_pixel_formats[dc] = create_default_pixel_format(descriptor);
+    g_pixel_formats[dc] = s_create_default_pixel_format(descriptor);
     g_pixel_formats[dc].id = pixel_format;
     return TRUE;
 }

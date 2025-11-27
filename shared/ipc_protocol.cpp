@@ -71,9 +71,8 @@ void glRemix::IPCProtocol::end_frame()
         throw std::logic_error("IPCProtocol.WRITER - `m_curr_slot` is null at time of frame end.");
     }
 
-    GLFrameHeader header;
-    header.frame_index = m_curr_slot->frame_index;
-    header.frame_bytes = m_offset - sizeof(GLFrameHeader);
+    GLFrameHeader header = { .frame_index = m_curr_slot->frame_index,
+                             .frame_bytes = m_offset - sizeof(GLFrameHeader) };
 
     m_curr_slot->smem.write(&header, 0, sizeof(GLFrameHeader));
 
@@ -82,7 +81,7 @@ void glRemix::IPCProtocol::end_frame()
 
 void glRemix::IPCProtocol::init_reader()
 {
-    constexpr UINT16 MAX_WAIT_MS = 5000;
+    constexpr UINT16 MAX_WAIT_MS = 60000;  // 1 minute timeout for graphics debugger workflow
     constexpr UINT16 RETRY_MS = 50;
 
     UINT16 elapsed = 0;

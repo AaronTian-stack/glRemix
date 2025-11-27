@@ -4,13 +4,9 @@
 #include <string>
 #include <tsl/robin_map.h>
 
-#include <shared/ipc_protocol.h>
-
 namespace glRemix
 {
 glRemix::IPCProtocol g_ipc;
-std::array<GLRemixClientArrayInterface, NUMCLIENTARRAYS> g_client_arrays{};
-UINT32 g_client_count = 0;  // count of currently enabled client arrays
 
 namespace gl
 {
