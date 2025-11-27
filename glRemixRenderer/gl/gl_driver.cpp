@@ -6,7 +6,7 @@
 
 namespace glRemix
 {
-static void hash_and_commit_geometry(glState& state)
+static void hash_and_commit_geometry(glState& state, const size_t* client_indices = nullptr)
 {
     // hashing - logic from boost::hash_combine
     size_t seed = 0;
@@ -32,10 +32,12 @@ static void hash_and_commit_geometry(glState& state)
         hash_combine(quantize(vertex.color.z));
     }
 
+    bool use_existing = client_indices != nullptr;
     // get index data to hash
     for (int i = 0; i < state.t_indices.size(); ++i)
     {
-        const uint32_t& index = state.t_indices[i];
+        const uint32_t& index = use_existing ? client_indices[state.t_indices[i]]
+                                             : state.t_indices[i];
         hash_combine(index);
     }
 
@@ -256,65 +258,29 @@ static void handle_end_list(const GLCommandContext& ctx, const void* data)
 }
 
 // CLIENT STATE
-static void assemble_float_vec2_array(glState& state, const uint8_t* blob,
-                                      const GLRemixClientArrayHeader& h, uint32_t count,
-                                      auto setter)
+template<typename I, typename O>
+void convert_ptr_template(size_t count, const void* ptr, O* out, bool normalize = false)
 {
-    for (uint32_t i = 0; i < count * h.stride; i += h.stride)
-    {
-        const float* src = reinterpret_cast<const float*>(blob + i);
-        XMFLOAT2 val{ src[0], src[1] };
-        setter(state.t_vertices[i], val);
-    }
-}
-
-static void assemble_float_vec3_array(glState& state, const uint8_t* blob,
-                                      const GLRemixClientArrayHeader& h, uint32_t count,
-                                      auto setter)
-{
-    for (uint32_t i = 0; i < count; i++)
-    {
-        const float* src = reinterpret_cast<const float*>(blob + i * h.stride);
-        XMFLOAT3 val{ src[0], src[1], src[2] };
-        setter(state.t_vertices[i], val);
-    }
-}
-
-static void assemble_float_vec4_array(glState& state, const uint8_t* blob,
-                                      const GLRemixClientArrayHeader& h, uint32_t count,
-                                      auto setter)
-{
-    for (uint32_t i = 0; i < count; i++)
-    {
-        const float* src = reinterpret_cast<const float*>(blob + i * h.stride);
-        XMFLOAT4 val{ src[0], src[1], src[2], src[3] };
-        setter(state.t_vertices[i], val);
-    }
-}
-
-template<typename T>
-void convert_to_float_template(size_t count, const void* ptr, float* out, bool normalize = false)
-{
-    const T* src_ptr = static_cast<const T*>(ptr);
+    const I* src_ptr = static_cast<const I*>(ptr);
     for (size_t i = 0; i < count; ++i)
     {
-        out[i] = normalize ? static_cast<float>(src_ptr[i]) / 255.f
-                           : static_cast<float>(src_ptr[i]);
+        out[i] = normalize ? static_cast<O>(src_ptr[i]) / 255.f : static_cast<O>(src_ptr[i]);
     }
 }
 
-void convert_to_float(uint32_t type, size_t count, const void* ptr, float* out)
+template<typename O>
+void convert_ptr(uint32_t type, size_t count, const void* ptr, O* out, bool normalize = false)
 {
     switch (type)
     {
-        case GL_UNSIGNED_BYTE: convert_to_float_template<uint8_t>(count, ptr, out, true); break;
-        case GL_BYTE: convert_to_float_template<int8_t>(count, ptr, out); break;
-        case GL_UNSIGNED_SHORT: convert_to_float_template<uint16_t>(count, ptr, out); break;
-        case GL_SHORT: convert_to_float_template<int16_t>(count, ptr, out); break;
-        case GL_UNSIGNED_INT: convert_to_float_template<uint32_t>(count, ptr, out); break;
-        case GL_INT: convert_to_float_template<int32_t>(count, ptr, out); break;
-        case GL_FLOAT: convert_to_float_template<float>(count, ptr, out); break;
-        case GL_DOUBLE: convert_to_float_template<double>(count, ptr, out); break;
+        case GL_UNSIGNED_BYTE: convert_ptr_template<uint8_t>(count, ptr, out, normalize); break;
+        case GL_BYTE: convert_ptr_template<int8_t>(count, ptr, out); break;
+        case GL_UNSIGNED_SHORT: convert_ptr_template<uint16_t>(count, ptr, out); break;
+        case GL_SHORT: convert_ptr_template<int16_t>(count, ptr, out); break;
+        case GL_UNSIGNED_INT: convert_ptr_template<uint32_t>(count, ptr, out); break;
+        case GL_INT: convert_ptr_template<int32_t>(count, ptr, out); break;
+        case GL_FLOAT: convert_ptr_template<float>(count, ptr, out); break;
+        case GL_DOUBLE: convert_ptr_template<double>(count, ptr, out); break;
         default: throw std::runtime_error("Unsupported type");
     }
 }
@@ -340,6 +306,7 @@ static void handle_draw_arrays(const GLCommandContext& ctx, const void* data)
         const GLRemixClientArrayHeader& h = cmd->headers[arr];
 
         const size_t component_count = cmd->count * h.size;
+        const bool normalize = h.array_type == GLRemixClientArrayType::COLOR;
 
         scratch_buffer.resize(component_count);
         float* f_ptr = scratch_buffer.data();
@@ -348,7 +315,7 @@ static void handle_draw_arrays(const GLCommandContext& ctx, const void* data)
         {
             const void* src = client_data + (v_idx * h.stride);
 
-            convert_to_float(h.type, h.size, src, f_ptr);
+            convert_ptr<float>(h.type, h.size, src, f_ptr, normalize);
 
             switch (h.array_type)
             {
@@ -384,14 +351,76 @@ static void handle_draw_arrays(const GLCommandContext& ctx, const void* data)
 
 static void handle_draw_elements(const GLCommandContext& ctx, const void* data)
 {
-    const auto* cmd = static_cast<const GLRemixDrawElementsCommand*>(data);
+    const GLRemixDrawElementsCommand* cmd = static_cast<const GLRemixDrawElementsCommand*>(data);
     glState& state = ctx.state;
 
-    // TODO: assemble vertices
+    state.t_vertices.clear();
+    state.t_indices.clear();
+
+    state.m_topology = cmd->mode;
+    state.t_vertices.resize(cmd->count);
+
+    const uint8_t* client_data = reinterpret_cast<const uint8_t*>(cmd + 1);
+
+    thread_local std::vector<float> scratch_buffer;
+    thread_local std::vector<size_t> client_indices;
+
+    // Loop over enabled arrays
+    for (uint32_t arr = 0; arr < cmd->enabled; arr++)
+    {
+        const GLRemixClientArrayHeader& h = cmd->headers[arr];
+
+        if (h.array_type == GLRemixClientArrayType::INDICES)
+        {
+            client_indices.resize(cmd->count);
+            convert_ptr<size_t>(h.type, cmd->count, client_data, client_indices.data());
+            client_data += h.array_bytes;
+            continue;
+        }
+
+        const size_t component_count = cmd->count * h.size;
+        const bool normalize = h.array_type == GLRemixClientArrayType::COLOR;
+
+        scratch_buffer.resize(component_count);
+        float* f_ptr = scratch_buffer.data();
+
+        for (size_t v_idx = 0; v_idx < cmd->count; v_idx++)
+        {
+            const void* src = client_data + (v_idx * h.stride);
+
+            convert_ptr<float>(h.type, h.size, src, f_ptr, normalize);
+
+            switch (h.array_type)
+            {
+                case GLRemixClientArrayType::VERTEX:
+                    state.t_vertices[v_idx].position = XMFLOAT3{ f_ptr[0], f_ptr[1],
+                                                                 h.size > 2 ? f_ptr[2] : 0.0f };
+                    break;
+
+                case GLRemixClientArrayType::NORMAL:
+                    state.t_vertices[v_idx].normal = XMFLOAT3{ f_ptr[0], f_ptr[1], f_ptr[2] };
+                    break;
+
+                case GLRemixClientArrayType::COLOR:
+                    state.t_vertices[v_idx].color = XMFLOAT4{ f_ptr[0], f_ptr[1], f_ptr[2],
+                                                              h.size > 3 ? f_ptr[3] : 1.0f };
+                    break;
+
+                case GLRemixClientArrayType::TEXCOORD:
+                    state.t_vertices[v_idx].uv = XMFLOAT2{ f_ptr[0], h.size > 1 ? f_ptr[1] : 0.0f };
+                    break;
+
+                default: break;
+            }
+
+            f_ptr += h.size;
+        }
+        client_data += h.array_bytes;
+    }
 
     triangulate(state);
 
-    hash_and_commit_geometry(state);
+    hash_and_commit_geometry(state, client_indices.data());
 }
 
 // MATRIX OPERATIONS

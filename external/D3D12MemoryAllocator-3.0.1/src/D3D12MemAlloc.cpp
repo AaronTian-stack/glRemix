@@ -413,14 +413,14 @@ static UINT8 BitScanMSB(UINT32 mask)
 
 /*
 Returns true if given number is a power of two.
-T must be unsigned integer number or signed integer but always nonnegative.
+IN must be unsigned integer number or signed integer but always nonnegative.
 For 0 returns true.
 */
 template <typename T>
 static bool IsPow2(T x) { return (x & (x - 1)) == 0; }
 
 // Aligns given value up to nearest multiply of align value. For example: AlignUp(11, 8) = 16.
-// Use types like UINT, uint64_t as T.
+// Use types like UINT, uint64_t as IN.
 template <typename T>
 static T AlignUp(T val, T alignment)
 {
@@ -428,7 +428,7 @@ static T AlignUp(T val, T alignment)
     return (val + alignment - 1) & ~(alignment - 1);
 }
 // Aligns given value down to nearest multiply of align value. For example: AlignUp(11, 8) = 8.
-// Use types like UINT, uint64_t as T.
+// Use types like UINT, uint64_t as IN.
 template <typename T>
 static T AlignDown(T val, T alignment)
 {
@@ -960,7 +960,7 @@ private:
 #ifndef _D3D12MA_VECTOR
 /*
 Dynamically resizing continuous array. Class with interface similar to std::vector.
-T must be POD because constructors and destructors are not called and memcpy is
+IN must be POD because constructors and destructors are not called and memcpy is
 used for these objects.
 */
 template<typename T>
@@ -1723,10 +1723,10 @@ void JsonWriter::WriteIndent(bool oneLess)
 
 #ifndef _D3D12MA_POOL_ALLOCATOR
 /*
-Allocator for objects of type T using a list of arrays (pools) to speed up
+Allocator for objects of type IN using a list of arrays (pools) to speed up
 allocation. Number of elements that can be allocated is not bounded because
 allocator can create multiple blocks.
-T should be POD because constructor and destructor is not called in Alloc or
+IN should be POD because constructor and destructor is not called in Alloc or
 Free.
 */
 template<typename T>
