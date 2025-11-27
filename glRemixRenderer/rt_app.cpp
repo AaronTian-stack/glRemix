@@ -869,6 +869,7 @@ void glRemix::glRemixRenderer::render()
     build_tlas(cmd_list.Get());
 
     // Dispatch rays to UAV render target
+    if (!state.m_meshes.empty())
     {
         XMMATRIX proj = XMLoadFloat4x4(&state.m_matrix_stack.top(GL_PROJECTION));
 
