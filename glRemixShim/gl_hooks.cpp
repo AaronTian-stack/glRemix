@@ -49,6 +49,12 @@ void APIENTRY gl_vertex3f_ovr(GLfloat x, GLfloat y, GLfloat z)
     g_ipc.write_command(GLCommandType::GLCMD_VERTEX3F, payload);
 }
 
+void APIENTRY gl_vertex3fv_ovr(const GLfloat* v)
+{
+    GLVertex3fCommand payload{ v[0], v[1], v[2] };
+    g_ipc.write_command(GLCommandType::GLCMD_VERTEX3F, payload);
+}
+
 void APIENTRY gl_color3f_ovr(GLfloat r, GLfloat g, GLfloat b)
 {
     GLColor3fCommand payload{ r, g, b };
@@ -958,6 +964,7 @@ void install_overrides()
         gl::register_hook("glEnd", reinterpret_cast<PROC>(&gl_end_ovr));
         gl::register_hook("glVertex2f", reinterpret_cast<PROC>(&gl_vertex2f_ovr));
         gl::register_hook("glVertex3f", reinterpret_cast<PROC>(&gl_vertex3f_ovr));
+        gl::register_hook("glVertex3fv", reinterpret_cast<PROC>(&gl_vertex3fv_ovr));
         gl::register_hook("glColor3f", reinterpret_cast<PROC>(&gl_color3f_ovr));
         gl::register_hook("glColor4f", reinterpret_cast<PROC>(&gl_color4f_ovr));
         gl::register_hook("glNormal3f", reinterpret_cast<PROC>(&gl_normal3f_ovr));
