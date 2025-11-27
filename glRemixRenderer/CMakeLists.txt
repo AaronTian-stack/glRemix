@@ -102,6 +102,9 @@ if(NOT TARGET DirectXTex::DirectXTex)
         set_target_properties(DirectXTex::DirectXTex PROPERTIES
             IMPORTED_LOCATION_DEBUG "${_directxtex_debug_lib}"
             IMPORTED_LOCATION_RELEASE "${_directxtex_release_lib}"
+            IMPORTED_LOCATION_RELWITHDEBINFO "${_directxtex_release_lib}"
+            IMPORTED_LOCATION_MINSIZEREL "${_directxtex_release_lib}"
+            IMPORTED_CONFIGURATIONS "Debug;Release;RelWithDebInfo;MinSizeRel"
         )
     else()
         set(_missing_components "")
