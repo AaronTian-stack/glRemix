@@ -24,7 +24,6 @@ struct FakeContext
 struct GLRemixClientArrayInterface
 {
     GLRemixClientArrayHeader ipc_payload;
-    SIZE_T stride = 0;
     bool enabled = false;
     const void* ptr = nullptr;
 };

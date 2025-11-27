@@ -119,6 +119,7 @@ struct GLRemixClientArrayHeader
 {
     UINT32 size;
     UINT32 type;
+    UINT32 stride;
     UINT32 array_bytes;
     GLRemixClientArrayType array_type;
 };
@@ -187,7 +188,7 @@ struct GLRemixDrawArraysCommand
 {
     UINT32 mode;
     UINT32 first;
-    UINT32 count;
+    SIZE_T count;
     UINT32 enabled;  // amount of currently enabled client array kinds (<= 6)
     GLRemixClientArrayHeader headers[static_cast<UINT32>(GLRemixClientArrayType::_COUNT)];
 };

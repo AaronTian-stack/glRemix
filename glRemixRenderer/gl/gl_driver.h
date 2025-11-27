@@ -11,6 +11,8 @@
 namespace glRemix
 {
 constexpr size_t NUM_COMMANDS = static_cast<size_t>(GLCommandType::_COUNT);
+constexpr SIZE_T NUM_CLIENT_ARRAYS = static_cast<SIZE_T>(GLRemixClientArrayType::_COUNT);
+
 class glDriver;  // forward declare
 class glState;
 

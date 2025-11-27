@@ -1,5 +1,6 @@
 #include "gl_driver.h"
 #include "gl_command_utils.h"
+#include <shared/gl_utils.h>
 
 #include <chrono>
 
@@ -34,12 +35,12 @@ static void hash_and_commit_geometry(glState& state)
     // get index data to hash
     for (int i = 0; i < state.t_indices.size(); ++i)
     {
-        const UINT32& index = state.t_indices[i];
+        const uint32_t& index = state.t_indices[i];
         hash_combine(index);
     }
 
     // check if hash exists
-    UINT64 hash = seed;
+    uint64_t hash = seed;
 
     MeshRecord* mesh;
     if (state.m_mesh_map.contains(hash))
@@ -55,8 +56,8 @@ static void hash_and_commit_geometry(glState& state)
         pending.vertices = std::move(state.t_vertices);
         pending.indices = std::move(state.t_indices);
         pending.hash = hash;
-        pending.mat_idx = static_cast<UINT32>(state.m_materials.size());
-        pending.mv_idx = static_cast<UINT32>(state.m_matrix_pool.size());
+        pending.mat_idx = static_cast<uint32_t>(state.m_materials.size());
+        pending.mv_idx = static_cast<uint32_t>(state.m_matrix_pool.size());
 
         new_mesh.blas_vb_ib_idx = state.m_num_mesh_resources + state.m_pending_geometries.size();
 
@@ -68,12 +69,12 @@ static void hash_and_commit_geometry(glState& state)
     }
 
     // Assign per-instance data (not cached)
-    mesh->mat_idx = static_cast<UINT32>(state.m_materials.size());
+    mesh->mat_idx = static_cast<uint32_t>(state.m_materials.size());
     // Store the current state of the material in the materials buffer
     // TODO: Modifying materials?
     state.m_materials.push_back(state.m_material);
 
-    mesh->mv_idx = static_cast<UINT32>(state.m_matrix_pool.size());
+    mesh->mv_idx = static_cast<uint32_t>(state.m_matrix_pool.size());
 
     state.m_matrix_pool.push_back(state.m_matrix_stack.top(GL_MODELVIEW));
 
@@ -93,12 +94,12 @@ static void triangulate(glState& state)
                                           : 0;
             state.t_indices.reserve(quad_count * 6);
 
-            for (UINT32 k = 0; k + 3 < state.t_vertices.size(); k += 2)
+            for (uint32_t k = 0; k + 3 < state.t_vertices.size(); k += 2)
             {
-                UINT32 a = k + 0;
-                UINT32 b = k + 1;
-                UINT32 c = k + 2;
-                UINT32 d = k + 3;
+                uint32_t a = k + 0;
+                uint32_t b = k + 1;
+                uint32_t c = k + 2;
+                uint32_t d = k + 3;
 
                 state.t_indices.push_back(a);
                 state.t_indices.push_back(b);
@@ -114,12 +115,12 @@ static void triangulate(glState& state)
             const size_t quad_count = state.t_vertices.size() / 4;
             state.t_indices.reserve(quad_count * 6);
 
-            for (UINT32 k = 0; k + 3 < state.t_vertices.size(); k += 4)
+            for (uint32_t k = 0; k + 3 < state.t_vertices.size(); k += 4)
             {
-                UINT32 a = k + 0;
-                UINT32 b = k + 1;
-                UINT32 c = k + 2;
-                UINT32 d = k + 3;
+                uint32_t a = k + 0;
+                uint32_t b = k + 1;
+                uint32_t c = k + 2;
+                uint32_t d = k + 3;
 
                 state.t_indices.push_back(a);
                 state.t_indices.push_back(b);
@@ -210,7 +211,7 @@ static void handle_call_list(const GLCommandContext& ctx, const void* data)
         auto& list_buf = ctx.state.m_display_lists[cmd->list];
 
         size_t offset = 0;
-        const UINT32 list_size = static_cast<UINT32>(list_buf.size());
+        const uint32_t list_size = static_cast<uint32_t>(list_buf.size());
 
         ctx.state.m_in_call = true;
         ctx.driver.read_buffer(ctx, list_buf.data(), list_size, offset);
@@ -255,6 +256,69 @@ static void handle_end_list(const GLCommandContext& ctx, const void* data)
 }
 
 // CLIENT STATE
+static void assemble_float_vec2_array(glState& state, const uint8_t* blob,
+                                      const GLRemixClientArrayHeader& h, uint32_t count,
+                                      auto setter)
+{
+    for (uint32_t i = 0; i < count * h.stride; i += h.stride)
+    {
+        const float* src = reinterpret_cast<const float*>(blob + i);
+        XMFLOAT2 val{ src[0], src[1] };
+        setter(state.t_vertices[i], val);
+    }
+}
+
+static void assemble_float_vec3_array(glState& state, const uint8_t* blob,
+                                      const GLRemixClientArrayHeader& h, uint32_t count,
+                                      auto setter)
+{
+    for (uint32_t i = 0; i < count; i++)
+    {
+        const float* src = reinterpret_cast<const float*>(blob + i * h.stride);
+        XMFLOAT3 val{ src[0], src[1], src[2] };
+        setter(state.t_vertices[i], val);
+    }
+}
+
+static void assemble_float_vec4_array(glState& state, const uint8_t* blob,
+                                      const GLRemixClientArrayHeader& h, uint32_t count,
+                                      auto setter)
+{
+    for (uint32_t i = 0; i < count; i++)
+    {
+        const float* src = reinterpret_cast<const float*>(blob + i * h.stride);
+        XMFLOAT4 val{ src[0], src[1], src[2], src[3] };
+        setter(state.t_vertices[i], val);
+    }
+}
+
+template<typename T>
+void convert_to_float_template(size_t count, const void* ptr, float* out, bool normalize = false)
+{
+    const T* src_ptr = static_cast<const T*>(ptr);
+    for (size_t i = 0; i < count; ++i)
+    {
+        out[i] = normalize ? static_cast<float>(src_ptr[i]) / 255.f
+                           : static_cast<float>(src_ptr[i]);
+    }
+}
+
+void convert_to_float(uint32_t type, size_t count, const void* ptr, float* out)
+{
+    switch (type)
+    {
+        case GL_UNSIGNED_BYTE: convert_to_float_template<uint8_t>(count, ptr, out, true); break;
+        case GL_BYTE: convert_to_float_template<int8_t>(count, ptr, out); break;
+        case GL_UNSIGNED_SHORT: convert_to_float_template<uint16_t>(count, ptr, out); break;
+        case GL_SHORT: convert_to_float_template<int16_t>(count, ptr, out); break;
+        case GL_UNSIGNED_INT: convert_to_float_template<uint32_t>(count, ptr, out); break;
+        case GL_INT: convert_to_float_template<int32_t>(count, ptr, out); break;
+        case GL_FLOAT: convert_to_float_template<float>(count, ptr, out); break;
+        case GL_DOUBLE: convert_to_float_template<double>(count, ptr, out); break;
+        default: throw std::runtime_error("Unsupported type");
+    }
+}
+
 static void handle_draw_arrays(const GLCommandContext& ctx, const void* data)
 {
     const GLRemixDrawArraysCommand* cmd = static_cast<const GLRemixDrawArraysCommand*>(data);
@@ -266,13 +330,53 @@ static void handle_draw_arrays(const GLCommandContext& ctx, const void* data)
     state.m_topology = cmd->mode;
     state.t_vertices.resize(cmd->count);
 
-    UINT32 offset = sizeof(GLRemixDrawArraysCommand);
-    GLRemixClientArrayHeader* header;
-    for (int i = 0; i < cmd->enabled; i++)
-    {
-        continue;
-    }
+    const uint8_t* client_data = reinterpret_cast<const uint8_t*>(cmd + 1);
 
+    thread_local std::vector<float> scratch_buffer;
+
+    // Loop over enabled arrays
+    for (uint32_t arr = 0; arr < cmd->enabled; arr++)
+    {
+        const GLRemixClientArrayHeader& h = cmd->headers[arr];
+
+        const size_t component_count = cmd->count * h.size;
+
+        scratch_buffer.resize(component_count);
+        float* f_ptr = scratch_buffer.data();
+
+        for (size_t v_idx = 0; v_idx < cmd->count; v_idx++)
+        {
+            const void* src = client_data + (v_idx * h.stride);
+
+            convert_to_float(h.type, h.size, src, f_ptr);
+
+            switch (h.array_type)
+            {
+                case GLRemixClientArrayType::VERTEX:
+                    state.t_vertices[v_idx].position = XMFLOAT3{ f_ptr[0], f_ptr[1],
+                                                                 h.size > 2 ? f_ptr[2] : 0.0f };
+                    break;
+
+                case GLRemixClientArrayType::NORMAL:
+                    state.t_vertices[v_idx].normal = XMFLOAT3{ f_ptr[0], f_ptr[1], f_ptr[2] };
+                    break;
+
+                case GLRemixClientArrayType::COLOR:
+                    state.t_vertices[v_idx].color = XMFLOAT4{ f_ptr[0], f_ptr[1], f_ptr[2],
+                                                              h.size > 3 ? f_ptr[3] : 1.0f };
+                    break;
+
+                case GLRemixClientArrayType::TEXCOORD:
+                    state.t_vertices[v_idx].uv = XMFLOAT2{ f_ptr[0], h.size > 1 ? f_ptr[1] : 0.0f };
+                    break;
+
+                default: break;
+            }
+
+            f_ptr += h.size;
+        }
+        client_data += h.array_bytes;
+    }
     triangulate(state);
 
     hash_and_commit_geometry(state);
@@ -396,7 +500,7 @@ static void handle_lightf(const GLCommandContext& ctx, const void* data)
 {
     const auto* cmd = static_cast<const GLLightCommand*>(data);
 
-    UINT32 light_index = cmd->light - GL_LIGHT0;
+    uint32_t light_index = cmd->light - GL_LIGHT0;
     Light& m_light = ctx.state.m_lights[light_index];
 
     switch (cmd->pname)
@@ -414,7 +518,7 @@ static void handle_lightfv(const GLCommandContext& ctx, const void* data)
 {
     const auto* cmd = static_cast<const GLLightfvCommand*>(data);
 
-    UINT32 light_index = cmd->light - GL_LIGHT0;
+    uint32_t light_index = cmd->light - GL_LIGHT0;
     Light& m_light = ctx.state.m_lights[light_index];
 
     switch (cmd->pname)
@@ -503,7 +607,7 @@ static void set_state(const GLCommandContext& ctx, unsigned int cap, bool value)
     // light handling
     if (cap >= GL_LIGHT0 && cap <= GL_LIGHT7)
     {
-        UINT32 light_index = cap - GL_LIGHT0;
+        uint32_t light_index = cap - GL_LIGHT0;
         ctx.state.m_lights[light_index].enabled = value;
         return;
     }
@@ -612,8 +716,8 @@ void glRemix::glDriver::init()
 
 void glRemix::glDriver::process_stream()
 {
-    UINT32 frame_index = 0;
-    UINT32 frame_bytes = 0;
+    uint32_t frame_index = 0;
+    uint32_t frame_bytes = 0;
     m_ipc.consume_frame_or_wait(m_command_buffer.data(), &frame_index, &frame_bytes);
 
     if (frame_bytes == 0)
@@ -635,7 +739,7 @@ void glRemix::glDriver::process_stream()
     read_buffer(ctx, m_command_buffer.data(), frame_bytes, m_state.m_offset);
 }
 
-void glRemix::glDriver::read_buffer(const GLCommandContext& ctx, const UINT8* buffer,
+void glRemix::glDriver::read_buffer(const GLCommandContext& ctx, const uint8_t* buffer,
                                     size_t buffer_size, size_t& offset)
 {
     GLCommandView view{};
@@ -668,7 +772,7 @@ void glRemix::glDriver::read_buffer(const GLCommandContext& ctx, const UINT8* bu
     }
 }
 
-bool glRemix::glDriver::read_next_command(const UINT8* buffer, size_t buffer_size, size_t& offset,
+bool glRemix::glDriver::read_next_command(const uint8_t* buffer, size_t buffer_size, size_t& offset,
                                           GLCommandView& out)
 {
     // ensure that we are not reading out of bounds

@@ -149,8 +149,8 @@ void APIENTRY gl_vertex_pointer_ovr(GLint size, GLenum type, GLsizei stride, con
     GLRemixClientArrayInterface& a = g_client_arrays[static_cast<UINT32>(array_type)];
     a.ipc_payload.size = static_cast<UINT32>(size);
     a.ipc_payload.type = static_cast<UINT32>(type);
+    a.ipc_payload.stride = utils::InterpretStride(size, type, stride);
     a.ipc_payload.array_type = array_type;
-    a.stride = utils::InterpretStride(size, type, stride);
     a.ptr = pointer;
     return;
 }
@@ -162,8 +162,8 @@ void APIENTRY gl_normal_pointer_ovr(GLenum type, GLsizei stride, const void* poi
     GLRemixClientArrayInterface& a = g_client_arrays[static_cast<UINT32>(array_type)];
     a.ipc_payload.size = static_cast<UINT32>(3);
     a.ipc_payload.type = static_cast<UINT32>(type);
+    a.ipc_payload.stride = utils::InterpretStride(3, type, stride);
     a.ipc_payload.array_type = array_type;
-    a.stride = utils::InterpretStride(3, type, stride);
     a.ptr = pointer;
     return;
 }
@@ -175,8 +175,8 @@ void APIENTRY gl_color_pointer_ovr(GLint size, GLenum type, GLsizei stride, cons
     GLRemixClientArrayInterface& a = g_client_arrays[static_cast<UINT32>(array_type)];
     a.ipc_payload.size = static_cast<UINT32>(size);
     a.ipc_payload.type = static_cast<UINT32>(type);
+    a.ipc_payload.stride = utils::InterpretStride(size, type, stride);
     a.ipc_payload.array_type = array_type;
-    a.stride = utils::InterpretStride(size, type, stride);
     a.ptr = pointer;
     return;
 }
@@ -188,8 +188,8 @@ void APIENTRY gl_tex_coord_pointer_ovr(GLint size, GLenum type, GLsizei stride, 
     GLRemixClientArrayInterface& a = g_client_arrays[static_cast<UINT32>(array_type)];
     a.ipc_payload.size = static_cast<UINT32>(size);
     a.ipc_payload.type = static_cast<UINT32>(type);
+    a.ipc_payload.stride = utils::InterpretStride(size, type, stride);
     a.ipc_payload.array_type = array_type;
-    a.stride = utils::InterpretStride(size, type, stride);
     a.ptr = pointer;
     return;
 }
@@ -201,8 +201,8 @@ void APIENTRY gl_index_pointer_ovr(GLint size, GLenum type, GLsizei stride, cons
     GLRemixClientArrayInterface& a = g_client_arrays[static_cast<UINT32>(array_type)];
     a.ipc_payload.size = static_cast<UINT32>(size);
     a.ipc_payload.type = static_cast<UINT32>(type);
+    a.ipc_payload.stride = utils::InterpretStride(size, type, stride);
     a.ipc_payload.array_type = array_type;
-    a.stride = utils::InterpretStride(size, type, stride);
     a.ptr = pointer;
     return;
 }
@@ -214,8 +214,8 @@ void APIENTRY gl_edge_flag_pointer_ovr(GLint size, GLenum type, GLsizei stride, 
     GLRemixClientArrayInterface& a = g_client_arrays[static_cast<UINT32>(array_type)];
     a.ipc_payload.size = static_cast<UINT32>(size);
     a.ipc_payload.type = static_cast<UINT32>(type);
+    a.ipc_payload.stride = utils::InterpretStride(size, type, stride);
     a.ipc_payload.array_type = array_type;
-    a.stride = utils::InterpretStride(size, type, stride);
     a.ptr = pointer;
     return;
 }
@@ -231,7 +231,8 @@ static UINT32 s_precompute_client_payload_bytes(GLsizei count)
         }
 
         const UINT32 a_bytes = utils::ComputeClientArraySize(count, a.ipc_payload.size,
-                                                             a.ipc_payload.type, a.stride);
+                                                             a.ipc_payload.type,
+                                                             a.ipc_payload.stride);
 
         a.ipc_payload.array_bytes = a_bytes;
         total_bytes += a_bytes;
@@ -274,7 +275,7 @@ void APIENTRY gl_draw_arrays_ovr(GLenum mode, GLint first, GLsizei count)
         }
 
         // factor in desired offset
-        const UINT8* a_ptr = reinterpret_cast<const UINT8*>(a.ptr) + (first * a.stride);
+        const UINT8* a_ptr = reinterpret_cast<const UINT8*>(a.ptr) + (first * a.ipc_payload.stride);
 
         // write pointer to this extra data directly
         g_ipc.write_simple(a_ptr, a.ipc_payload.array_bytes);
@@ -303,8 +304,8 @@ void APIENTRY gl_draw_elements_ovr(GLenum mode, GLsizei count, GLenum type, cons
         GLRemixClientArrayInterface& a = g_client_arrays[static_cast<UINT32>(array_type)];
         a.ipc_payload.size = 1;
         a.ipc_payload.type = static_cast<UINT32>(type);
+        a.ipc_payload.stride = utils::InterpretStride(1, type, 0);
         a.ipc_payload.array_type = array_type;
-        a.stride = utils::InterpretStride(1, type, 0);
         a.enabled = true;
         a.ptr = indices;
     }
@@ -337,19 +338,20 @@ void APIENTRY gl_draw_elements_ovr(GLenum mode, GLsizei count, GLenum type, cons
         const UINT8* a_ptr = reinterpret_cast<const UINT8*>(a.ptr);
 
         const UINT32& a_bytes = a.ipc_payload.array_bytes;
+        const UINT32& a_stride = a.ipc_payload.stride;
 
         scratch_buffer.resize(a_bytes);
         UINT8* dst_ptr = scratch_buffer.data();
 
         /* SCATTER STEP */
-        for (SIZE_T i = 0; i < static_cast<SIZE_T>(count); i++)
+        for (UINT32 i = 0; i < static_cast<UINT32>(count); i++)
         {
             UINT32 idx = s_read_index(i, type, indices);
 
-            const UINT8* src = a_ptr + (idx * a.stride);
-            UINT8* dst = dst_ptr + (i * a.stride);
+            const UINT8* src = a_ptr + (idx * a_stride);
+            UINT8* dst = dst_ptr + (i * a_stride);
 
-            memcpy(dst, src, a.stride);
+            memcpy(dst, src, a_stride);
         }
 
         g_ipc.write_simple(dst_ptr, a.ipc_payload.array_bytes);  // write pointer directly
