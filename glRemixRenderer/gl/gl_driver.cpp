@@ -901,6 +901,7 @@ void glRemix::glDriver::init_handlers()
     // CLIENT STATE
     gl_command_handlers[static_cast<size_t>(GLREMIXCMD_DRAW_ARRAYS)] = &handle_draw_arrays;
     gl_command_handlers[static_cast<size_t>(GLREMIXCMD_DRAW_ELEMENTS)] = &handle_draw_elements;
+    gl_command_handlers[static_cast<size_t>(GLREMIXCMD_DRAW_RANGE_ELEMENTS)] = &handle_draw_elements;
 
     // MATRIX OPERATIONS
     gl_command_handlers[static_cast<size_t>(GLCMD_MATRIX_MODE)] = &handle_matrix_mode;

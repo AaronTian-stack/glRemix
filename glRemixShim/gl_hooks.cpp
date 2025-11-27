@@ -309,32 +309,8 @@ static UINT32 s_read_index(SIZE_T i, GLenum type, const void* indices)
     return 0;
 };
 
-void APIENTRY gl_draw_elements_ovr(GLenum mode, GLsizei count, GLenum type, const void* indices)
+static void s_draw_elements_base(GLsizei count, GLenum type, const void* indices)
 {
-    {
-        GLRemixClientArrayType array_type = GLRemixClientArrayType::INDICES;
-
-        GLRemixClientArrayInterface& a = g_client_arrays[static_cast<UINT32>(array_type)];
-        a.ipc_payload.size = 1;
-        a.ipc_payload.type = static_cast<UINT32>(type);
-        a.ipc_payload.stride = utils::InterpretStride(1, type, 0);
-        a.ipc_payload.array_type = array_type;
-        a.enabled = true;
-        a.ptr = indices;
-    }
-
-    const UINT32 extra_data_bytes = s_precompute_client_payload_bytes(count);
-
-    GLRemixDrawElementsCommand payload{ .mode = static_cast<UINT32>(mode),
-                                        .count = static_cast<UINT32>(count),
-                                        .type = static_cast<UINT32>(type),
-                                        .enabled = g_enabled_client_arrays_count };
-
-    s_fill_client_array_headers(payload.headers);
-
-    g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_ELEMENTS, payload, extra_data_bytes, false,
-                        nullptr);
-
     thread_local std::vector<UINT8> scratch_buffer;
 
     for (const GLRemixClientArrayInterface& a : g_client_arrays)
@@ -371,6 +347,63 @@ void APIENTRY gl_draw_elements_ovr(GLenum mode, GLsizei count, GLenum type, cons
 
         g_ipc.write_simple(dst_ptr, a.ipc_payload.array_bytes);  // write pointer directly
     }
+}
+
+/**
+ * @brief OpenGL has indices in a separate category from normal client arrays but we will send
+ * it in our payload as just another client array.
+ */
+static void s_fake_gl_indices_pointer(GLenum type, const void* indices)
+{
+    GLRemixClientArrayType array_type = GLRemixClientArrayType::INDICES;
+
+    GLRemixClientArrayInterface& a = g_client_arrays[static_cast<UINT32>(array_type)];
+    a.ipc_payload.size = 1;
+    a.ipc_payload.type = static_cast<UINT32>(type);
+    a.ipc_payload.stride = utils::InterpretStride(1, type, 0);
+    a.ipc_payload.array_type = array_type;
+    a.enabled = true;
+    a.ptr = indices;
+}
+
+void APIENTRY gl_draw_elements_ovr(GLenum mode, GLsizei count, GLenum type, const void* indices)
+{
+    s_fake_gl_indices_pointer(type, indices);
+
+    const UINT32 extra_data_bytes = s_precompute_client_payload_bytes(count);
+
+    GLRemixDrawElementsCommand payload{ .mode = static_cast<UINT32>(mode),
+                                        .count = static_cast<UINT32>(count),
+                                        .type = static_cast<UINT32>(type),
+                                        .enabled = g_enabled_client_arrays_count };
+
+    s_fill_client_array_headers(payload.headers);
+
+    g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_ELEMENTS, payload, extra_data_bytes, false,
+                        nullptr);
+
+    s_draw_elements_base(count, type, indices);
+}
+
+void APIENTRY gl_draw_range_elements_ovr(GLenum mode, GLuint start, GLuint end, GLsizei count,
+                                         GLenum type, const void* indices)
+{
+    s_fake_gl_indices_pointer(type, indices);
+
+    const UINT32 extra_data_bytes = s_precompute_client_payload_bytes(count);
+
+    GLRemixDrawRangeElementsCommand payload{ .mode = static_cast<UINT32>(mode),
+                                             .start = static_cast<UINT32>(start),
+                                             .count = static_cast<UINT32>(count),
+                                             .type = static_cast<UINT32>(type),
+                                             .enabled = g_enabled_client_arrays_count };
+
+    s_fill_client_array_headers(payload.headers);
+
+    g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_RANGE_ELEMENTS, payload, extra_data_bytes,
+                        false, nullptr);
+
+    s_draw_elements_base(count, type, indices);
 }
 
 /* MATRIX OPERATIONS */
@@ -989,6 +1022,8 @@ void install_overrides()
         gl::register_hook("glEdgeFlagPointer", reinterpret_cast<PROC>(&gl_edge_flag_pointer_ovr));
         gl::register_hook("glDrawArrays", reinterpret_cast<PROC>(&gl_draw_arrays_ovr));
         gl::register_hook("glDrawElements", reinterpret_cast<PROC>(&gl_draw_elements_ovr));
+        gl::register_hook("glDrawRangeElements",
+                          reinterpret_cast<PROC>(&gl_draw_range_elements_ovr));
 
         /* MATRIX OPERATIONS */
         gl::register_hook("glMatrixMode", reinterpret_cast<PROC>(&gl_matrix_mode_ovr));
