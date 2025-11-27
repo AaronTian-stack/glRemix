@@ -2,6 +2,7 @@
 
 #include <mutex>
 #include <string>
+#include <cassert>
 #include <tsl/robin_map.h>
 
 #include <shared/ipc_protocol.h>
@@ -56,6 +57,15 @@ void initialize()
             std::snprintf(debug_msg, sizeof(debug_msg), "glRemix: Using custom renderer path: %s\n",
                           dll_path.data());
             OutputDebugStringA(debug_msg);
+
+            // Append -d flag for Debug and RelWithDebInfo builds
+#if defined(_DEBUG) || defined(CONFIG_RELWITHDEBINFO)
+            end = strrchr(dll_path.data(), '\0');
+            const size_t remaining_for_flag = MAX_PATH - (end - dll_path.data());
+            assert(remaining_for_flag >= 4);
+            strcpy_s(end, remaining_for_flag, " -d");
+#endif
+
             STARTUPINFOA si{ .cb = sizeof(STARTUPINFOA) };
             PROCESS_INFORMATION pi;
             if (CreateProcessA(nullptr, dll_path.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
