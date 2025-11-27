@@ -52,7 +52,7 @@ float3 transform_to_world(float3 local_dir, float3 N)
     uint seed = uint(DispatchRaysIndex().x * 1973 + DispatchRaysIndex().y * 9277 + 891);
     
     uint max_bounces = 3;
-    int num_samples_per_pixel = 15;
+    int num_samples_per_pixel = 5;
     float3 final_color = float3(0, 0, 0);
     
     for (int sample = 0; sample < num_samples_per_pixel; ++sample)
@@ -194,12 +194,13 @@ float3 transform_to_world(float3 local_dir, float3 N)
         
     float3 final_color = float3(0, 0, 0);
     
-    // iterate through lights - unroll for parallelism?
+    // iterate through lights
     for (int i = 0; i < 8; ++i)
     {
         Light curr_light = light_cb.lights[i];
         if (!curr_light.enabled)
         {
+            // TODO: fix lights so that it is able to be continue
             break;
         }
         

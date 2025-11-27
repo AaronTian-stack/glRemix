@@ -1,7 +1,5 @@
 #include "debug_window.h"
 #include "imgui.h"
-// #include "structs.h"
-// #include <cstdio>
 
 using namespace glRemix;
 
@@ -43,14 +41,14 @@ void DebugWindow::render()
 }
 
 // get mesh buffer from rt_app
-void DebugWindow::set_mesh_buffer(const std::vector<MeshRecord> meshes)
+void DebugWindow::set_mesh_buffer(std::vector<MeshRecord>& meshes)
 {
-    m_meshes = meshes;
+    m_meshes = &meshes;
 }
 
 // get replace_mesh function from rt_app
 void DebugWindow::set_replace_mesh_callback(
-    std::function<void(uint64_t meshID, const std::string& asset_path)> callback)
+    std::function<void(uint64_t meshID, const char* asset_path)> callback)
 {
     m_replace_mesh_callback = callback;
 }
@@ -63,9 +61,9 @@ void DebugWindow::render_mesh_ids()
     // render meshIDs and get selected mesh
     if (ImGui::BeginListBox("##assets"))
     {
-        for (int i = 0; i < m_meshes.size(); i++)
+        for (int i = 0; i < m_meshes->size(); i++)
         {
-            uint64_t meshID = m_meshes[i].mesh_id;
+            uint64_t meshID = (*m_meshes)[i].mesh_id;
 
             const bool is_selected = (m_meshID_to_replace == meshID);
             char buf[64];
@@ -89,11 +87,10 @@ void DebugWindow::render_mesh_ids()
         // if button is pressed to replace asset, call replace_mesh from rt_app
         if (ImGui::Button("Replace Asset"))
         {
-            m_new_asset_path = m_asset_path_buffer;
             ImGui::Text("%s", m_asset_path_buffer);
             if (m_replace_mesh_callback)
             {
-                m_replace_mesh_callback(m_meshID_to_replace, m_new_asset_path);
+                m_replace_mesh_callback(m_meshID_to_replace, m_asset_path_buffer);
             }
         }
     }

@@ -105,9 +105,6 @@ static void handle_end(const GLCommandContext& ctx, const void* data)
 
         XMStoreFloat3(&min_bb, minv);
         XMStoreFloat3(&max_bb, maxv);
-
-        /*min_bb = XMMin(min_bb, vertex.position);
-        max_bb = XMMax(max_bb, vertex.position);*/
     }
 
     // get index data to hash

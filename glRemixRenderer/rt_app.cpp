@@ -1,4 +1,5 @@
 #include "rt_app.h"
+#include "mesh_loader.h"
 
 #include <cstdio>
 
@@ -363,6 +364,10 @@ void glRemix::glRemixRenderer::create()
         m_context.create_constant_buffer_view(&m_light_buffer[i].buffer,
                                               m_light_buffer[i].descriptor);
     }
+
+    // set asset replacement callback
+    m_debug_window.set_replace_mesh_callback([this](UINT32 meshID, const char* path)
+                                             { this->replace_mesh(meshID, path); });
 }
 
 void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7* cmd_list)
@@ -373,7 +378,7 @@ void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7
         return;
     }
 
-    const size_t start_idx = m_mesh_resources.size() - m_mesh_resources.m_free_indices.size();
+    const size_t start_idx = m_mesh_resources.size() - m_mesh_resources.freed_size();
     std::vector<size_t> pending_indices;
 
     // Create all vertex and index buffers first
@@ -433,12 +438,6 @@ void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7
         mesh = &state.m_mesh_map[pending.hash];
 
         // assign per-instance data for new mesh
-        /*mesh->mat_idx = static_cast<UINT32>(state.m_materials.size());
-        state.m_materials.push_back(state.m_material);
-
-        mesh->mv_idx = static_cast<UINT32>(state.m_matrix_pool.size());
-        state.m_matrix_pool.push_back(state.m_matrix_stack.top(GL_MODELVIEW));*/
-
         mesh->last_frame = m_current_frame;
 
         // update m_mesh_replacement_tracker
@@ -689,8 +688,8 @@ static D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const XMFLOAT4X4& mv)
     return desc;
 }
 
-uint64_t glRemix::glRemixRenderer::create_hash(std::vector<Vertex> vertices,
-                                               std::vector<UINT32> indices)
+UINT64 glRemix::glRemixRenderer::create_hash(std::vector<Vertex> vertices,
+                                             std::vector<UINT32> indices)
 {
     // hashing - logic from boost::hash_combine
     size_t seed = 0;
@@ -737,7 +736,7 @@ void glRemix::glRemixRenderer::handle_per_frame_replacement()
 
     for (auto& kv : state.m_mesh_replacement_tracker)
     {
-        uint32_t index = kv.first;                  // index for m_meshes
+        UINT32 index = kv.first;                    // index for m_meshes
         const MeshRecord& replacement = kv.second;  // mesh to replace with
 
         // check if the index is valid
@@ -751,15 +750,15 @@ void glRemix::glRemixRenderer::handle_per_frame_replacement()
 }
 
 // replaces asset in scene based on file provided by user in ImGui
-void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& new_asset_path)
+void glRemix::glRemixRenderer::replace_mesh(UINT64 meshID, const char* new_asset_path)
 {
     glState& state = m_driver.get_state();
 
-    uint32_t old_mesh_mv_idx = -1;
-    uint32_t old_mesh_mat_idx = -1;
+    UINT32 old_mesh_mv_idx = -1;
+    UINT32 old_mesh_mat_idx = -1;
     std::array<float, 3> old_min_bb = { 1000.0, 1000.0, 1000.0 };
     std::array<float, 3> old_max_bb = { -1000.0, -1000.0, -1000.0 };
-    uint32_t removed_index = -1;
+    UINT32 removed_index = -1;
 
     XMFLOAT3 min_bb = { 1000.0, 1000.0, 1000.0 };
     XMFLOAT3 max_bb = { -1000.0, -1000.0, -1000.0 };
@@ -807,10 +806,10 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
 
     // load new asset from given file path
     std::vector<Vertex> new_vertices;
-    std::vector<uint32_t> new_indices;
+    std::vector<UINT32> new_indices;
     std::vector<Material> new_materials;
-    THROW_IF_FALSE(load_mesh_from_path(new_asset_path_fs, new_vertices, new_indices, new_materials,
-                                       min_bb, max_bb));
+    THROW_IF_FALSE(glRemix::load_mesh_from_path(new_asset_path_fs, new_vertices, new_indices,
+                                                new_materials, min_bb, max_bb));
 
     // get value to scale imported mesh vertices
     std::array<float, 3> old_bb_size = { old_max_bb[0] - old_min_bb[0],
@@ -833,7 +832,7 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
     transform_replacement_vertices(new_vertices, old_mesh_mv, scale_factors);
 
     // put new mesh into pending geometries
-    uint64_t new_mesh_hash = create_hash(new_vertices, new_indices);
+    UINT64 new_mesh_hash = create_hash(new_vertices, new_indices);
     MeshRecord* mesh;
     MeshRecord new_mesh;
 
@@ -845,10 +844,10 @@ void glRemix::glRemixRenderer::replace_mesh(uint64_t meshID, const std::string& 
     pending.mv_idx = static_cast<UINT32>(state.m_matrix_pool.size());
     pending.replace_idx = removed_index;
 
-    new_mesh.blas_vb_ib_idx = m_mesh_resources.size() - m_mesh_resources.m_free_indices.size()
+    new_mesh.blas_vb_ib_idx = m_mesh_resources.size() - m_mesh_resources.freed_size()
                               + state.m_pending_geometries.size();
 
-    // added
+    // added other mesh properties
     new_mesh.mat_idx = old_mesh_mat_idx;
     new_mesh.mv_idx = old_mesh_mv_idx;
     new_mesh.min_bb = min_bb;
@@ -869,110 +868,6 @@ void glRemix::glRemixRenderer::transform_replacement_vertices(std::vector<Vertex
         v.position.y *= scale_val[1];
         v.position.z *= scale_val[2];
     }
-}
-
-bool glRemix::glRemixRenderer::load_mesh_from_path(std::filesystem::path asset_path,
-                                                   std::vector<Vertex>& out_vertices,
-                                                   std::vector<uint32_t>& out_indices,
-                                                   std::vector<Material>& out_materials,
-                                                   XMFLOAT3& out_min_bb, XMFLOAT3& out_max_bb)
-{
-    fastgltf::Parser parser;
-
-    auto data = fastgltf::GltfDataBuffer::FromPath(asset_path);
-    if (data.error() != fastgltf::Error::None)
-    {
-        return false;
-    }
-
-    auto asset = parser.loadGltf(data.get(), asset_path.parent_path(),
-                                 fastgltf::Options::LoadExternalBuffers);
-    if (auto error = asset.error(); error != fastgltf::Error::None)
-    {
-        return false;
-    }
-
-    // fastgltf::validate(asset.get());
-
-    // get first mesh only for now
-    auto& mesh = asset->meshes[0];
-
-    // loop through primitives and put all data into a single MeshRecord mesh
-    for (auto& primitive : mesh.primitives)
-    {
-        // get indices
-        const auto& index_acc = asset->accessors[primitive.indicesAccessor.value()];
-        if (!index_acc.bufferViewIndex.has_value())
-        {
-            return false;
-        }
-
-        size_t index_offset = out_indices.size();
-        out_indices.resize(index_offset + index_acc.count);
-        if (index_acc.componentType == fastgltf::ComponentType::UnsignedByte
-            || index_acc.componentType == fastgltf::ComponentType::UnsignedShort)
-        {
-            // handle u16 values
-            std::vector<uint16_t> temp(index_acc.count);
-            fastgltf::copyFromAccessor<uint16_t>(asset.get(), index_acc, temp.data());
-
-            for (size_t i = 0; i < index_acc.count; i++)
-            {
-                out_indices[index_offset + i] = static_cast<uint32_t>(temp[i]);
-            }
-        }
-        else
-        {
-            // u32 values
-            fastgltf::copyFromAccessor<uint32_t>(asset.get(), index_acc, &out_indices[index_offset]);
-        }
-
-        // get vertices
-        const auto& position_acc
-            = asset->accessors[primitive.findAttribute("POSITION")->accessorIndex];
-        size_t vertex_offset = out_vertices.size();
-        out_vertices.resize(vertex_offset + position_acc.count);
-        for (int i = 0; i < position_acc.count; ++i)
-        {
-            // initialize vertex data
-            Vertex& vertex = out_vertices[vertex_offset + i];
-            out_vertices[vertex_offset + i].position = { 0, 0, 0 };
-            out_vertices[vertex_offset + i].color = { 1, 1, 1, 1 };
-            out_vertices[vertex_offset + i].normal = { 0, 1, 0 };
-        }
-        fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(
-            asset.get(), position_acc, [&](fastgltf::math::fvec3 p, size_t idx)
-            { out_vertices[vertex_offset + idx].position = { p.x(), p.y(), p.z() }; });
-
-        // get normals if they exist
-        const auto* normal_it = primitive.findAttribute("NORMAL");
-        if (normal_it != primitive.attributes.end())
-        {
-            const auto& normal_acc = asset->accessors[normal_it->accessorIndex];
-            fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(
-                asset.get(), normal_acc, [&](fastgltf::math::fvec3 n, size_t idx)
-                { out_vertices[vertex_offset + idx].normal = { n.x(), n.y(), n.z() }; });
-        }
-    }
-
-    // get info for bounding box
-    for (const auto& vertex : out_vertices)
-    {
-        XMVECTOR p = XMLoadFloat3(&vertex.position);
-        XMVECTOR minv = XMLoadFloat3(&out_min_bb);
-        XMVECTOR maxv = XMLoadFloat3(&out_max_bb);
-
-        minv = XMVectorMin(minv, p);
-        maxv = XMVectorMax(maxv, p);
-
-        XMStoreFloat3(&out_min_bb, minv);
-        XMStoreFloat3(&out_max_bb, maxv);
-
-        /*out_min_bb = XMMin(out_min_bb, vertex.position);
-        out_max_bb = XMMax(out_max_bb, vertex.position);*/
-    }
-
-    return true;
 }
 
 // builds top level acceleration structure with blas buffer (can be called each frame likely)
@@ -1179,10 +1074,7 @@ void glRemix::glRemixRenderer::render()
 
     m_context.start_imgui_frame();
 
-    // set asset replacement callback
-    m_debug_window.set_replace_mesh_callback([this](uint32_t meshID, const std::string& path)
-                                             { this->replace_mesh(meshID, path); });
-
+    // render imgui
     m_debug_window.set_mesh_buffer(state.m_meshes);
     m_debug_window.render();
 

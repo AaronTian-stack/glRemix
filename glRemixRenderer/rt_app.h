@@ -87,7 +87,7 @@ class glRemixRenderer : public Application
 
     void create_swapchain_and_rts(HWND hwnd);
     void create_uav_rt();
-    uint64_t create_hash(std::vector<Vertex> vertices, std::vector<UINT32> indices);
+    UINT64 create_hash(std::vector<Vertex> vertices, std::vector<UINT32> indices);
 
     // This should only be called from create_pending_buffers
     void build_mesh_blas_batch(std::vector<size_t> pending_indices, size_t count,
@@ -101,12 +101,9 @@ protected:
     void render() override;
     void destroy() override;
 
+private:
     // asset replacement
-    void replace_mesh(uint64_t meshID, const std::string& new_asset_path);
-    bool load_mesh_from_path(std::filesystem::path asset_path, std::vector<Vertex>& out_vertices,
-                             std::vector<uint32_t>& out_indices,
-                             std::vector<Material>& out_materials, XMFLOAT3& out_min_bb,
-                             XMFLOAT3& out_max_bb);
+    void replace_mesh(UINT64 meshID, const char* new_asset_path);
     void transform_replacement_vertices(std::vector<Vertex>& gltf_vertices, XMFLOAT4X4 mv,
                                         std::array<float, 3> scale_val);
     void handle_per_frame_replacement();

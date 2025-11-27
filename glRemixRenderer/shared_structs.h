@@ -4,14 +4,6 @@
 
 #include "hlsl_compat.h"
 
-#ifndef __cplusplus
-// hlsl path
-#define SHARED_CPP 0
-#else
-// c++ path
-#define SHARED_CPP 1
-#endif
-
 struct RayGenConstantBuffer
 {
     XMFLOAT4X4 view_proj;
@@ -46,12 +38,12 @@ struct Light
 
     BOOL enabled;
 
-#if SHARED_CPP
+#if __cplusplus
     Light()
         : ambient(0, 0, 0, 1)
         , diffuse(1, 1, 1, 1)
         , specular(0, 0, 0, 1)
-        , position(0, 0, 1, 1)
+        , position(0, 0, 1, 1)  // w position = 0 means directional light, otherwise point light
         , spot_direction(0, 0, -1)
         , spot_exponent(0)
         , spot_cutoff(180.0f)
