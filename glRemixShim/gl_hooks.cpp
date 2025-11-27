@@ -5,10 +5,18 @@
 
 namespace glRemix::hooks
 {
-thread_local std::array<GLRemixClientArrayInterface, NUM_CLIENT_ARRAYS> g_client_arrays{};
 
+static UINT32 g_gen_lists_count = 0;     // monotonic int, passed back to host app in `glGenLists`
+static UINT32 g_gen_textures_count = 0;  // monotonic int, passed back in `glGenTextures`
+
+thread_local std::array<GLRemixClientArrayInterface, NUM_CLIENT_ARRAYS> g_client_arrays{};
+static UINT32 g_enabled_client_arrays_count = 0;  // count of currently enabled client arrays
+
+// WGL/OpenGL might be called from multiple threads
 std::mutex g_mutex;
 
+// wglSetPixelFormat will only be called once per context
+// Or if there are multiple contexts they can share the same format since they're fake anyway...
 tsl::robin_map<HDC, FakePixelFormat> g_pixel_formats;
 
 thread_local HGLRC g_current_context = nullptr;
@@ -85,8 +93,8 @@ void APIENTRY gl_end_list_ovr()
 GLuint APIENTRY gl_gen_lists_ovr(GLsizei range)
 {
     // fetchandadd
-    GLuint base = static_cast<GLuint>(g_gen_lists_counter);
-    g_gen_lists_counter += range;
+    GLuint base = static_cast<GLuint>(g_gen_lists_count);
+    g_gen_lists_count += range;
 
     return base;
 }
@@ -107,7 +115,7 @@ void APIENTRY gl_enable_client_state_ovr(GLenum array)
     if (target && !target->enabled)
     {
         target->enabled = true;
-        g_enabled_client_arrays_counter++;
+        g_enabled_client_arrays_count++;
     }
 
     return;  // do NOT send to IPC
@@ -128,7 +136,7 @@ void APIENTRY gl_disable_client_state_ovr(GLenum array)
     if (target && target->enabled)
     {
         target->enabled = false;
-        g_enabled_client_arrays_counter--;
+        g_enabled_client_arrays_count--;
     }
 
     return;
@@ -240,10 +248,10 @@ void APIENTRY gl_draw_arrays_ovr(GLenum mode, GLint first, GLsizei count)
     const UINT32 extra_data_bytes = s_precompute_client_payload_bytes(count);
 
     GLRemixDrawArraysCommand payload{
-        .mode = static_cast<UINT32>(mode),                               // mode
-        .first = static_cast<UINT32>(first),                             // first
-        .count = static_cast<UINT32>(count),                             // count
-        .enabled = static_cast<UINT32>(g_enabled_client_arrays_counter)  // enabled
+        .mode = static_cast<UINT32>(mode),                             // mode
+        .first = static_cast<UINT32>(first),                           // first
+        .count = static_cast<UINT32>(count),                           // count
+        .enabled = static_cast<UINT32>(g_enabled_client_arrays_count)  // enabled
     };
 
     s_fill_client_array_headers(payload.headers);
@@ -279,7 +287,7 @@ void APIENTRY gl_draw_elements_ovr(GLenum mode, GLsizei count, GLenum type, cons
     GLRemixDrawElementsCommand header{ .mode = static_cast<UINT32>(mode),
                                        .count = static_cast<UINT32>(count),
                                        .type = static_cast<UINT32>(type),
-                                       .enabled = g_enabled_client_arrays_counter };
+                                       .enabled = g_enabled_client_arrays_count };
 
     g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_ELEMENTS, header, 0, false, nullptr);
 
