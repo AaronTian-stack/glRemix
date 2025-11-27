@@ -84,6 +84,8 @@ enum class GLCommandType : UINT32
     // Other
     WGLCMD_CREATE_CONTEXT,  // wglCreateContext needs IPC
 
+    // Input Events
+    WGLCMD_INPUT_EVENT,
     _COUNT,  // sentinel value (keep this as the last element in enum to always have a count
              // of enum elements)
 };
@@ -443,5 +445,12 @@ struct GLStencilOpSeparateATICommand
 struct WGLCreateContextCommand
 {
     HWND hwnd;  // NOTE: 32-bit in x86 shim, 64-bit in x64 shim
+};
+
+struct WGLInputEventCommand
+{
+    UINT32 msg;
+    UINT64 wparam;
+    UINT64 lparam;
 };
 }  // namespace glRemix
