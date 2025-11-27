@@ -23,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "-M", "--max-version",
-        default="1.1",
+        default="1.3",
         help="Highest OpenGL core version (inclusive) to include",
     )
     return parser.parse_args()
@@ -222,6 +222,26 @@ def single_param_size(type_text: str) -> int:
         return 4
     return size
 
+legacy_multitexture = {
+    "glActiveTexture",
+    "glClientActiveTexture",
+    "glMultiTexCoord1d", "glMultiTexCoord1dv",
+    "glMultiTexCoord1f", "glMultiTexCoord1fv",
+    "glMultiTexCoord1i", "glMultiTexCoord1iv",
+    "glMultiTexCoord1s", "glMultiTexCoord1sv",
+    "glMultiTexCoord2d", "glMultiTexCoord2dv",
+    "glMultiTexCoord2f", "glMultiTexCoord2fv",
+    "glMultiTexCoord2i", "glMultiTexCoord2iv",
+    "glMultiTexCoord2s", "glMultiTexCoord2sv",
+    "glMultiTexCoord3d", "glMultiTexCoord3dv",
+    "glMultiTexCoord3f", "glMultiTexCoord3fv",
+    "glMultiTexCoord3i", "glMultiTexCoord3iv",
+    "glMultiTexCoord3s", "glMultiTexCoord3sv",
+    "glMultiTexCoord4d", "glMultiTexCoord4dv",
+    "glMultiTexCoord4f", "glMultiTexCoord4fv",
+    "glMultiTexCoord4i", "glMultiTexCoord4iv",
+    "glMultiTexCoord4s", "glMultiTexCoord4sv",
+}
 
 def generate_wrappers(args: argparse.Namespace) -> None:
     tree = ET.parse(args.xml)
@@ -238,6 +258,7 @@ def generate_wrappers(args: argparse.Namespace) -> None:
     required_names = collect_feature_commands(root, min_version, max_version)
 
     required_names |= collect_extension_commands(root, required_extensions)
+    required_names |= legacy_multitexture
 
     missing: List[str] = [name for name in sorted(required_names) if name not in command_elements]
     if missing:

@@ -7,8 +7,6 @@
 
 #include <format>
 
-#define FSTR(fmt, ...) std::format(fmt, __VA_ARGS__)
-
 void glRemix::IPCProtocol::init_writer()
 {
     if (!m_slot_A.smem.create_for_writer(k_MAP_A, k_WRITE_EVENT_A, k_READ_EVENT_A))

@@ -659,7 +659,7 @@ const GLubyte* APIENTRY gl_get_string_ovr(GLenum name)
     switch (name)
     {
         case GL_EXTENSIONS: return reinterpret_cast<const GLubyte*>("GL_ARB_multitexture ");
-        case GL_VERSION: return reinterpret_cast<const GLubyte*>("1.1");
+        case GL_VERSION: return reinterpret_cast<const GLubyte*>("1.3");  // TODO: define in CMake
         case GL_VENDOR: return reinterpret_cast<const GLubyte*>("glRemix");
         case GL_RENDERER: return reinterpret_cast<const GLubyte*>("glRemixRenderer");
         default: return reinterpret_cast<const GLubyte*>("");
@@ -1032,6 +1032,8 @@ void install_overrides()
         gl::register_hook("glGetIntegerv", reinterpret_cast<PROC>(&gl_get_integer_v));
         gl::register_hook("glGetError", reinterpret_cast<PROC>(&gl_get_error));
         gl::register_hook("glActiveTextureARB", reinterpret_cast<PROC>(&gl_active_texture_ARB));
+        gl::register_hook("glClientActiveTexture",
+                          reinterpret_cast<PROC>(&gl_client_active_texture_ARB));
         gl::register_hook("glClientActiveTextureARB",
                           reinterpret_cast<PROC>(&gl_client_active_texture_ARB));
         gl::register_hook("glMultiTexCoord2fARB",

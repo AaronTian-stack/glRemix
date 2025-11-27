@@ -12,9 +12,11 @@
         OutputDebugStringA(_buf);                                                                  \
     } while (0)
 
+#define FSTR(fmt, ...) std::format(fmt, __VA_ARGS__)
+
 namespace glRemix
 {
-constexpr UINT32 k_DEFAULT_CAPACITY = 1 * MEGABYTE;  // i.e. 1mb
+constexpr UINT32 k_DEFAULT_CAPACITY = 16 * MEGABYTE;
 
 class SharedMemory
 {
