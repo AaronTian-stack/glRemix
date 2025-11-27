@@ -24,12 +24,12 @@ struct FakeContext
 struct GLRemixClientArrayInterface
 {
     GLRemixClientArrayHeader ipc_payload;
-    UINT32 stride = 0;
+    SIZE_T stride = 0;
     bool enabled = false;
     const void* ptr = nullptr;
 };
 
-constexpr UINT32 NUM_CLIENT_ARRAYS = static_cast<UINT32>(GLRemixClientArrayType::_COUNT);
+constexpr SIZE_T NUM_CLIENT_ARRAYS = static_cast<SIZE_T>(GLRemixClientArrayType::_COUNT);
 
 void install_overrides();
 }  // namespace glRemix::hooks

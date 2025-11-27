@@ -96,6 +96,7 @@ enum class GLRemixClientArrayType : UINT32
     TEXCOORD,  // GL_TEXCOORD_ARRAY
     COLORIDX,  // GL_INDEX_ARRAY
     EDGEFLAG,  // GL_EDGEFLAG_ARRAY
+    INDICES,   // `indices` passed in `glDrawElements`
     _COUNT,
     _INVALID
 };
@@ -119,6 +120,7 @@ struct GLRemixClientArrayHeader
     UINT32 size;
     UINT32 type;
     UINT32 array_bytes;
+    GLRemixClientArrayType array_type;
 };
 
 /* COMPONENT STRUCTS */

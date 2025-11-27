@@ -49,21 +49,22 @@ static inline UINT32 ComputePixelDataSize(GLsizei width, GLsizei height, GLenum 
            * _ComponentsPerPixelFormat(format) * _BytesPerComponentType(type);
 }
 
-static inline UINT32 ComputeStride(GLint size, GLenum type, GLint stride)
+static inline SIZE_T InterpretStride(GLint size, GLenum type, GLint stride)
 {
-    UINT32 bytes_per_component = _BytesPerComponentType(type);
-
     if (stride == 0)
     {
+        UINT32 bytes_per_component = _BytesPerComponentType(type);
+
         stride = size * bytes_per_component;
     }
     return stride;
 }
 
-static inline UINT32 ComputeClientArraySize(GLint count, GLint size, GLenum type, GLint stride)
+/**
+ * @param stride: Assumes stride has already been passed through `InterpretStride`
+ */
+static inline UINT32 ComputeClientArraySize(GLint count, GLint size, GLenum type, GLsizei stride)
 {
-    stride = ComputeStride(size, type, stride);
-
     return count * stride;
 }
 
@@ -78,59 +79,6 @@ static inline GLRemixClientArrayType MapTo(GLenum cap)
         case GL_INDEX_ARRAY: return GLRemixClientArrayType::COLORIDX;
         case GL_EDGE_FLAG_ARRAY: return GLRemixClientArrayType::EDGEFLAG;
         default: return GLRemixClientArrayType::_INVALID;
-    }
-}
-
-static inline UINT32 FindMaxIndexValue(const void* indices, UINT32 count, GLenum type)
-{
-    switch (type)
-    {
-        case GL_UNSIGNED_BYTE:
-        {
-            const UINT8* idx = reinterpret_cast<const UINT8*>(indices);
-
-            UINT8 max_val = 0;
-            for (UINT32 i = 0; i < count; ++i)
-            {
-                if (idx[i] > max_val)
-                {
-                    max_val = idx[i];
-                }
-            }
-            return static_cast<UINT32>(max_val);
-        }
-
-        case GL_UNSIGNED_SHORT:
-        {
-            const UINT16* idx = reinterpret_cast<const UINT16*>(indices);
-
-            UINT16 max_val = 0;
-            for (UINT32 i = 0; i < count; ++i)
-            {
-                if (idx[i] > max_val)
-                {
-                    max_val = idx[i];
-                }
-            }
-            return static_cast<UINT32>(max_val);
-        }
-
-        case GL_UNSIGNED_INT:
-        {
-            const UINT32* idx = reinterpret_cast<const UINT32*>(indices);
-
-            UINT32 max_val = 0;
-            for (UINT32 i = 0; i < count; ++i)
-            {
-                if (idx[i] > max_val)
-                {
-                    max_val = idx[i];
-                }
-            }
-            return max_val;
-        }
-
-        default: return 0;
     }
 }
 }  // namespace utils
