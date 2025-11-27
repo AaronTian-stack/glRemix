@@ -32,6 +32,17 @@ def parse_args() -> argparse.Namespace:
 def parse_version(value: str) -> Tuple[int, ...]:
     return tuple(int(part) for part in value.split("."))
 
+def collect_extension_commands(root: ET.Element, required_exts: Set[str]) -> Set[str]:
+    names = set()
+    for ext in root.findall("extensions/extension"):
+        if ext.get("name") not in required_exts:
+            continue
+        for require in ext.findall("require"):
+            for cmd in require.findall("command"):
+                cmd_name = cmd.get("name")
+                if cmd_name:
+                    names.add(cmd_name)
+    return names
 
 def collect_command_elements(root: ET.Element) -> Dict[str, ET.Element]:
     command_elements: Dict[str, ET.Element] = {}
@@ -219,8 +230,14 @@ def generate_wrappers(args: argparse.Namespace) -> None:
     min_version = parse_version(args.min_version)
     max_version = parse_version(args.max_version)
 
+    required_extensions = {
+        "GL_ARB_multitexture",
+    }
+
     command_elements = collect_command_elements(root)
     required_names = collect_feature_commands(root, min_version, max_version)
+
+    required_names |= collect_extension_commands(root, required_extensions)
 
     missing: List[str] = [name for name in sorted(required_names) if name not in command_elements]
     if missing:

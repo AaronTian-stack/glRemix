@@ -658,8 +658,8 @@ const GLubyte* APIENTRY gl_get_string_ovr(GLenum name)
 {
     switch (name)
     {
-        case GL_EXTENSIONS: return reinterpret_cast<const GLubyte*>("GL_ARB_multitexture");
-        case GL_VERSION: return reinterpret_cast<const GLubyte*>("1.0");
+        case GL_EXTENSIONS: return reinterpret_cast<const GLubyte*>("GL_ARB_multitexture ");
+        case GL_VERSION: return reinterpret_cast<const GLubyte*>("1.1");
         case GL_VENDOR: return reinterpret_cast<const GLubyte*>("glRemix");
         case GL_RENDERER: return reinterpret_cast<const GLubyte*>("glRemixRenderer");
         default: return reinterpret_cast<const GLubyte*>("");
