@@ -1,10 +1,7 @@
 #include "gl_driver.h"
 #include "gl_command_utils.h"
 
-#include <chrono>
 #include <Windows.h>
-#include <imgui.h>
-#include "imgui_impl_win32.h"
 LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace glRemix

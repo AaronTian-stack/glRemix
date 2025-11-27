@@ -1,21 +1,15 @@
 #include "rt_app.h"
 
-#include <cstdio>
-
 #include <thread>
 #include <chrono>
 #include <vector>
 #include <filesystem>
 
 #include <imgui.h>
-#include "imgui_impl_win32.h"
 
 #include <shared/math_utils.h>
 
 #include "dx/d3d12_barrier.h"
-
-extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam,
-                                                             LPARAM lParam);
 
 void glRemix::glRemixRenderer::create_material_buffer()
 {
