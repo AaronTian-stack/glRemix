@@ -666,7 +666,47 @@ const GLubyte* APIENTRY gl_get_string_ovr(GLenum name)
     }
 }
 
+void APIENTRY gl_active_texture_ARB(GLenum texture)
+{
+    return;
+}
+
+void APIENTRY gl_client_active_texture_ARB(GLenum texture)
+{
+    return;
+}
+
+void APIENTRY gl_multi_tex_coord_2f_ARB(GLenum target, float s, float t)
+{
+    return;
+}
+
+void APIENTRY gl_multi_tex_coord_2fv_ARB(GLenum target, const float* v)
+{
+    return;
+}
+
+void APIENTRY gl_get_integer_v(GLenum pname, GLint* data)
+{
+    switch (pname)
+    {
+        case GL_MAX_TEXTURE_SIZE: *data = 4096; return;
+
+        default: *data = 0; return;
+    }
+}
+
+GLenum APIENTRY gl_get_error()
+{
+    return GL_NO_ERROR;
+}
+
 /* WGL (Windows Graphics Library) overrides */
+const char* WINAPI get_extensions_string_ARB_ovr(HDC)
+{
+    return "GL_ARB_multitexture";
+}
+
 BOOL WINAPI swap_buffers_ovr(HDC)
 {
     g_ipc.end_frame();
@@ -989,8 +1029,21 @@ void install_overrides()
 
         /* MISC */
         gl::register_hook("glGetString", reinterpret_cast<PROC>(&gl_get_string_ovr));
+        gl::register_hook("glGetIntegerv", reinterpret_cast<PROC>(&gl_get_integer_v));
+        gl::register_hook("glGetError", reinterpret_cast<PROC>(&gl_get_error));
+        gl::register_hook("glActiveTextureARB", reinterpret_cast<PROC>(&gl_active_texture_ARB));
+        gl::register_hook("glClientActiveTextureARB",
+                          reinterpret_cast<PROC>(&gl_client_active_texture_ARB));
+        gl::register_hook("glMultiTexCoord2fARB",
+                          reinterpret_cast<PROC>(&gl_multi_tex_coord_2f_ARB));
+        gl::register_hook("glMultiTexCoord2fvARB",
+                          reinterpret_cast<PROC>(&gl_multi_tex_coord_2fv_ARB));
 
         /* WGL (Windows Graphics Library) overrides */
+        gl::register_hook("wglGetExtensionsStringARB",
+                          reinterpret_cast<PROC>(&get_extensions_string_ARB_ovr));
+        gl::register_hook("wglGetExtensionsStringEXT",
+                          reinterpret_cast<PROC>(&get_extensions_string_ARB_ovr));
         gl::register_hook("wglChoosePixelFormat", reinterpret_cast<PROC>(&choose_pixel_format_ovr));
         gl::register_hook("wglDescribePixelFormat",
                           reinterpret_cast<PROC>(&describe_pixel_format_ovr));
