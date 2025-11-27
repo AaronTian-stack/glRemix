@@ -2,6 +2,10 @@
 #include "gl_command_utils.h"
 
 #include <chrono>
+#include <Windows.h>
+#include <imgui.h>
+#include "imgui_impl_win32.h"
+LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace glRemix
 {
@@ -497,6 +501,16 @@ static void handle_wgl_create_context(const GLCommandContext& ctx, const void* d
     ctx.state.hwnd = cmd->hwnd;
     ctx.state.m_create_context = true;
 }
+
+static void handle_wgl_input_event(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const WGLInputEventCommand*>(data);
+    if (ctx.state.hwnd)
+    {
+        ImGui_ImplWin32_WndProcHandler(ctx.state.hwnd, cmd->msg, cmd->wparam,
+                                       static_cast<LPARAM>(cmd->lparam));
+    }
+}
 }  // namespace glRemix
 
 void glRemix::glDriver::init_handlers()
@@ -555,6 +569,7 @@ void glRemix::glDriver::init_handlers()
 
     // OTHER
     gl_command_handlers[static_cast<size_t>(WGLCMD_CREATE_CONTEXT)] = &handle_wgl_create_context;
+    gl_command_handlers[static_cast<size_t>(WGLCMD_INPUT_EVENT)] = &handle_wgl_input_event;
 }
 
 glRemix::glDriver::glDriver()
