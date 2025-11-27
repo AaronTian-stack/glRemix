@@ -245,9 +245,14 @@ static UINT32 s_precompute_client_payload_bytes(GLsizei count)
 
 static void s_fill_client_array_headers(GLRemixClientArrayHeader (&out)[NUM_CLIENT_ARRAYS])
 {
-    for (SIZE_T i = 0; i < NUM_CLIENT_ARRAYS; i++)
+    SIZE_T curr = 0;
+    for (const GLRemixClientArrayInterface& i : g_client_arrays)
     {
-        out[i] = g_client_arrays[i].ipc_payload;
+        if (i.enabled)
+        {
+            out[curr] = i.ipc_payload;
+            curr++;
+        }
     }
 }
 
@@ -314,12 +319,14 @@ void APIENTRY gl_draw_elements_ovr(GLenum mode, GLsizei count, GLenum type, cons
 
     const UINT32 extra_data_bytes = s_precompute_client_payload_bytes(count);
 
-    GLRemixDrawElementsCommand header{ .mode = static_cast<UINT32>(mode),
-                                       .count = static_cast<UINT32>(count),
-                                       .type = static_cast<UINT32>(type),
-                                       .enabled = g_enabled_client_arrays_count };
+    GLRemixDrawElementsCommand payload{ .mode = static_cast<UINT32>(mode),
+                                        .count = static_cast<UINT32>(count),
+                                        .type = static_cast<UINT32>(type),
+                                        .enabled = g_enabled_client_arrays_count };
 
-    g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_ELEMENTS, header, extra_data_bytes, false,
+    s_fill_client_array_headers(payload.headers);
+
+    g_ipc.write_command(GLCommandType::GLREMIXCMD_DRAW_ELEMENTS, payload, extra_data_bytes, false,
                         nullptr);
 
     thread_local std::vector<UINT8> scratch_buffer;
