@@ -72,8 +72,8 @@ void glRemix::IPCProtocol::end_frame()
     }
 
     GLFrameHeader header;
-    header.payload_size = m_offset - sizeof(GLFrameHeader);
     header.frame_index = m_curr_slot->frame_index;
+    header.frame_bytes = m_offset - sizeof(GLFrameHeader);
 
     m_curr_slot->smem.write(&header, 0, sizeof(GLFrameHeader));
 
@@ -120,8 +120,8 @@ void glRemix::IPCProtocol::init_reader()
     throw std::runtime_error("IPCProtocol.READER - Timed out waiting for writer initialization.");
 }
 
-void glRemix::IPCProtocol::consume_frame_or_wait(void* payload, UINT32* payload_size,
-                                                 UINT32* frame_index)
+void glRemix::IPCProtocol::consume_frame_or_wait(void* payload, UINT32* frame_index,
+                                                 UINT32* frame_bytes)
 {
     {
         MemorySlot* oldest;  // shared memory that has the smaller recorded time frame
@@ -157,17 +157,21 @@ void glRemix::IPCProtocol::consume_frame_or_wait(void* payload, UINT32* payload_
         }
     }
 
-    m_curr_slot->smem.read(payload_size, 0, 4);
-    m_curr_slot->smem.read(frame_index, 4, 4);
+    thread_local GLFrameHeader frame_header;
 
-    UINT32 payload_bytes_read = m_curr_slot->smem.read(payload, 8, *payload_size);
+    m_curr_slot->smem.read(&frame_header, 0, sizeof(GLFrameHeader));
 
-    if (payload_bytes_read != *payload_size)
+    *frame_index = frame_header.frame_index;
+    *frame_bytes = frame_header.frame_bytes;
+
+    UINT32 payload_bytes_read = m_curr_slot->smem.read(payload, sizeof(GLFrameHeader), *frame_bytes);
+
+    if (payload_bytes_read != *frame_bytes)
     {
         // this is a logic error as this should really never happen.
-        // if it occurs, my writer logic is incorrect
+        // if it occurs, writer logic is incorrect
         throw std::logic_error(FSTR("IPCProtocol.READER - Tried to read {} but only read {}",
-                                    *payload_size, payload_bytes_read));
+                                    *frame_bytes, payload_bytes_read));
     }
 
     m_curr_slot->smem.signal_read_event();

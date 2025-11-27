@@ -612,11 +612,11 @@ void glRemix::glDriver::init()
 
 void glRemix::glDriver::process_stream()
 {
-    UINT32 buffer_size = 0;
     UINT32 frame_index = 0;
-    m_ipc.consume_frame_or_wait(m_command_buffer.data(), &buffer_size, &frame_index);
+    UINT32 frame_bytes = 0;
+    m_ipc.consume_frame_or_wait(m_command_buffer.data(), &frame_index, &frame_bytes);
 
-    if (buffer_size == 0)
+    if (frame_bytes == 0)
     {
         return;
     }
@@ -632,7 +632,7 @@ void glRemix::glDriver::process_stream()
 
     m_state.m_offset = 0;
     GLCommandContext ctx{ m_state, *this };
-    read_buffer(ctx, m_command_buffer.data(), buffer_size, m_state.m_offset);
+    read_buffer(ctx, m_command_buffer.data(), frame_bytes, m_state.m_offset);
 }
 
 void glRemix::glDriver::read_buffer(const GLCommandContext& ctx, const UINT8* buffer,
@@ -662,7 +662,7 @@ void glRemix::glDriver::read_buffer(const GLCommandContext& ctx, const UINT8* bu
         {
             char buffer[256];
             sprintf_s(buffer, "glxRemixRenderer - Unhandled Command: %d (size: %u)\n", view.type,
-                      view.data_size);
+                      view.cmd_bytes);
             OutputDebugStringA(buffer);
         }
     }
@@ -681,15 +681,15 @@ bool glRemix::glDriver::read_next_command(const UINT8* buffer, size_t buffer_siz
     offset += sizeof(GLCommandHeader);
 
     // ensure that we are not reading out of bounds
-    if (offset + header->data_size > buffer_size)
+    if (offset + header->cmd_bytes > buffer_size)
     {
         return false;
     }
 
     out.type = header->type;
-    out.data_size = header->data_size;
+    out.cmd_bytes = header->cmd_bytes;
     out.data = buffer + offset;
 
-    offset += header->data_size;  // move header after extracting latest command
+    offset += header->cmd_bytes;  // move header after extracting latest command
     return true;
 }

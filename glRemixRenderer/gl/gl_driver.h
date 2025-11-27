@@ -18,7 +18,7 @@ class glState;
 struct GLCommandView
 {
     GLCommandType type;
-    UINT32 data_size;
+    UINT32 cmd_bytes;
     const void* data;
 };
 

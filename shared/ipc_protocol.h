@@ -9,13 +9,6 @@
 
 namespace glRemix
 {
-// per-frame uniforms for OpenGL commands sent via IPC
-struct GLFrameHeader
-{
-    UINT32 payload_size = 0;  // bytes following this header
-    UINT32 frame_index = 0;   // incremental frame counter
-};
-
 // Local keyword allows to stay per-session, Global requires elevated permissions
 // wchar_t is standard for file mapping names in windows (though can maybe switch with TCHAR*)
 constexpr const wchar_t* k_MAP_A = L"Local\\glRemix_Map_A";
@@ -45,7 +38,7 @@ public:
     // for renderer
     void init_reader();
     // uses `WaitForMultipleObjects` to stall thread here. signals read event when complete.
-    void consume_frame_or_wait(void* payload, UINT32* payload_size, UINT32* frame_index);
+    void consume_frame_or_wait(void* payload, UINT32* frame_index, UINT32* frame_bytes);
 
     void write_simple(const void* ptr, SIZE_T bytes);
 

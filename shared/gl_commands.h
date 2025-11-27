@@ -7,18 +7,8 @@
 
 namespace glRemix
 {
-enum class GLRemixClientArrayKind : UINT32
-{
-    VERTEX,    // GL_VERTEX_ARRAY
-    NORMAL,    // GL_NORMAL_ARRAY
-    COLOR,     // GL_COLOR_ARRAY
-    TEXCOORD,  // GL_TEXCOORD_ARRAY
-    COLORIDX,  // GL_INDEX_ARRAY
-    EDGEFLAG,  // GL_EDGEFLAG_ARRAY
-    _COUNT,
-    _INVALID
-};
 
+/* ENUMS */
 enum class GLCommandType : UINT32
 {
     // Core Immediate Mode
@@ -98,7 +88,40 @@ enum class GLCommandType : UINT32
              // of enum elements)
 };
 
-// Component Structs
+enum class GLRemixClientArrayType : UINT32
+{
+    VERTEX,    // GL_VERTEX_ARRAY
+    NORMAL,    // GL_NORMAL_ARRAY
+    COLOR,     // GL_COLOR_ARRAY
+    TEXCOORD,  // GL_TEXCOORD_ARRAY
+    COLORIDX,  // GL_INDEX_ARRAY
+    EDGEFLAG,  // GL_EDGEFLAG_ARRAY
+    _COUNT,
+    _INVALID
+};
+
+/* HEADER STRUCTS */
+struct GLCommandHeader
+{
+    GLCommandType type;
+    UINT32 cmd_bytes;
+};
+
+// per-frame uniforms for OpenGL commands sent via IPC
+struct GLFrameHeader
+{
+    UINT32 frame_index = 0;  // incremental frame counter
+    UINT32 frame_bytes = 0;  // bytes following this header
+};
+
+struct GLRemixClientArrayHeader
+{
+    UINT32 size;
+    UINT32 type;
+    UINT32 array_bytes;
+};
+
+/* COMPONENT STRUCTS */
 struct GLVec2f
 {
     float x, y;
@@ -127,13 +150,6 @@ struct GLVec4d
 struct GLEmptyCommand
 {
     UINT32 reserved = 0;  // to maintain alignment. think of as padding GPUBuffers
-};
-
-// Header for all commands
-struct GLCommandHeader
-{
-    GLCommandType type;
-    UINT32 data_size;
 };
 
 /* CORE IMMEDIATE MODE */
@@ -165,19 +181,13 @@ struct GLNewListCommand
 using GLEndListCommand = GLEmptyCommand;
 
 /* CLIENT STATE */
-struct GLRemixClientArrayHeader
-{
-    UINT32 size;
-    UINT32 type;
-    UINT32 stride;
-};
-
 struct GLRemixDrawArraysCommand
 {
     UINT32 mode;
     UINT32 first;
     UINT32 count;
-    UINT32 enabled;  // amount of currently enabled client array kinds (<= 7)
+    UINT32 enabled;  // amount of currently enabled client array kinds (<= 6)
+    GLRemixClientArrayHeader headers[static_cast<UINT32>(GLRemixClientArrayType::_COUNT)];
 };
 
 struct GLRemixDrawElementsCommand
@@ -186,6 +196,7 @@ struct GLRemixDrawElementsCommand
     UINT32 count;
     UINT32 type;
     UINT32 enabled;
+    GLRemixClientArrayHeader headers[static_cast<UINT32>(GLRemixClientArrayType::_COUNT)];
 };
 
 /* MATRIX OPERATIONS */

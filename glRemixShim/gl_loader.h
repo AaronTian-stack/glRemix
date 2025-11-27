@@ -8,7 +8,7 @@ namespace glRemix
 {
 extern glRemix::IPCProtocol g_ipc;
 
-constexpr UINT32 NUMCLIENTARRAYS = static_cast<UINT32>(GLRemixClientArrayKind::_COUNT);
+constexpr UINT32 NUMCLIENTARRAYS = static_cast<UINT32>(GLRemixClientArrayType::_COUNT);
 
 struct GLRemixClientArrayInterface
 {

@@ -67,17 +67,17 @@ static inline UINT32 ComputeClientArraySize(GLint count, GLint size, GLenum type
     return count * stride;
 }
 
-static inline GLRemixClientArrayKind MapTo(GLenum cap)
+static inline GLRemixClientArrayType MapTo(GLenum cap)
 {
     switch (cap)
     {
-        case GL_VERTEX_ARRAY: return GLRemixClientArrayKind::VERTEX;
-        case GL_NORMAL_ARRAY: return GLRemixClientArrayKind::NORMAL;
-        case GL_COLOR_ARRAY: return GLRemixClientArrayKind::COLOR;
-        case GL_TEXTURE_COORD_ARRAY: return GLRemixClientArrayKind::TEXCOORD;
-        case GL_INDEX_ARRAY: return GLRemixClientArrayKind::COLORIDX;
-        case GL_EDGE_FLAG_ARRAY: return GLRemixClientArrayKind::EDGEFLAG;
-        default: return GLRemixClientArrayKind::_INVALID;
+        case GL_VERTEX_ARRAY: return GLRemixClientArrayType::VERTEX;
+        case GL_NORMAL_ARRAY: return GLRemixClientArrayType::NORMAL;
+        case GL_COLOR_ARRAY: return GLRemixClientArrayType::COLOR;
+        case GL_TEXTURE_COORD_ARRAY: return GLRemixClientArrayType::TEXCOORD;
+        case GL_INDEX_ARRAY: return GLRemixClientArrayType::COLORIDX;
+        case GL_EDGE_FLAG_ARRAY: return GLRemixClientArrayType::EDGEFLAG;
+        default: return GLRemixClientArrayType::_INVALID;
     }
 }
 

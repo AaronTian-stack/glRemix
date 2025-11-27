@@ -140,8 +140,8 @@ void APIENTRY gl_enable_client_state_ovr(GLenum array)
 {
     GLRemixClientArrayInterface* target = nullptr;
 
-    GLRemixClientArrayKind kind = utils::MapTo(array);
-    if (kind == GLRemixClientArrayKind::_INVALID)
+    GLRemixClientArrayType kind = utils::MapTo(array);
+    if (kind == GLRemixClientArrayType::_INVALID)
     {
         return;  // TODO: handle this better
     }
@@ -161,8 +161,8 @@ void APIENTRY gl_disable_client_state_ovr(GLenum array)
 {
     GLRemixClientArrayInterface* target = nullptr;
 
-    GLRemixClientArrayKind kind = utils::MapTo(array);
-    if (kind == GLRemixClientArrayKind::_INVALID)
+    GLRemixClientArrayType kind = utils::MapTo(array);
+    if (kind == GLRemixClientArrayType::_INVALID)
     {
         return;
     }
@@ -180,7 +180,7 @@ void APIENTRY gl_disable_client_state_ovr(GLenum array)
 
 void APIENTRY gl_vertex_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
-    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayKind::VERTEX)];
+    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::VERTEX)];
     a.size = static_cast<UINT32>(size);
     a.type = static_cast<UINT32>(type);
     a.stride = static_cast<UINT32>(stride);
@@ -190,7 +190,7 @@ void APIENTRY gl_vertex_pointer_ovr(GLint size, GLenum type, GLsizei stride, con
 
 void APIENTRY gl_normal_pointer_ovr(GLenum type, GLsizei stride, const void* pointer)
 {
-    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayKind::NORMAL)];
+    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::NORMAL)];
     a.size = 3;
     a.type = static_cast<UINT32>(type);
     a.stride = static_cast<UINT32>(stride);
@@ -200,7 +200,7 @@ void APIENTRY gl_normal_pointer_ovr(GLenum type, GLsizei stride, const void* poi
 
 void APIENTRY gl_color_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
-    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayKind::COLOR)];
+    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::COLOR)];
     a.size = static_cast<UINT32>(size);
     a.type = static_cast<UINT32>(type);
     a.stride = static_cast<UINT32>(stride);
@@ -210,7 +210,7 @@ void APIENTRY gl_color_pointer_ovr(GLint size, GLenum type, GLsizei stride, cons
 
 void APIENTRY gl_tex_coord_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
-    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayKind::TEXCOORD)];
+    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::TEXCOORD)];
     a.size = static_cast<UINT32>(size);
     a.type = static_cast<UINT32>(type);
     a.stride = static_cast<UINT32>(stride);
@@ -220,7 +220,7 @@ void APIENTRY gl_tex_coord_pointer_ovr(GLint size, GLenum type, GLsizei stride, 
 
 void APIENTRY gl_index_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
-    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayKind::COLORIDX)];
+    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::COLORIDX)];
     a.size = static_cast<UINT32>(size);
     a.type = static_cast<UINT32>(type);
     a.stride = static_cast<UINT32>(stride);
@@ -230,7 +230,7 @@ void APIENTRY gl_index_pointer_ovr(GLint size, GLenum type, GLsizei stride, cons
 
 void APIENTRY gl_edge_flag_pointer_ovr(GLint size, GLenum type, GLsizei stride, const void* pointer)
 {
-    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayKind::EDGEFLAG)];
+    auto& a = g_client_arrays[static_cast<UINT32>(GLRemixClientArrayType::EDGEFLAG)];
     a.size = static_cast<UINT32>(size);
     a.type = static_cast<UINT32>(type);
     a.stride = static_cast<UINT32>(stride);
