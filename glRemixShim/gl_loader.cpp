@@ -56,6 +56,7 @@ void initialize()
             std::snprintf(debug_msg, sizeof(debug_msg), "glRemix: Using custom renderer path: %s\n",
                           dll_path.data());
             OutputDebugStringA(debug_msg);
+
             STARTUPINFOA si{ .cb = sizeof(STARTUPINFOA) };
             PROCESS_INFORMATION pi;
             if (CreateProcessA(nullptr, dll_path.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,

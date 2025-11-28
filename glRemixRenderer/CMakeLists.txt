@@ -102,6 +102,9 @@ if(NOT TARGET DirectXTex::DirectXTex)
         set_target_properties(DirectXTex::DirectXTex PROPERTIES
             IMPORTED_LOCATION_DEBUG "${_directxtex_debug_lib}"
             IMPORTED_LOCATION_RELEASE "${_directxtex_release_lib}"
+            IMPORTED_LOCATION_RELWITHDEBINFO "${_directxtex_release_lib}"
+            IMPORTED_LOCATION_MINSIZEREL "${_directxtex_release_lib}"
+            IMPORTED_CONFIGURATIONS "Debug;Release;RelWithDebInfo;MinSizeRel"
         )
     else()
         set(_missing_components "")
@@ -148,6 +151,8 @@ if(WIN32)
         UNICODE 
         _UNICODE
         WIN32_LEAN_AND_MEAN
+        $<$<CONFIG:RelWithDebInfo>:CONFIG_RELWITHDEBINFO>
+        $<$<CONFIG:MinSizeRel>:CONFIG_MINSIZEREL>
     )
     
     if(ENABLE_GPU_BASED_VALIDATION)
@@ -155,7 +160,16 @@ if(WIN32)
     endif()
     
     if(MSVC)
-        target_compile_options(${PROJECT_NAME} PRIVATE /MP) # Enable multi-processor compilation
+        target_compile_options(${PROJECT_NAME} PRIVATE 
+            /MP # Enable multi-processor compilation
+            $<$<CONFIG:RelWithDebInfo>:/O2> # Force highest optimization for RelWithDebInfo
+        )
+    endif()
+
+    if(NOT MSVC)
+        target_compile_options(${PROJECT_NAME} PRIVATE
+            $<$<CONFIG:RelWithDebInfo>:-O3> # Force highest optimization for RelWithDebInfo
+        )
     endif()
 
     target_link_libraries(${PROJECT_NAME} PRIVATE
