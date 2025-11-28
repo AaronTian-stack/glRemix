@@ -103,11 +103,6 @@ if(NOT TARGET ${PROJECT_NAME})
         target_compile_definitions(${PROJECT_NAME} PRIVATE GLREMIX_AUTO_LAUNCH_RENDERER)
     endif()
 
-    target_compile_definitions(${PROJECT_NAME} PRIVATE
-        $<$<CONFIG:RelWithDebInfo>:CONFIG_RELWITHDEBINFO>
-        $<$<CONFIG:MinSizeRel>:CONFIG_MINSIZEREL>
-    )
-
     # Force highest optimization for RelWithDebInfo
     if(MSVC)
         target_compile_options(${PROJECT_NAME} PRIVATE

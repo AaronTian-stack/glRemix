@@ -151,6 +151,8 @@ if(WIN32)
         UNICODE 
         _UNICODE
         WIN32_LEAN_AND_MEAN
+        $<$<CONFIG:RelWithDebInfo>:CONFIG_RELWITHDEBINFO>
+        $<$<CONFIG:MinSizeRel>:CONFIG_MINSIZEREL>
     )
     
     if(ENABLE_GPU_BASED_VALIDATION)
@@ -158,7 +160,16 @@ if(WIN32)
     endif()
     
     if(MSVC)
-        target_compile_options(${PROJECT_NAME} PRIVATE /MP) # Enable multi-processor compilation
+        target_compile_options(${PROJECT_NAME} PRIVATE 
+            /MP # Enable multi-processor compilation
+            $<$<CONFIG:RelWithDebInfo>:/O2> # Force highest optimization for RelWithDebInfo
+        )
+    endif()
+
+    if(NOT MSVC)
+        target_compile_options(${PROJECT_NAME} PRIVATE
+            $<$<CONFIG:RelWithDebInfo>:-O3> # Force highest optimization for RelWithDebInfo
+        )
     endif()
 
     target_link_libraries(${PROJECT_NAME} PRIVATE
