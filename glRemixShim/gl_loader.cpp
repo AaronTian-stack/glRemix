@@ -2,7 +2,6 @@
 
 #include <mutex>
 #include <string>
-#include <cassert>
 #include <tsl/robin_map.h>
 
 #include <shared/ipc_protocol.h>
