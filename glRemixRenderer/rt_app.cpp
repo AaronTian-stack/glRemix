@@ -1,4 +1,5 @@
 #include "rt_app.h"
+#include "mesh_loader.h"
 
 #include <thread>
 #include <chrono>
@@ -6,6 +7,8 @@
 #include <filesystem>
 
 #include <imgui.h>
+#include <fastgltf/core.hpp>
+#include <fastgltf/tools.hpp>
 
 #include <shared/math_utils.h>
 
@@ -363,6 +366,10 @@ void glRemix::glRemixRenderer::create()
         m_context.create_constant_buffer_view(&m_light_buffer[i].buffer,
                                               m_light_buffer[i].descriptor);
     }
+
+    // set asset replacement callback
+    m_debug_window.set_replace_mesh_callback([this](UINT32 meshID, const char* path)
+                                             { this->replace_mesh(meshID, path); });
 }
 
 void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7* cmd_list)
@@ -373,7 +380,8 @@ void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7
         return;
     }
 
-    const size_t start_idx = m_mesh_resources.size();
+    // TODO: Replace with static allocator
+    std::vector<size_t> pending_indices;
 
     // Create all vertex and index buffers first
     for (size_t i = 0; i < state.m_pending_geometries.size(); ++i)
@@ -417,18 +425,37 @@ void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7
                                                                &ib.descriptor);
         m_context.create_shader_resource_view(ib.buffer, ib.descriptor);
 
+        int idx = m_mesh_resources.push_back(std::move(resource));
+        pending_indices.push_back(idx);
+
         // Cache the geometry
-        const UINT32 resource_idx = static_cast<UINT32>(start_idx + i);
+        const UINT32 resource_idx = static_cast<UINT32>(idx);
         MeshRecord cached_mesh{};
         cached_mesh.mesh_id = pending.hash;
         cached_mesh.blas_vb_ib_idx = resource_idx;
         state.m_mesh_map[pending.hash] = cached_mesh;  // actually modifies driver state
 
-        m_mesh_resources.push_back(std::move(resource));
+        // push to m_meshes
+        MeshRecord* mesh;
+        mesh = &state.m_mesh_map[pending.hash];
+
+        // assign per-instance data for new mesh
+        mesh->last_frame = m_current_frame;
+
+        // update m_mesh_replacement_tracker
+        if (pending.replace_idx != -1)
+        {
+            // add mesh to m_mesh_replacement_tracker
+            state.m_mesh_replacement_tracker.emplace(pending.replace_idx, *mesh);
+        }
+        else
+        {
+            state.m_meshes.push_back(*mesh);
+        }
     }
 
     // Build all BLAS in a single batch
-    build_mesh_blas_batch(start_idx, state.m_pending_geometries.size(), cmd_list);
+    build_mesh_blas_batch(pending_indices, state.m_pending_geometries.size(), cmd_list);
 
     state.m_pending_geometries.clear();
 }
@@ -487,7 +514,8 @@ void glRemix::glRemixRenderer::create_pending_textures(ID3D12GraphicsCommandList
     state.m_pending_textures.clear();
 }
 
-void glRemix::glRemixRenderer::build_mesh_blas_batch(const size_t start_idx, const size_t count,
+void glRemix::glRemixRenderer::build_mesh_blas_batch(std::vector<size_t> pending_indices,
+                                                     const size_t count,
                                                      ID3D12GraphicsCommandList7* cmd_list)
 {
     if (count == 0)
@@ -511,9 +539,9 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const size_t start_idx, con
     scratch_offsets.reserve(count);
 
     // Create all BLAS buffers and compute scratch sizes
-    for (size_t i = 0; i < count; i++)
+    for (size_t i = 0; i < pending_indices.size(); i++)
     {
-        auto& info = m_mesh_resources[start_idx + i];
+        auto& info = m_mesh_resources[pending_indices[i]];
 
         // TODO: combine multiple geometries BLAS into one buffer?
         D3D12_RAYTRACING_GEOMETRY_DESC tri_desc{
@@ -547,9 +575,9 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const size_t start_idx, con
 
     // Mark all resources for BLAS build
     m_context.mark_use(&m_scratch_space, dx::Usage::UAV_COMPUTE);
-    for (size_t i = 0; i < count; i++)
+    for (size_t i = 0; i < pending_indices.size(); i++)
     {
-        m_context.mark_use(&m_mesh_resources[start_idx + i].blas, dx::Usage::AS_WRITE);
+        m_context.mark_use(&m_mesh_resources[pending_indices[i]].blas, dx::Usage::AS_WRITE);
     }
     const std::array scratch_array = { &m_scratch_space };
     m_context.emit_barriers(cmd_list, scratch_array.data(), scratch_array.size(), nullptr, 0);
@@ -558,23 +586,23 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const size_t start_idx, con
     // TODO: Get rid of this and replace with static allocator
     static std::vector<dx::D3D12Buffer*> blas_barrier_ptrs;
     blas_barrier_ptrs.clear();
-    for (size_t i = 0; i < count; i++)
+    for (size_t i = 0; i < pending_indices.size(); i++)
     {
-        blas_barrier_ptrs.push_back(&m_mesh_resources[start_idx + i].blas);
+        blas_barrier_ptrs.push_back(&m_mesh_resources[pending_indices[i]].blas);
     }
     m_context.emit_barriers(cmd_list, blas_barrier_ptrs.data(), blas_barrier_ptrs.size(), nullptr,
                             0);
 
     // Build all BLAS in repeated partial batches
     size_t build_start = 0;
-    while (build_start < count)
+    while (build_start < pending_indices.size())
     {
         scratch_offsets.clear();
         UINT64 running_total = 0;
         size_t batch_count = 0;
 
         // Compute how many builds fit this batch and their offsets
-        for (size_t j = build_start; j < count; j++)
+        for (size_t j = build_start; j < pending_indices.size(); j++)
         {
             // Alignment requirement: 256 multiple needed between scratch regions
             running_total = align_u64(running_total,
@@ -599,7 +627,7 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const size_t start_idx, con
         for (size_t k = 0; k < batch_count; k++)
         {
             const size_t idx = build_start + k;
-            auto& info = m_mesh_resources[start_idx + idx];
+            auto& info = m_mesh_resources[pending_indices[idx]];
 
             D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS blas_input{
                 .Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
@@ -642,9 +670,9 @@ void glRemix::glRemixRenderer::build_mesh_blas_batch(const size_t start_idx, con
     }
 
     // Transition all BLAS to read state
-    for (size_t i = 0; i < count; i++)
+    for (size_t i = 0; i < pending_indices.size(); i++)
     {
-        m_context.mark_use(&m_mesh_resources[start_idx + i].blas, dx::Usage::AS_READ);
+        m_context.mark_use(&m_mesh_resources[pending_indices[i]].blas, dx::Usage::AS_READ);
     }
     m_context.emit_barriers(cmd_list, blas_barrier_ptrs.data(), blas_barrier_ptrs.size(), nullptr,
                             0);
@@ -671,6 +699,185 @@ static D3D12_RAYTRACING_INSTANCE_DESC mv_to_instance_desc(const XMFLOAT4X4& mv)
     desc.Transform[2][3] = mv._43;
 
     return desc;
+}
+
+UINT64 glRemix::glRemixRenderer::create_hash(std::vector<Vertex> vertices,
+                                             std::vector<UINT32> indices)
+{
+    // hashing - logic from boost::hash_combine
+    size_t seed = 0;
+    auto hash_combine = [&seed](auto const& v)
+    {
+        seed ^= std::hash<std::decay_t<decltype(v)>>{}(v) + 0x9e3779b97f4a7c15ULL + (seed << 6)
+                + (seed >> 2);
+    };
+
+    // reduces floating point instability
+    auto quantize = [](float v, float precision = 1e-5f) -> float
+    { return std::round(v / precision) * precision; };
+
+    // get vertex data to hash
+    for (int i = 0; i < vertices.size(); ++i)
+    {
+        const Vertex& vertex = vertices[i];
+        hash_combine(quantize(vertex.position.x));
+        hash_combine(quantize(vertex.position.y));
+        hash_combine(quantize(vertex.position.z));
+        hash_combine(quantize(vertex.color.x));
+        hash_combine(quantize(vertex.color.y));
+        hash_combine(quantize(vertex.color.z));
+    }
+
+    // get index data to hash
+    for (int i = 0; i < indices.size(); ++i)
+    {
+        const UINT32& index = indices[i];
+        hash_combine(index);
+    }
+
+    return seed;
+}
+
+void glRemix::glRemixRenderer::handle_per_frame_replacement()
+{
+    glState& state = sm_driver.get_state();
+
+    if (state.m_mesh_replacement_tracker.empty())
+    {
+        return;
+    }
+
+    for (auto& kv : state.m_mesh_replacement_tracker)
+    {
+        UINT32 index = kv.first;                    // index for m_meshes
+        const MeshRecord& replacement = kv.second;  // mesh to replace with
+
+        // check if the index is valid
+        if (index >= state.m_meshes.size())
+        {
+            continue;
+        }
+
+        state.m_meshes[index] = replacement;
+    }
+}
+
+// replaces asset in scene based on file provided by user in ImGui
+void glRemix::glRemixRenderer::replace_mesh(UINT64 meshID, const char* new_asset_path)
+{
+    glState& state = sm_driver.get_state();
+
+    UINT32 old_mesh_mv_idx = -1;
+    UINT32 old_mesh_mat_idx = -1;
+    std::array<float, 3> old_min_bb = { 1000.0, 1000.0, 1000.0 };
+    std::array<float, 3> old_max_bb = { -1000.0, -1000.0, -1000.0 };
+    UINT32 removed_index = -1;
+
+    XMFLOAT3 min_bb = { 1000.0, 1000.0, 1000.0 };
+    XMFLOAT3 max_bb = { -1000.0, -1000.0, -1000.0 };
+
+    // erase mesh that needs to be replaced
+    for (auto it = state.m_mesh_map.begin(); it != state.m_mesh_map.end();)
+    {
+        auto& mesh = it->second;
+
+        if (mesh.mesh_id == meshID)
+        {
+            old_mesh_mv_idx = mesh.mv_idx;  // save for transforming new mesh
+            old_mesh_mat_idx = mesh.mat_idx;
+            old_min_bb = { mesh.min_bb.x, mesh.min_bb.y, mesh.min_bb.z };
+            old_max_bb = { mesh.max_bb.x, mesh.max_bb.y, mesh.max_bb.z };
+
+            // erase mesh from m_mesh_map
+            auto& resource = m_mesh_resources[mesh.blas_vb_ib_idx];
+            m_mesh_resources.free(mesh.blas_vb_ib_idx);
+            m_descriptor_pager.free_descriptor(dx::DescriptorPager::VB_IB,
+                                               &resource.vertex_buffer.descriptor);
+            m_descriptor_pager.free_descriptor(dx::DescriptorPager::VB_IB,
+                                               &resource.index_buffer.descriptor);
+            it = state.m_mesh_map.erase(it);
+
+            // erase mesh from m_meshes and get its index for m_mesh_replacement_tracker
+            auto it2 = std::find_if(state.m_meshes.begin(), state.m_meshes.end(),
+                                    [&](const MeshRecord& m) { return m.mesh_id == meshID; });
+            if (it2 != state.m_meshes.end())
+            {
+                removed_index = std::distance(state.m_meshes.begin(), it2);
+                state.m_meshes.erase(it2);
+            }
+
+            break;
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
+    // convert path to filesystem path
+    std::filesystem::path new_asset_path_fs = std::filesystem::path(new_asset_path);
+
+    // load new asset from given file path
+    std::vector<Vertex> new_vertices;
+    std::vector<UINT32> new_indices;
+    std::vector<Material> new_materials;
+    THROW_IF_FALSE(glRemix::load_mesh_from_path(new_asset_path_fs, new_vertices, new_indices,
+                                                new_materials, min_bb, max_bb));
+
+    // get value to scale imported mesh vertices
+    std::array<float, 3> old_bb_size = { old_max_bb[0] - old_min_bb[0],
+                                         old_max_bb[1] - old_min_bb[1],
+                                         old_max_bb[2] - old_min_bb[2] };
+    std::array<float, 3> new_bb_size = { max_bb.x - min_bb.x, max_bb.y - min_bb.y,
+                                         max_bb.z - min_bb.z };
+
+    std::array<float, 3> scale_factors = { 1.0f, 1.0f, 1.0f };
+    for (int i = 0; i < 3; ++i)
+    {
+        if (new_bb_size[i] > 0.0f)
+        {
+            scale_factors[i] = old_bb_size[i] / new_bb_size[i];
+        }
+    }
+
+    // transform new vertices by replaced mesh's modelview matrix (uniform scale only)
+    transform_replacement_vertices(new_vertices, scale_factors);
+
+    // put new mesh into pending geometries
+    UINT64 new_mesh_hash = create_hash(new_vertices, new_indices);
+    MeshRecord new_mesh;
+
+    PendingGeometry pending;
+    pending.vertices = std::move(new_vertices);
+    pending.indices = std::move(new_indices);
+    pending.hash = new_mesh_hash;
+    pending.mat_idx = static_cast<UINT32>(state.m_materials.size());
+    pending.mv_idx = static_cast<UINT32>(state.m_matrix_pool.size());
+    pending.replace_idx = removed_index;
+
+    new_mesh.blas_vb_ib_idx = m_mesh_resources.size() - m_mesh_resources.freed_size()
+                              + state.m_pending_geometries.size();
+
+    // added other mesh properties
+    new_mesh.mat_idx = old_mesh_mat_idx;
+    new_mesh.mv_idx = old_mesh_mv_idx;
+    new_mesh.min_bb = min_bb;
+    new_mesh.max_bb = max_bb;
+
+    state.m_mesh_map.emplace(new_mesh_hash, new_mesh);
+
+    state.m_pending_geometries.push_back(std::move(pending));
+}
+
+void glRemix::glRemixRenderer::transform_replacement_vertices(std::vector<Vertex>& gltf_vertices,
+                                                              std::array<float, 3> scale_val)
+{
+    for (auto& v : gltf_vertices)
+    {
+        v.position.x *= scale_val[0];
+        v.position.y *= scale_val[1];
+        v.position.z *= scale_val[2];
+    }
 }
 
 // builds top level acceleration structure with blas buffer (can be called each frame likely)
@@ -851,10 +1058,6 @@ void glRemix::glRemixRenderer::render()
         m_context.unmap_buffer(&m_light_buffer[get_frame_index()].buffer);
     }
 
-    m_context.start_imgui_frame();
-
-    m_debug_window.render();
-
     // Be careful not to call the ID3D12Interface reset instead
     THROW_IF_FALSE(SUCCEEDED(m_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
 
@@ -888,6 +1091,12 @@ void glRemix::glRemixRenderer::render()
     cmd_list->RSSetViewports(1, &viewport);
     cmd_list->RSSetScissorRects(1, &scissor_rect);
 
+    m_context.start_imgui_frame();
+
+    // render imgui
+    m_debug_window.set_mesh_buffer(state.m_meshes);
+    m_debug_window.render();
+
     // Build all pending buffers from geometry collected in read_gl_command_stream
     create_pending_buffers(cmd_list.Get());
     {
@@ -899,6 +1108,8 @@ void glRemix::glRemixRenderer::render()
         create_pending_textures(upload_cmd_list.Get());
     }
 
+    // replace meshes in m_meshes if applicable
+    handle_per_frame_replacement();
     // Currently reserve TLAS, 1 UAV RT, 2 CBV
     constexpr auto reserved_descriptor_offset = 4;
     // Update mesh records vector with global indices based off current paging status

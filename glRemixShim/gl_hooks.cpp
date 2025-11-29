@@ -704,8 +704,7 @@ const GLubyte* APIENTRY gl_get_string_ovr(GLenum name)
 {
     switch (name)
     {
-        case GL_EXTENSIONS:
-            return reinterpret_cast<const GLubyte*>(g_extensions);
+        case GL_EXTENSIONS: return reinterpret_cast<const GLubyte*>(g_extensions);
         case GL_VERSION: return reinterpret_cast<const GLubyte*>("1.3");  // TODO: define in CMake
         case GL_VENDOR: return reinterpret_cast<const GLubyte*>("glRemix");
         case GL_RENDERER: return reinterpret_cast<const GLubyte*>("glRemixRenderer");

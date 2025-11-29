@@ -26,8 +26,74 @@ void DebugWindow::render()
             }
             ImGui::EndTabBar();
         }
+
+        if (ImGui::BeginTabBar("Asset Replacement"))
+        {
+            if (ImGui::BeginTabItem("Mesh IDs"))
+            {
+                render_mesh_ids();
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
+        }
     }
     ImGui::End();
+}
+
+// get mesh buffer from rt_app
+void DebugWindow::set_mesh_buffer(std::vector<MeshRecord>& meshes)
+{
+    m_meshes = &meshes;
+}
+
+// get replace_mesh function from rt_app
+void DebugWindow::set_replace_mesh_callback(
+    std::function<void(uint64_t meshID, const char* asset_path)> callback)
+{
+    m_replace_mesh_callback = callback;
+}
+
+void DebugWindow::render_mesh_ids()
+{
+    ImGui::Text("Asset Replacement");
+    ImGui::Text("List of Assets");
+
+    // render meshIDs and get selected mesh
+    if (ImGui::BeginListBox("##assets"))
+    {
+        for (int i = 0; i < m_meshes->size(); i++)
+        {
+            uint64_t meshID = (*m_meshes)[i].mesh_id;
+
+            const bool is_selected = (m_meshID_to_replace == meshID);
+            char buf[64];
+            snprintf(buf, 64, "Mesh ID: %llu", meshID);
+            if (ImGui::Selectable(buf, is_selected))
+            {
+                m_meshID_to_replace = meshID;
+            }
+        }
+        ImGui::EndListBox();
+    }
+
+    // handle asset replacement with selected mesh
+    if (m_meshID_to_replace != -1)
+    {
+        ImGui::Separator();
+
+        // get new asset path from user input
+        ImGui::InputText("Replacement Asset Path", m_asset_path_buffer, sizeof(m_asset_path_buffer));
+
+        // if button is pressed to replace asset, call replace_mesh from rt_app
+        if (ImGui::Button("Replace Asset"))
+        {
+            ImGui::Text("%s", m_asset_path_buffer);
+            if (m_replace_mesh_callback)
+            {
+                m_replace_mesh_callback(m_meshID_to_replace, m_asset_path_buffer);
+            }
+        }
+    }
 }
 
 void DebugWindow::render_performance_stats()

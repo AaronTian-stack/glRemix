@@ -13,12 +13,16 @@ namespace glRemix
 
 struct MeshRecord
 {
-    UINT32 mesh_id;  // will eventually be hashed
+    UINT32 mesh_id;
 
     UINT32 blas_vb_ib_idx;
     UINT32 mv_idx;  // index into model view array
     UINT32 mat_idx;
     UINT32 tex_idx;
+
+    // bounding box info
+    XMFLOAT3 min_bb;
+    XMFLOAT3 max_bb;
 
     // For garbage collection, last frame this mesh record was accessed
     UINT32 last_frame;
@@ -52,6 +56,7 @@ struct PendingGeometry
     UINT64 hash;
     UINT32 mat_idx;
     UINT32 mv_idx;
+    UINT32 replace_idx = -1;
 };
 
 struct PendingTexture
