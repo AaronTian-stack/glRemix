@@ -7,8 +7,6 @@
 
 #include <format>
 
-#define FSTR(fmt, ...) std::format(fmt, __VA_ARGS__)
-
 void glRemix::IPCProtocol::init_writer()
 {
     if (!m_slot_A.smem.create_for_writer(k_MAP_A, k_WRITE_EVENT_A, k_READ_EVENT_A))
@@ -45,7 +43,8 @@ void glRemix::IPCProtocol::start_frame_or_wait()
         {
             case WAIT_OBJECT_0:
                 m_curr_slot = oldest;
-                DBG_PRINT("IPCProtocol.WRITER - Oldest SharedMemory slot became available to write "
+                DBG_PRINT("IPCProtocol.WRITER - Oldest SharedMemory slot became available to "
+                          "write_simple "
                           "before latest.");  // theoretically should not occur
                 break;
             case WAIT_OBJECT_0 + 1: m_curr_slot = latest; break;
@@ -60,7 +59,7 @@ void glRemix::IPCProtocol::start_frame_or_wait()
     g_frame_index++;
     m_curr_slot->frame_index = g_frame_index;
 
-    m_offset = sizeof(GLFrameUnifs);  // reset to just the size of GLFrameUnifs
+    m_offset = sizeof(GLFrameHeader);  // reset to just the size of GLFrameHeader
 }
 
 void glRemix::IPCProtocol::end_frame()
@@ -70,18 +69,17 @@ void glRemix::IPCProtocol::end_frame()
         throw std::logic_error("IPCProtocol.WRITER - `m_curr_slot` is null at time of frame end.");
     }
 
-    GLFrameUnifs unifs;
-    unifs.payload_size = m_offset - sizeof(GLFrameUnifs);
-    unifs.frame_index = m_curr_slot->frame_index;
+    GLFrameHeader header = { .frame_index = m_curr_slot->frame_index,
+                             .frame_bytes = m_offset - sizeof(GLFrameHeader) };
 
-    m_curr_slot->smem.write(&unifs, 0, sizeof(GLFrameUnifs));
+    m_curr_slot->smem.write(&header, 0, sizeof(GLFrameHeader));
 
     m_curr_slot->smem.signal_write_event();
 }
 
 void glRemix::IPCProtocol::init_reader()
 {
-    constexpr UINT16 MAX_WAIT_MS = 5000;
+    constexpr UINT16 MAX_WAIT_MS = 60000;  // 1 minute timeout for graphics debugger workflow
     constexpr UINT16 RETRY_MS = 50;
 
     UINT16 elapsed = 0;
@@ -119,8 +117,8 @@ void glRemix::IPCProtocol::init_reader()
     throw std::runtime_error("IPCProtocol.READER - Timed out waiting for writer initialization.");
 }
 
-void glRemix::IPCProtocol::consume_frame_or_wait(void* payload, UINT32* payload_size,
-                                                 UINT32* frame_index)
+void glRemix::IPCProtocol::consume_frame_or_wait(void* payload, UINT32* frame_index,
+                                                 UINT32* frame_bytes)
 {
     {
         MemorySlot* oldest;  // shared memory that has the smaller recorded time frame
@@ -156,18 +154,28 @@ void glRemix::IPCProtocol::consume_frame_or_wait(void* payload, UINT32* payload_
         }
     }
 
-    m_curr_slot->smem.read(payload_size, 0, 4);
-    m_curr_slot->smem.read(frame_index, 4, 4);
+    thread_local GLFrameHeader frame_header;
 
-    UINT32 payload_bytes_read = m_curr_slot->smem.read(payload, 8, *payload_size);
+    m_curr_slot->smem.read(&frame_header, 0, sizeof(GLFrameHeader));
 
-    if (payload_bytes_read != *payload_size)
+    *frame_index = frame_header.frame_index;
+    *frame_bytes = frame_header.frame_bytes;
+
+    UINT32 payload_bytes_read = m_curr_slot->smem.read(payload, sizeof(GLFrameHeader), *frame_bytes);
+
+    if (payload_bytes_read != *frame_bytes)
     {
         // this is a logic error as this should really never happen.
-        // if it occurs, my writer logic is incorrect
+        // if it occurs, writer logic is incorrect
         throw std::logic_error(FSTR("IPCProtocol.READER - Tried to read {} but only read {}",
-                                    *payload_size, payload_bytes_read));
+                                    *frame_bytes, payload_bytes_read));
     }
 
     m_curr_slot->smem.signal_read_event();
+}
+
+void glRemix::IPCProtocol::write_simple(const void* ptr, SIZE_T bytes)
+{
+    m_curr_slot->smem.write(ptr, m_offset, bytes);
+    m_offset += bytes;
 }

@@ -34,10 +34,11 @@ function(set_shim_target_properties ${target} ${platform})
     set_property(DIRECTORY ${REPO_ROOT} PROPERTY VS_STARTUP_PROJECT ${target}) # set as startup proj
 
     if (GLREMIX_SHIM_DEBUGGER_EXE_PATH) # set launch executable within visual studio
+        cmake_path(GET GLREMIX_SHIM_DEBUGGER_EXE_PATH PARENT_PATH GLREMIX_SHIM_DEBUGGER_DIR)
         set_target_properties(${target} PROPERTIES
             VS_DEBUGGER_COMMAND            "${GLREMIX_SHIM_DEBUGGER_EXE_PATH}"
             VS_DEBUGGER_COMMAND_ARGUMENTS  ""
-            VS_DEBUGGER_WORKING_DIRECTORY  "${CMAKE_CURRENT_SOURCE_DIR}"
+            VS_DEBUGGER_WORKING_DIRECTORY  "${GLREMIX_SHIM_DEBUGGER_DIR}"
         )
     endif()
 endfunction()
@@ -68,5 +69,9 @@ function(set_shim_compile_specifications target)
 
     if (GLREMIX_OVERRIDE_RENDERER_PATH)
         target_compile_definitions(${target} PRIVATE GLREMIX_CUSTOM_RENDERER_EXE_PATH="${GLREMIX_CUSTOM_RENDERER_EXE_PATH}")
+    endif()
+
+    if(GLREMIX_AUTO_LAUNCH_RENDERER)
+        target_compile_definitions(${target} PRIVATE GLREMIX_AUTO_LAUNCH_RENDERER)
     endif()
 endfunction()

@@ -25,7 +25,12 @@ namespace glRemix
 {
 class glRemixRenderer : public Application
 {
+    static glDriver sm_driver;
+
     std::array<dx::D3D12CommandAllocator, m_frames_in_flight> m_cmd_pools{};
+
+    // TODO: Delete this after proper multithreading setup is implemented
+    std::array<dx::D3D12CommandAllocator, m_frames_in_flight> m_rt_cmd_pools{};
 
     ComPtr<ID3D12RootSignature> m_root_signature{};
     ComPtr<ID3D12PipelineState> m_raster_pipeline{};
@@ -65,7 +70,7 @@ class glRemixRenderer : public Application
     FreeListVector<MeshResources> m_mesh_resources;
 
     // Textures
-    std::vector<dx::D3D12Buffer> m_texture_upload_buffers;
+    std::array<std::vector<dx::D3D12Buffer>, m_frames_in_flight> m_texture_upload_buffers;
     FreeListVector<TextureAndDescriptor> m_textures;
 
     // Materials per buffer
@@ -76,8 +81,6 @@ class glRemixRenderer : public Application
     // This is written to by CPU potentially in two consecutive frames so we need to double buffer it
     FreeListVector<std::array<BufferAndDescriptor, m_frames_in_flight>> m_material_buffers;
     std::array<BufferAndDescriptor, m_frames_in_flight> m_light_buffer;
-
-    glDriver m_driver;
 
     DebugWindow m_debug_window;
 

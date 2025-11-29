@@ -14,6 +14,8 @@
 
 #include "dx/d3d12_barrier.h"
 
+glRemix::glDriver glRemix::glRemixRenderer::sm_driver;
+
 void glRemix::glRemixRenderer::create_material_buffer()
 {
     std::array<BufferAndDescriptor, m_frames_in_flight> bds;
@@ -64,6 +66,8 @@ void glRemix::glRemixRenderer::create()
     {
         THROW_IF_FALSE(m_context.create_command_allocator(&m_cmd_pools[i], &m_gfx_queue,
                                                           "frame command allocator"));
+        THROW_IF_FALSE(m_context.create_command_allocator(&m_rt_cmd_pools[i], &m_gfx_queue,
+                                                          "secondary command allocator"));
     }
 
     // Create raster root signature
@@ -370,7 +374,7 @@ void glRemix::glRemixRenderer::create()
 
 void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7* cmd_list)
 {
-    glState& state = m_driver.get_state();
+    glState& state = sm_driver.get_state();
     if (state.m_pending_geometries.empty())
     {
         return;
@@ -458,25 +462,29 @@ void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7
 
 void glRemix::glRemixRenderer::create_pending_textures(ID3D12GraphicsCommandList7* cmd_list)
 {
-    glState& state = m_driver.get_state();
+    glState& state = sm_driver.get_state();
     if (state.m_pending_textures.empty())
     {
         return;
     }
 
+    // TODO: Use static allocator
     std::vector<dx::D3D12Texture*> textures_to_barrier;
-    textures_to_barrier.reserve(state.m_pending_textures.size());
+
+    const size_t first_new_texture_idx = m_textures.size();
+
     for (size_t i = 0; i < state.m_pending_textures.size(); i++)
     {
         auto& pending = state.m_pending_textures[i];
         TextureAndDescriptor texture;
         texture.texture.desc = pending.desc;
 
+        // Create texture directly in COPY_DEST layout for the upload
         THROW_IF_FALSE(m_context.create_texture(pending.desc, D3D12_BARRIER_LAYOUT_COPY_DEST,
                                                 &texture.texture, nullptr, "texture"));
 
-        m_texture_upload_buffers.emplace_back();
-        dx::D3D12Buffer& staging = m_texture_upload_buffers.back();
+        m_texture_upload_buffers[get_frame_index()].emplace_back();
+        dx::D3D12Buffer& staging = m_texture_upload_buffers[get_frame_index()].back();
         m_context.copy_to_texture(cmd_list, pending.pixels, &staging, &texture.texture);
 
         texture.page_index = m_descriptor_pager.allocate_descriptor(m_context,
@@ -485,16 +493,23 @@ void glRemix::glRemixRenderer::create_pending_textures(ID3D12GraphicsCommandList
         m_context.create_shader_resource_view_texture(texture.texture, pending.desc.format,
                                                       texture.descriptor);
         m_textures.push_back(std::move(texture));
-        dx::D3D12Texture* tex_ptr = &m_textures[m_textures.size() - 1].texture;
-        m_context.mark_use(tex_ptr, dx::Usage::SRV_PIXEL);
-        textures_to_barrier.push_back(tex_ptr);
     }
 
-    if (!textures_to_barrier.empty())
+    for (size_t i = first_new_texture_idx; i < m_textures.size(); i++)
     {
-        m_context.emit_barriers(cmd_list, nullptr, 0, textures_to_barrier.data(),
-                                textures_to_barrier.size());
+        textures_to_barrier.push_back(&m_textures[i].texture);
     }
+
+    for (auto* tex : textures_to_barrier)
+    {
+        m_context.mark_use(tex, dx::Usage::SRV_RT);
+    }
+    m_context.emit_barriers(cmd_list, nullptr, 0, textures_to_barrier.data(),
+                            textures_to_barrier.size());
+
+    THROW_IF_FALSE(SUCCEEDED(cmd_list->Close()));
+    const std::array<ID3D12CommandList*, 1> lists = { cmd_list };
+    m_gfx_queue.queue->ExecuteCommandLists(1, lists.data());
 
     state.m_pending_textures.clear();
 }
@@ -725,7 +740,7 @@ UINT64 glRemix::glRemixRenderer::create_hash(std::vector<Vertex> vertices,
 
 void glRemix::glRemixRenderer::handle_per_frame_replacement()
 {
-    glState& state = m_driver.get_state();
+    glState& state = sm_driver.get_state();
 
     if (state.m_mesh_replacement_tracker.empty())
     {
@@ -750,7 +765,7 @@ void glRemix::glRemixRenderer::handle_per_frame_replacement()
 // replaces asset in scene based on file provided by user in ImGui
 void glRemix::glRemixRenderer::replace_mesh(UINT64 meshID, const char* new_asset_path)
 {
-    glState& state = m_driver.get_state();
+    glState& state = sm_driver.get_state();
 
     UINT32 old_mesh_mv_idx = -1;
     UINT32 old_mesh_mat_idx = -1;
@@ -868,7 +883,7 @@ void glRemix::glRemixRenderer::transform_replacement_vertices(std::vector<Vertex
 // builds top level acceleration structure with blas buffer (can be called each frame likely)
 void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
 {
-    const auto state = m_driver.get_state();
+    const auto state = sm_driver.get_state();
     // create an instance descriptor for all geometry
     // TODO: Check if this truncates size_t -> UINT
     const UINT instance_count = static_cast<UINT>(state.m_meshes.size());  // this frame's meshes
@@ -878,8 +893,7 @@ void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
         return;
     }
 
-    // TODO: Use some sort of static allocator or reuse previous buffer
-    // Use static vector as hack for now
+    // TODO: Replace with arena allocator
     static std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instance_descs(instance_count);
     if (instance_count > instance_descs.size())
     {
@@ -903,8 +917,16 @@ void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
         instance_descs[i] = desc;
     }
 
-    assert(m_tlas.instance.desc.size >= sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instance_count);
-    // TODO: Recreate instance buffer if too small
+    if (m_tlas.instance.desc.size < sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instance_count)
+    {
+        dx::BufferDesc instance_buffer_desc{
+            .size = sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instance_count,
+            .stride = sizeof(D3D12_RAYTRACING_INSTANCE_DESC),
+            .visibility = dx::CPU | dx::GPU,
+        };
+        THROW_IF_FALSE(m_context.create_buffer(instance_buffer_desc, &m_tlas.instance,
+                                               "TLAS instance buffer"));
+    }
 
     void* cpu_ptr;
     THROW_IF_FALSE(m_context.map_buffer(&m_tlas.instance, &cpu_ptr));
@@ -982,13 +1004,13 @@ void glRemix::glRemixRenderer::build_tlas(ID3D12GraphicsCommandList7* cmd_list)
 void glRemix::glRemixRenderer::render()
 {
     // Read GL stream and set resources accordingly
-    auto& state = m_driver.get_state();
+    auto& state = sm_driver.get_state();
     state.m_num_mesh_resources
         = m_mesh_resources
               .size();  // required for setting mesh record pointers properly within driver
     state.m_num_textures = m_textures.size();
-    m_texture_upload_buffers.clear();
-    m_driver.process_stream();
+    m_texture_upload_buffers[get_frame_index()].clear();
+    sm_driver.process_stream();
 
     if (state.m_create_context)
     {
@@ -1039,6 +1061,8 @@ void glRemix::glRemixRenderer::render()
     // Be careful not to call the ID3D12Interface reset instead
     THROW_IF_FALSE(SUCCEEDED(m_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
 
+    THROW_IF_FALSE(SUCCEEDED(m_rt_cmd_pools[get_frame_index()].cmd_allocator->Reset()));
+
     // Create a command list in the open state
     ComPtr<ID3D12GraphicsCommandList7> cmd_list;
     THROW_IF_FALSE(m_context.create_command_list(cmd_list.ReleaseAndGetAddressOf(),
@@ -1075,7 +1099,14 @@ void glRemix::glRemixRenderer::render()
 
     // Build all pending buffers from geometry collected in read_gl_command_stream
     create_pending_buffers(cmd_list.Get());
-    create_pending_textures(cmd_list.Get());
+    {
+        // TODO: Execute this block on another thread, or somehow assign it as a job
+        ComPtr<ID3D12GraphicsCommandList7> upload_cmd_list;
+        THROW_IF_FALSE(m_context.create_command_list(upload_cmd_list.ReleaseAndGetAddressOf(),
+                                                     m_rt_cmd_pools[get_frame_index()],
+                                                     "texture upload command list"));
+        create_pending_textures(upload_cmd_list.Get());
+    }
 
     // replace meshes in m_meshes if applicable
     handle_per_frame_replacement();
@@ -1155,8 +1186,16 @@ void glRemix::glRemixRenderer::render()
     build_tlas(cmd_list.Get());
 
     // Dispatch rays to UAV render target
+    if (!state.m_meshes.empty())
     {
-        XMMATRIX proj = XMLoadFloat4x4(&state.m_matrix_stack.top(GL_PROJECTION));
+        float fov = XM_PIDIV2;  // 90 degrees
+        float aspect = float(win_dims.x) / float(win_dims.y);
+        float nearZ = 0.1f;
+        float farZ = 1000.0f;
+
+        XMMATRIX proj = XMMatrixPerspectiveFovRH(fov, aspect, nearZ, farZ);
+
+        // XMMATRIX proj = XMLoadFloat4x4(&state.m_matrix_stack.top(GL_PROJECTION));
 
         XMMATRIX inv_proj = XMMatrixInverse(nullptr, proj);
 

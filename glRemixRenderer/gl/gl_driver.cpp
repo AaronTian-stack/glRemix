@@ -1,72 +1,19 @@
 #include "gl_driver.h"
 #include "gl_command_utils.h"
+#include <shared/gl_utils.h>
 
 #include <Windows.h>
 LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace glRemix
 {
-// CORE IMMEDIATE MODE
-static void handle_begin(const GLCommandContext& ctx, const void* data)
+static void hash_and_commit_geometry(glState& state, const size_t* client_indices = nullptr)
 {
-    const auto* cmd = static_cast<const GLBeginCommand*>(data);
-    ctx.state.m_topology = cmd->mode;
-
-    ctx.state.t_vertices.clear();
-    ctx.state.t_indices.clear();
-}
-
-static void handle_end(const GLCommandContext& ctx, const void* data)
-{
-    const auto* cmd = static_cast<const GLEndCommand*>(data);
-    glState& state = ctx.state;
-    switch (state.m_topology)
+    if (!state.m_perspective || state.t_indices.empty())
     {
-        case GL_QUAD_STRIP:
-        {
-            const size_t quad_count = state.t_vertices.size() >= 4
-                                          ? (state.t_vertices.size() - 2) / 2
-                                          : 0;
-            state.t_indices.reserve(quad_count * 6);
-
-            for (UINT32 k = 0; k + 3 < state.t_vertices.size(); k += 2)
-            {
-                UINT32 a = k + 0;
-                UINT32 b = k + 1;
-                UINT32 c = k + 2;
-                UINT32 d = k + 3;
-
-                state.t_indices.push_back(a);
-                state.t_indices.push_back(b);
-                state.t_indices.push_back(d);
-                state.t_indices.push_back(a);
-                state.t_indices.push_back(d);
-                state.t_indices.push_back(c);
-            }
-            break;
-        }
-        case GL_QUADS:
-        {
-            const size_t quad_count = state.t_vertices.size() / 4;
-            state.t_indices.reserve(quad_count * 6);
-
-            for (UINT32 k = 0; k + 3 < state.t_vertices.size(); k += 4)
-            {
-                UINT32 a = k + 0;
-                UINT32 b = k + 1;
-                UINT32 c = k + 2;
-                UINT32 d = k + 3;
-
-                state.t_indices.push_back(a);
-                state.t_indices.push_back(b);
-                state.t_indices.push_back(c);
-                state.t_indices.push_back(a);
-                state.t_indices.push_back(c);
-                state.t_indices.push_back(d);
-            }
-            break;
-        }
-        default: break;
+        state.t_vertices.clear();
+        state.t_indices.clear();
+        return;
     }
 
     // bounding box variables
@@ -108,15 +55,17 @@ static void handle_end(const GLCommandContext& ctx, const void* data)
         XMStoreFloat3(&max_bb, maxv);
     }
 
+    bool use_existing = client_indices != nullptr;
     // get index data to hash
     for (int i = 0; i < state.t_indices.size(); ++i)
     {
-        const UINT32& index = state.t_indices[i];
+        const uint32_t& index = use_existing ? client_indices[state.t_indices[i]]
+                                             : state.t_indices[i];
         hash_combine(index);
     }
 
     // check if hash exists
-    UINT64 hash = seed;
+    uint64_t hash = seed;
 
     MeshRecord* mesh;
     if (state.m_mesh_map.contains(hash))
@@ -132,8 +81,8 @@ static void handle_end(const GLCommandContext& ctx, const void* data)
         pending.vertices = std::move(state.t_vertices);
         pending.indices = std::move(state.t_indices);
         pending.hash = hash;
-        pending.mat_idx = static_cast<UINT32>(state.m_materials.size());
-        pending.mv_idx = static_cast<UINT32>(state.m_matrix_pool.size());
+        pending.mat_idx = static_cast<uint32_t>(state.m_materials.size());
+        pending.mv_idx = static_cast<uint32_t>(state.m_matrix_pool.size());
 
         new_mesh.blas_vb_ib_idx = state.m_num_mesh_resources + state.m_pending_geometries.size();
 
@@ -147,19 +96,19 @@ static void handle_end(const GLCommandContext& ctx, const void* data)
     }
 
     // Assign per-instance data (not cached)
-    mesh->mat_idx = static_cast<UINT32>(state.m_materials.size());
+    mesh->mat_idx = static_cast<uint32_t>(state.m_materials.size());
     // Store the current state of the material in the materials buffer
     // TODO: Modifying materials?
     state.m_materials.push_back(state.m_material);
 
-    mesh->mv_idx = static_cast<UINT32>(state.m_matrix_pool.size());
+    mesh->mv_idx = static_cast<uint32_t>(state.m_matrix_pool.size());
 
     state.m_matrix_pool.push_back(state.m_matrix_stack.top(GL_MODELVIEW));
 
-    if (ctx.state.m_texture_2d)
+    if (state.m_texture_2d)
     {
-        auto& map = ctx.state.m_texture_indices;
-        auto it = map.find(ctx.state.m_texture_index);
+        auto& map = state.m_texture_indices;
+        auto it = map.find(state.m_texture_index);
         if (it != map.end())
         {
             mesh->tex_idx = it->second;
@@ -172,6 +121,264 @@ static void handle_end(const GLCommandContext& ctx, const void* data)
     mesh->max_bb = max_bb;
 
     state.m_meshes.push_back(*mesh);
+}
+
+static void triangulate(glState& state)
+{
+    switch (state.m_topology)
+    {
+        case GL_POINTS:
+        {
+            break;
+        }
+        case GL_LINES:
+        {
+            const size_t vert_count = state.t_vertices.size();
+            if (vert_count < 2)
+            {
+                break;
+            }
+
+            const size_t seg_count = vert_count / 2;
+            state.t_indices.reserve(seg_count * 3);
+
+            for (uint32_t k = 0; k + 1 < vert_count; k += 2)
+            {
+                uint32_t a = k + 0;
+                uint32_t b = k + 1;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(b);
+            }
+            break;
+        }
+        case GL_LINE_STRIP:
+        {
+            const size_t vert_count = state.t_vertices.size();
+            if (vert_count < 2)
+            {
+                break;
+            }
+
+            const size_t seg_count = vert_count - 1;
+            state.t_indices.reserve(seg_count * 3);
+
+            for (uint32_t k = 0; k + 1 < vert_count; ++k)
+            {
+                uint32_t a = k;
+                uint32_t b = k + 1;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(b);
+            }
+            break;
+        }
+
+        case GL_LINE_LOOP:
+        {
+            const size_t vert_count = state.t_vertices.size();
+            if (vert_count < 2)
+            {
+                break;
+            }
+            const size_t seg_count = vert_count;
+            state.t_indices.reserve(seg_count * 3);
+
+            for (uint32_t k = 0; k + 1 < vert_count; ++k)
+            {
+                uint32_t a = k;
+                uint32_t b = k + 1;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(b);
+            }
+            {
+                uint32_t a = static_cast<uint32_t>(vert_count - 1);
+                uint32_t b = 0;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(b);
+            }
+            break;
+        }
+
+        case GL_QUAD_STRIP:
+        {
+            const size_t quad_count = state.t_vertices.size() >= 4
+                                          ? (state.t_vertices.size() - 2) / 2
+                                          : 0;
+            state.t_indices.reserve(quad_count * 6);
+
+            for (uint32_t k = 0; k + 3 < state.t_vertices.size(); k += 2)
+            {
+                uint32_t a = k + 0;
+                uint32_t b = k + 1;
+                uint32_t c = k + 2;
+                uint32_t d = k + 3;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(d);
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(d);
+                state.t_indices.push_back(c);
+            }
+            break;
+        }
+
+        case GL_QUADS:
+        {
+            const size_t quad_count = state.t_vertices.size() / 4;
+            state.t_indices.reserve(quad_count * 6);
+
+            for (uint32_t k = 0; k + 3 < state.t_vertices.size(); k += 4)
+            {
+                uint32_t a = k + 0;
+                uint32_t b = k + 1;
+                uint32_t c = k + 2;
+                uint32_t d = k + 3;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(c);
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(c);
+                state.t_indices.push_back(d);
+            }
+            break;
+        }
+
+        case GL_TRIANGLES:
+        {
+            const size_t vert_count = state.t_vertices.size();
+            if (vert_count < 3)
+            {
+                break;
+            }
+
+            const size_t tri_count = vert_count / 3;
+            state.t_indices.reserve(tri_count * 3);
+
+            for (uint32_t k = 0; k + 2 < vert_count; k += 3)
+            {
+                state.t_indices.push_back(k + 0);
+                state.t_indices.push_back(k + 1);
+                state.t_indices.push_back(k + 2);
+            }
+            break;
+        }
+
+        case GL_TRIANGLE_STRIP:
+        {
+            const size_t vert_count = state.t_vertices.size();
+            if (vert_count < 3)
+            {
+                break;
+            }
+
+            const size_t tri_count = vert_count - 2;
+            state.t_indices.reserve(tri_count * 3);
+
+            for (uint32_t k = 0; k + 2 < vert_count; ++k)
+            {
+                uint32_t a, b, c;
+
+                if ((k & 1) == 0)
+                {
+                    a = k;
+                    b = k + 1;
+                    c = k + 2;
+                }
+                else
+                {
+                    a = k + 1;
+                    b = k;
+                    c = k + 2;
+                }
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(c);
+            }
+            break;
+        }
+
+        case GL_TRIANGLE_FAN:
+        {
+            const size_t vert_count = state.t_vertices.size();
+            if (vert_count < 3)
+            {
+                break;
+            }
+
+            const size_t tri_count = vert_count - 2;
+            state.t_indices.reserve(tri_count * 3);
+
+            uint32_t center = 0;
+            for (uint32_t k = 1; k + 1 < vert_count; ++k)
+            {
+                uint32_t a = center;
+                uint32_t b = k;
+                uint32_t c = k + 1;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(c);
+            }
+            break;
+        }
+
+        case GL_POLYGON:
+        {
+            const size_t vert_count = state.t_vertices.size();
+            if (vert_count < 3)
+            {
+                break;
+            }
+
+            const size_t tri_count = vert_count - 2;
+            state.t_indices.reserve(tri_count * 3);
+
+            uint32_t center = 0;
+            for (uint32_t k = 1; k + 1 < vert_count; ++k)
+            {
+                uint32_t a = center;
+                uint32_t b = k;
+                uint32_t c = k + 1;
+
+                state.t_indices.push_back(a);
+                state.t_indices.push_back(b);
+                state.t_indices.push_back(c);
+            }
+            break;
+        }
+
+        default: break;
+    }
+}
+
+// CORE IMMEDIATE MODE
+static void handle_begin(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLBeginCommand*>(data);
+    ctx.state.m_topology = cmd->mode;
+
+    ctx.state.t_vertices.clear();
+    ctx.state.t_indices.clear();
+}
+
+static void handle_end(const GLCommandContext& ctx, const void* data)
+{
+    const auto* cmd = static_cast<const GLEndCommand*>(data);
+    glState& state = ctx.state;
+
+    triangulate(state);
+
+    hash_and_commit_geometry(state);
 }
 
 static void handle_vertex2f(const GLCommandContext& ctx, const void* data)
@@ -233,7 +440,7 @@ static void handle_call_list(const GLCommandContext& ctx, const void* data)
         auto& list_buf = ctx.state.m_display_lists[cmd->list];
 
         size_t offset = 0;
-        const UINT32 list_size = static_cast<UINT32>(list_buf.size());
+        const uint32_t list_size = static_cast<uint32_t>(list_buf.size());
 
         ctx.state.m_in_call = true;
         ctx.driver.read_buffer(ctx, list_buf.data(), list_size, offset);
@@ -339,8 +546,171 @@ static void handle_tex_envf(const GLCommandContext& ctx, const void* data)
 // -----------------------------------------------------------------------------
 // MATRIX COMMANDS
 // -----------------------------------------------------------------------------
+// CLIENT STATE
+template<typename I, typename O>
+void convert_ptr_template(size_t count, const void* ptr, O* out, bool normalize = false)
+{
+    const I* src_ptr = static_cast<const I*>(ptr);
+    for (size_t i = 0; i < count; ++i)
+    {
+        out[i] = normalize ? static_cast<O>(src_ptr[i]) / 255.f : static_cast<O>(src_ptr[i]);
+    }
+}
 
-static void handle_draw_elements(const GLCommandContext& ctx, const void* data) {}
+template<typename O>
+void convert_ptr(uint32_t type, size_t count, const void* ptr, O* out, bool normalize = false)
+{
+    switch (type)
+    {
+        case GL_UNSIGNED_BYTE: convert_ptr_template<uint8_t>(count, ptr, out, normalize); break;
+        case GL_BYTE: convert_ptr_template<int8_t>(count, ptr, out); break;
+        case GL_UNSIGNED_SHORT: convert_ptr_template<uint16_t>(count, ptr, out); break;
+        case GL_SHORT: convert_ptr_template<int16_t>(count, ptr, out); break;
+        case GL_UNSIGNED_INT: convert_ptr_template<uint32_t>(count, ptr, out); break;
+        case GL_INT: convert_ptr_template<int32_t>(count, ptr, out); break;
+        case GL_FLOAT: convert_ptr_template<float>(count, ptr, out); break;
+        case GL_DOUBLE: convert_ptr_template<double>(count, ptr, out); break;
+        default: throw std::runtime_error("Unsupported type");
+    }
+}
+
+static void handle_draw_arrays(const GLCommandContext& ctx, const void* data)
+{
+    const GLRemixDrawArraysCommand* cmd = static_cast<const GLRemixDrawArraysCommand*>(data);
+    glState& state = ctx.state;
+
+    state.t_vertices.clear();
+    state.t_indices.clear();
+
+    state.m_topology = cmd->mode;
+    state.t_vertices.resize(cmd->count);
+
+    const uint8_t* client_data = reinterpret_cast<const uint8_t*>(cmd + 1);
+
+    thread_local std::vector<float> scratch_buffer;
+
+    // Loop over enabled arrays
+    for (uint32_t arr = 0; arr < cmd->enabled; arr++)
+    {
+        const GLRemixClientArrayHeader& h = cmd->headers[arr];
+
+        const size_t component_count = cmd->count * h.size;
+        const bool normalize = h.array_type == GLRemixClientArrayType::COLOR;
+
+        scratch_buffer.resize(component_count);
+        float* f_ptr = scratch_buffer.data();
+
+        for (size_t v_idx = 0; v_idx < cmd->count; v_idx++)
+        {
+            const void* src = client_data + (v_idx * h.stride);
+
+            convert_ptr<float>(h.type, h.size, src, f_ptr, normalize);
+
+            switch (h.array_type)
+            {
+                case GLRemixClientArrayType::VERTEX:
+                    state.t_vertices[v_idx].position = XMFLOAT3{ f_ptr[0], f_ptr[1],
+                                                                 h.size > 2 ? f_ptr[2] : 0.0f };
+                    break;
+
+                case GLRemixClientArrayType::NORMAL:
+                    state.t_vertices[v_idx].normal = XMFLOAT3{ f_ptr[0], f_ptr[1], f_ptr[2] };
+                    break;
+
+                case GLRemixClientArrayType::COLOR:
+                    state.t_vertices[v_idx].color = XMFLOAT4{ f_ptr[0], f_ptr[1], f_ptr[2],
+                                                              h.size > 3 ? f_ptr[3] : 1.0f };
+                    break;
+
+                case GLRemixClientArrayType::TEXCOORD:
+                    state.t_vertices[v_idx].uv = XMFLOAT2{ f_ptr[0], h.size > 1 ? f_ptr[1] : 0.0f };
+                    break;
+
+                default: break;
+            }
+
+            f_ptr += h.size;
+        }
+        client_data += h.array_bytes;
+    }
+    triangulate(state);
+
+    hash_and_commit_geometry(state);
+}
+
+static void handle_draw_elements(const GLCommandContext& ctx, const void* data)
+{
+    const GLRemixDrawElementsCommand* cmd = static_cast<const GLRemixDrawElementsCommand*>(data);
+    glState& state = ctx.state;
+
+    state.t_vertices.clear();
+    state.t_indices.clear();
+
+    state.m_topology = cmd->mode;
+    state.t_vertices.resize(cmd->count);
+
+    const uint8_t* client_data = reinterpret_cast<const uint8_t*>(cmd + 1);
+
+    thread_local std::vector<float> scratch_buffer;
+    thread_local std::vector<size_t> client_indices;
+
+    // Loop over enabled arrays
+    for (uint32_t arr = 0; arr < cmd->enabled; arr++)
+    {
+        const GLRemixClientArrayHeader& h = cmd->headers[arr];
+
+        if (h.array_type == GLRemixClientArrayType::INDICES)
+        {
+            client_indices.resize(cmd->count);
+            convert_ptr<size_t>(h.type, cmd->count, client_data, client_indices.data());
+            client_data += h.array_bytes;
+            continue;
+        }
+
+        const size_t component_count = cmd->count * h.size;
+        const bool normalize = h.array_type == GLRemixClientArrayType::COLOR;
+
+        scratch_buffer.resize(component_count);
+        float* f_ptr = scratch_buffer.data();
+
+        for (size_t v_idx = 0; v_idx < cmd->count; v_idx++)
+        {
+            const void* src = client_data + (v_idx * h.stride);
+
+            convert_ptr<float>(h.type, h.size, src, f_ptr, normalize);
+
+            switch (h.array_type)
+            {
+                case GLRemixClientArrayType::VERTEX:
+                    state.t_vertices[v_idx].position = XMFLOAT3{ f_ptr[0], f_ptr[1],
+                                                                 h.size > 2 ? f_ptr[2] : 0.0f };
+                    break;
+
+                case GLRemixClientArrayType::NORMAL:
+                    state.t_vertices[v_idx].normal = XMFLOAT3{ f_ptr[0], f_ptr[1], f_ptr[2] };
+                    break;
+
+                case GLRemixClientArrayType::COLOR:
+                    state.t_vertices[v_idx].color = XMFLOAT4{ f_ptr[0], f_ptr[1], f_ptr[2],
+                                                              h.size > 3 ? f_ptr[3] : 1.0f };
+                    break;
+
+                case GLRemixClientArrayType::TEXCOORD:
+                    state.t_vertices[v_idx].uv = XMFLOAT2{ f_ptr[0], h.size > 1 ? f_ptr[1] : 0.0f };
+                    break;
+
+                default: break;
+            }
+
+            f_ptr += h.size;
+        }
+        client_data += h.array_bytes;
+    }
+
+    triangulate(state);
+
+    hash_and_commit_geometry(state, client_indices.data());
+}
 
 // MATRIX OPERATIONS
 static void handle_matrix_mode(const GLCommandContext& ctx, const void* data)
@@ -417,6 +787,7 @@ static void handle_ortho(const GLCommandContext& ctx, const void* data)
 
     ctx.state.m_matrix_stack.ortho(ctx.state.m_matrix_mode, cmd->left, cmd->right, cmd->bottom,
                                    cmd->top, cmd->zNear, cmd->zFar);
+    ctx.state.m_perspective = false;
 }
 
 static void handle_frustum(const GLCommandContext& ctx, const void* data)
@@ -425,6 +796,7 @@ static void handle_frustum(const GLCommandContext& ctx, const void* data)
 
     ctx.state.m_matrix_stack.frustum(ctx.state.m_matrix_mode, cmd->left, cmd->right, cmd->bottom,
                                      cmd->top, cmd->zNear, cmd->zFar);
+    ctx.state.m_perspective = true;
 }
 
 static void handle_perspective(const GLCommandContext& ctx, const void* data)
@@ -433,6 +805,7 @@ static void handle_perspective(const GLCommandContext& ctx, const void* data)
 
     ctx.state.m_matrix_stack.perspective(ctx.state.m_matrix_mode, cmd->fovY, cmd->aspect,
                                          cmd->zNear, cmd->zFar);
+    ctx.state.m_perspective = true;
 }
 
 // RENDERING
@@ -640,6 +1013,10 @@ void glRemix::glDriver::init_handlers()
     gl_command_handlers[static_cast<size_t>(GLCMD_TEX_PARAMETER)] = &handle_tex_param;
     gl_command_handlers[static_cast<size_t>(GLCMD_TEX_ENV_I)] = &handle_tex_envi;
     gl_command_handlers[static_cast<size_t>(GLCMD_TEX_ENV_F)] = &handle_tex_envf;
+    // CLIENT STATE
+    gl_command_handlers[static_cast<size_t>(GLREMIXCMD_DRAW_ARRAYS)] = &handle_draw_arrays;
+    gl_command_handlers[static_cast<size_t>(GLREMIXCMD_DRAW_ELEMENTS)] = &handle_draw_elements;
+    gl_command_handlers[static_cast<size_t>(GLREMIXCMD_DRAW_RANGE_ELEMENTS)] = &handle_draw_elements;
 
     // MATRIX OPERATIONS
     gl_command_handlers[static_cast<size_t>(GLCMD_MATRIX_MODE)] = &handle_matrix_mode;
@@ -688,18 +1065,17 @@ glRemix::glDriver::glDriver()
 void glRemix::glDriver::init()
 {
     m_ipc.init_reader();
-    m_command_buffer.resize(m_ipc.get_max_payload_size());
 
     init_handlers();
 }
 
 void glRemix::glDriver::process_stream()
 {
-    UINT32 buffer_size = 0;
-    UINT32 frame_index = 0;
-    m_ipc.consume_frame_or_wait(m_command_buffer.data(), &buffer_size, &frame_index);
+    uint32_t frame_index = 0;
+    uint32_t frame_bytes = 0;
+    m_ipc.consume_frame_or_wait(m_command_buffer.data(), &frame_index, &frame_bytes);
 
-    if (buffer_size == 0)
+    if (frame_bytes == 0)
     {
         return;
     }
@@ -716,10 +1092,10 @@ void glRemix::glDriver::process_stream()
 
     m_state.m_offset = 0;
     GLCommandContext ctx{ m_state, *this };
-    read_buffer(ctx, m_command_buffer.data(), buffer_size, m_state.m_offset);
+    read_buffer(ctx, m_command_buffer.data(), frame_bytes, m_state.m_offset);
 }
 
-void glRemix::glDriver::read_buffer(const GLCommandContext& ctx, const UINT8* buffer,
+void glRemix::glDriver::read_buffer(const GLCommandContext& ctx, const uint8_t* buffer,
                                     size_t buffer_size, size_t& offset)
 {
     GLCommandView view{};
@@ -746,34 +1122,34 @@ void glRemix::glDriver::read_buffer(const GLCommandContext& ctx, const UINT8* bu
         {
             char buffer[256];
             sprintf_s(buffer, "glxRemixRenderer - Unhandled Command: %d (size: %u)\n", view.type,
-                      view.data_size);
+                      view.cmd_bytes);
             OutputDebugStringA(buffer);
         }
     }
 }
 
-bool glRemix::glDriver::read_next_command(const UINT8* buffer, size_t buffer_size, size_t& offset,
+bool glRemix::glDriver::read_next_command(const uint8_t* buffer, size_t buffer_size, size_t& offset,
                                           GLCommandView& out)
 {
     // ensure that we are not reading out of bounds
-    if (offset + sizeof(GLCommandUnifs) > buffer_size)
+    if (offset + sizeof(GLCommandHeader) > buffer_size)
     {
         return false;
     }
 
-    const auto* header = reinterpret_cast<const GLCommandUnifs*>(buffer + offset);
-    offset += sizeof(GLCommandUnifs);
+    const auto* header = reinterpret_cast<const GLCommandHeader*>(buffer + offset);
+    offset += sizeof(GLCommandHeader);
 
     // ensure that we are not reading out of bounds
-    if (offset + header->dataSize > buffer_size)
+    if (offset + header->cmd_bytes > buffer_size)
     {
         return false;
     }
 
     out.type = header->type;
-    out.data_size = header->dataSize;
+    out.cmd_bytes = header->cmd_bytes;
     out.data = buffer + offset;
 
-    offset += header->dataSize;  // move header after extracting latest command
+    offset += header->cmd_bytes;  // move header after extracting latest command
     return true;
 }

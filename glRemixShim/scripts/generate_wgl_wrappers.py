@@ -31,6 +31,8 @@ WGL_FUNCTIONS = [
     ("BOOL", "wglUseFontOutlinesA", "HDC dc, DWORD first, DWORD count, DWORD listBase, FLOAT deviation, FLOAT extrusion, int format, LPGLYPHMETRICSFLOAT metrics", "dc, first, count, listBase, deviation, extrusion, format, metrics", "FALSE"),
     ("BOOL", "wglUseFontOutlinesW", "HDC dc, DWORD first, DWORD count, DWORD listBase, FLOAT deviation, FLOAT extrusion, int format, LPGLYPHMETRICSFLOAT metrics", "dc, first, count, listBase, deviation, extrusion, format, metrics", "FALSE"),
     ("BOOL", "wglSwapIntervalEXT", "int interval", "interval", "0"),
+    ("const char*", "wglGetExtensionsStringARB", "HDC hdc", "hdc", "nullptr"),
+    ("const char*", "wglGetExtensionsStringEXT", "", "", "nullptr")
 ]
 
 

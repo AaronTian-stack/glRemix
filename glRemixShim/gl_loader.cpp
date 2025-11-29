@@ -4,8 +4,6 @@
 #include <string>
 #include <tsl/robin_map.h>
 
-#include <shared/ipc_protocol.h>
-
 namespace glRemix
 {
 glRemix::IPCProtocol g_ipc;

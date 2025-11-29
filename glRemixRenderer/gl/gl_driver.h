@@ -11,6 +11,8 @@
 namespace glRemix
 {
 constexpr size_t NUM_COMMANDS = static_cast<size_t>(GLCommandType::_COUNT);
+constexpr SIZE_T NUM_CLIENT_ARRAYS = static_cast<SIZE_T>(GLRemixClientArrayType::_COUNT);
+
 class glDriver;  // forward declare
 class glState;
 
@@ -18,7 +20,7 @@ class glState;
 struct GLCommandView
 {
     GLCommandType type;
-    UINT32 data_size;
+    UINT32 cmd_bytes;
     const void* data;
 };
 
@@ -33,7 +35,7 @@ class glDriver
 {
     glState m_state;
     IPCProtocol m_ipc;
-    std::vector<UINT8> m_command_buffer;
+    std::array<UINT8, k_MAX_IPC_PAYLOAD> m_command_buffer;
 
     using GLCommandHandler = void (*)(const GLCommandContext&, const void* data);
     std::array<GLCommandHandler, NUM_COMMANDS> gl_command_handlers{};

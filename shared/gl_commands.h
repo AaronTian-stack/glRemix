@@ -7,6 +7,8 @@
 
 namespace glRemix
 {
+
+/* ENUMS */
 enum class GLCommandType : UINT32
 {
     // Core Immediate Mode
@@ -25,14 +27,9 @@ enum class GLCommandType : UINT32
     GLCMD_END_LIST,
 
     // Client State
-    GLCMD_ENABLE_CLIENT_STATE,
-    GLCMD_DISABLE_CLIENT_STATE,
-    GLCMD_VERTEX_POINTER,
-    GLCMD_NORMAL_POINTER,
-    GLCMD_TEXCOORD_POINTER,
-    GLCMD_COLOR_POINTER,
-    GLCMD_DRAW_ARRAYS,    // within fixed-function scope
-    GLCMD_DRAW_ELEMENTS,  // within fixed-function scope
+    GLREMIXCMD_DRAW_ARRAYS,
+    GLREMIXCMD_DRAW_ELEMENTS,
+    GLREMIXCMD_DRAW_RANGE_ELEMENTS,
 
     // Matrix Operations
     GLCMD_MATRIX_MODE,
@@ -94,7 +91,43 @@ enum class GLCommandType : UINT32
              // of enum elements)
 };
 
-// Component Structs
+enum class GLRemixClientArrayType : UINT32
+{
+    VERTEX,    // GL_VERTEX_ARRAY
+    NORMAL,    // GL_NORMAL_ARRAY
+    COLOR,     // GL_COLOR_ARRAY
+    TEXCOORD,  // GL_TEXCOORD_ARRAY
+    COLORIDX,  // GL_INDEX_ARRAY
+    EDGEFLAG,  // GL_EDGEFLAG_ARRAY
+    INDICES,   // `indices` passed in `glDrawElements`
+    _COUNT,
+    _INVALID
+};
+
+/* HEADER STRUCTS */
+struct GLCommandHeader
+{
+    GLCommandType type;
+    UINT32 cmd_bytes;
+};
+
+// per-frame uniforms for OpenGL commands sent via IPC
+struct GLFrameHeader
+{
+    UINT32 frame_index;  // incremental frame counter
+    UINT32 frame_bytes;  // bytes following this ipc_payload
+};
+
+struct GLRemixClientArrayHeader
+{
+    UINT32 size;
+    UINT32 type;
+    UINT32 stride;
+    UINT32 array_bytes;
+    GLRemixClientArrayType array_type;
+};
+
+/* COMPONENT STRUCTS */
 struct GLVec2f
 {
     float x, y;
@@ -123,14 +156,6 @@ struct GLVec4d
 struct GLEmptyCommand
 {
     UINT32 reserved = 0;  // to maintain alignment. think of as padding GPUBuffers
-};
-
-// Named *Unifs for clear association
-// Header for all commands
-struct GLCommandUnifs
-{
-    GLCommandType type;
-    UINT32 dataSize;
 };
 
 /* CORE IMMEDIATE MODE */
@@ -162,55 +187,33 @@ struct GLNewListCommand
 using GLEndListCommand = GLEmptyCommand;
 
 /* CLIENT STATE */
-struct GLEnableClientStateCommand
-{
-    UINT32 array;
-};
-
-struct GLDisableClientStateCommand
-{
-    UINT32 array;
-};
-
-struct GLVertexPointerCommand
-{
-    UINT32 size;
-    UINT32 type;
-    UINT32 stride;
-};
-
-struct GLNormalPointerCommand
-{
-    UINT32 type;
-    UINT32 stride;
-};
-
-struct GLTexCoordPointerCommand
-{
-    UINT32 size;
-    UINT32 type;
-    UINT32 stride;
-};
-
-struct GLColorPointerCommand
-{
-    UINT32 size;
-    UINT32 type;
-    UINT32 stride;
-};
-
-struct GLDrawArraysCommand
+struct GLRemixDrawArraysCommand
 {
     UINT32 mode;
     UINT32 first;
     UINT32 count;
+    UINT32 enabled;  // amount of currently enabled client array kinds (<= 6)
+    GLRemixClientArrayHeader headers[static_cast<UINT32>(GLRemixClientArrayType::_COUNT)];
 };
 
-struct GLDrawElementsCommand
+struct GLRemixDrawElementsCommand
 {
     UINT32 mode;
     UINT32 count;
     UINT32 type;
+    UINT32 enabled;
+    GLRemixClientArrayHeader headers[static_cast<UINT32>(GLRemixClientArrayType::_COUNT)];
+};
+
+struct GLRemixDrawRangeElementsCommand
+{
+    UINT32 mode;
+    UINT32 start;
+    UINT32 end;
+    UINT32 count;
+    UINT32 type;
+    UINT32 enabled;
+    GLRemixClientArrayHeader headers[static_cast<UINT32>(GLRemixClientArrayType::_COUNT)];
 };
 
 /* MATRIX OPERATIONS */
@@ -289,14 +292,18 @@ struct GLBindTextureCommand
     UINT32 texture;
 };
 
+constexpr UINT32 k_MAX_TEXTURE_IDS_PER_COMMAND = 64;
+
 struct GLGenTexturesCommand
 {
     UINT32 n;
+    UINT32 ids[k_MAX_TEXTURE_IDS_PER_COMMAND];  // should usually be 1-4
 };
 
 struct GLDeleteTexturesCommand
 {
     UINT32 n;
+    UINT32 ids[k_MAX_TEXTURE_IDS_PER_COMMAND];
 };
 
 struct GLTexImage2DCommand

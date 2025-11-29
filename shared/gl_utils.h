@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <GL/gl.h>
 
@@ -8,7 +8,7 @@ namespace utils
 {
 /* Handled all cases specified here:
  * https://learn.microsoft.com/en-us/windows/win32/opengl/glteximage2d */
-static inline UINT32 _BytesPerComponent(GLenum type)
+static inline UINT32 _BytesPerComponentType(GLenum type)
 {
     switch (type)
     {
@@ -20,13 +20,14 @@ static inline UINT32 _BytesPerComponent(GLenum type)
         case GL_UNSIGNED_INT:
         case GL_INT:
         case GL_FLOAT: return 4;
+        case GL_DOUBLE: return 8;
         default: return 0;
     }
 }
 
 /* Handled all cases specified here:
  * https://learn.microsoft.com/en-us/windows/win32/opengl/glteximage2d */
-static inline UINT32 _ComponentsPerPixel(GLenum format)
+static inline UINT32 _ComponentsPerPixelFormat(GLenum format)
 {
     switch (format)
     {
@@ -42,49 +43,42 @@ static inline UINT32 _ComponentsPerPixel(GLenum format)
     }
 }
 
-inline UINT32 ComputePixelDataSize(GLsizei width, GLsizei height, GLenum format, GLenum type)
+static inline UINT32 ComputePixelDataSize(GLsizei width, GLsizei height, GLenum format, GLenum type)
 {
-    return static_cast<UINT32>(width) * static_cast<UINT32>(height) * _ComponentsPerPixel(format)
-           * _BytesPerComponent(type);
+    return static_cast<UINT32>(width) * static_cast<UINT32>(height)
+           * _ComponentsPerPixelFormat(format) * _BytesPerComponentType(type);
 }
 
-inline UINT32 ComputeClientArraySize(GLint count, GLint size, GLenum type, GLint stride)
+static inline SIZE_T InterpretStride(GLint size, GLenum type, GLint stride)
 {
-    UINT32 t = 0;
-    switch (type)
-    {
-        case GL_UNSIGNED_BYTE:
-        case GL_BYTE: t = 1; break;
-
-        case GL_SHORT:
-        case GL_UNSIGNED_SHORT: t = 2; break;
-
-        case GL_INT:
-        case GL_UNSIGNED_INT:
-        case GL_FLOAT: t = 4; break;
-
-        case GL_DOUBLE: t = 8; break;
-
-        default: assert(false && "glHooks - Unsupported client array GL type."); return 0;
-    }
-
     if (stride == 0)
     {
-        stride = size * t;
-    }
+        UINT32 bytes_per_component = _BytesPerComponentType(type);
 
+        stride = size * bytes_per_component;
+    }
+    return stride;
+}
+
+/**
+ * @param stride: Assumes stride has already been passed through `InterpretStride`
+ */
+static inline UINT32 ComputeClientArraySize(GLint count, GLint size, GLenum type, GLsizei stride)
+{
     return count * stride;
 }
 
-inline UINT32 ComputeIndexArraySize(GLint count, GLenum type)
+static inline GLRemixClientArrayType MapTo(GLenum cap)
 {
-    switch (type)
+    switch (cap)
     {
-        case GL_UNSIGNED_BYTE: return count * 1;
-        case GL_UNSIGNED_SHORT: return count * 2;
-        case GL_UNSIGNED_INT: return count * 4;
-
-        default: assert(false && "glHooks - Unsupported index array GL type"); return 0;
+        case GL_VERTEX_ARRAY: return GLRemixClientArrayType::VERTEX;
+        case GL_NORMAL_ARRAY: return GLRemixClientArrayType::NORMAL;
+        case GL_COLOR_ARRAY: return GLRemixClientArrayType::COLOR;
+        case GL_TEXTURE_COORD_ARRAY: return GLRemixClientArrayType::TEXCOORD;
+        case GL_INDEX_ARRAY: return GLRemixClientArrayType::COLORIDX;
+        case GL_EDGE_FLAG_ARRAY: return GLRemixClientArrayType::EDGEFLAG;
+        default: return GLRemixClientArrayType::_INVALID;
     }
 }
 }  // namespace utils

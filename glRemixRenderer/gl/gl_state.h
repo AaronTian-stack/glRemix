@@ -44,6 +44,7 @@ public:
     // matrix
     gl::glMatrixStack m_matrix_stack;
     UINT32 m_matrix_mode = GL_MODELVIEW;
+    bool m_perspective = true;
 
     // geometry
     UINT32 m_topology = GL_QUADS;

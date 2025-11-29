@@ -125,6 +125,19 @@ const UseDefinition& lookup_use_definition(Usage use_kind)
     return use_definitions[index];
 }
 
+constexpr const UseDefinition* lookup_definition_by_layout(D3D12_BARRIER_LAYOUT layout)
+{
+    // This is a small loop so should be ok, and constexpr allows for optimizations
+    for (const auto& def : use_definitions)
+    {
+        if (def.layout == layout)
+        {
+            return &def;
+        }
+    }
+    return nullptr;
+}
+
 bool are_layouts_compatible(D3D12_BARRIER_LAYOUT layout_a, D3D12_BARRIER_LAYOUT layout_b)
 {
     if (layout_a == layout_b)
@@ -194,6 +207,13 @@ void initialize_tracked_resource(Resource* resource, ID3D12Resource* d3d_resourc
     resource->is_texture = is_texture;
     resource->tracked_layout = initial_layout;
     resource->next_layout = initial_layout;
+
+    if (const auto* def = lookup_definition_by_layout(initial_layout))
+    {
+        resource->tracked_access = def->access;
+        resource->tracked_sync = def->sync;
+        resource->tracked_valid = true;
+    }
 
     if (is_texture)
     {
@@ -273,10 +293,10 @@ bool mark_use(Resource& resource, const Usage usage)
 void emit_barriers(ID3D12GraphicsCommandList7* command_list, Resource* const* resources,
                    const size_t resource_count, std::vector<BarrierLogEvent>* debug_log)
 {
-    // TODO: This is 8kb and probably should be reduced
     // If all the meshes are suddenly sent in one frame this will overflow
-    constexpr size_t max_texture_barriers = 64;
-    constexpr size_t max_buffer_barriers = 64;
+    // TODO: Replace with arena allocator
+    constexpr size_t max_texture_barriers = 101;
+    constexpr size_t max_buffer_barriers = 101;
     constexpr size_t max_barrier_groups = 2;
 
     D3D12_TEXTURE_BARRIER texture_barriers[max_texture_barriers]{};

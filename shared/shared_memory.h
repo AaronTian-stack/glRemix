@@ -12,9 +12,11 @@
         OutputDebugStringA(_buf);                                                                  \
     } while (0)
 
+#define FSTR(fmt, ...) std::format(fmt, __VA_ARGS__)
+
 namespace glRemix
 {
-constexpr UINT32 k_DEFAULT_CAPACITY = 1 * MEGABYTE;  // i.e. 1mb
+constexpr UINT32 k_DEFAULT_CAPACITY = 16 * MEGABYTE;
 
 class SharedMemory
 {
@@ -22,7 +24,7 @@ public:
     SharedMemory() = default;
     ~SharedMemory();
 
-    // writer creates or opens existing mapping and initializes header.
+    // writer creates or opens existing mapping and initializes frame header.
     bool create_for_writer(const wchar_t* map_name, const wchar_t* write_event_name,
                            const wchar_t* read_event_name);
 
