@@ -183,6 +183,7 @@ float3 transform_to_world(float3 local_dir, float3 N)
     }
     
     float3 tex_albedo = float3(1.0, 1.0, 1.0);
+    float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
     
     // Fetch texture
     if (mesh.tex_idx != 0xFFFFFFFFu)
