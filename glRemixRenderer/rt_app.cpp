@@ -188,11 +188,28 @@ void glRemix::glRemixRenderer::create()
             .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
         };
 
+        // create static sampler at s0
+        // TODO (per texture samplers?)
+        D3D12_STATIC_SAMPLER_DESC linear_wrap_sampler{};
+        linear_wrap_sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+        linear_wrap_sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+        linear_wrap_sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+        linear_wrap_sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+        linear_wrap_sampler.MipLODBias = 0.0f;
+        linear_wrap_sampler.MaxAnisotropy = 1;
+        linear_wrap_sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        linear_wrap_sampler.BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK;
+        linear_wrap_sampler.MinLOD = 0.0f;
+        linear_wrap_sampler.MaxLOD = D3D12_FLOAT32_MAX;
+        linear_wrap_sampler.ShaderRegister = 0;
+        linear_wrap_sampler.RegisterSpace = 0;
+        linear_wrap_sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
         D3D12_ROOT_SIGNATURE_DESC root_sig_desc{};
         root_sig_desc.NumParameters = static_cast<UINT>(root_parameters.size());
         root_sig_desc.pParameters = root_parameters.data();
-        root_sig_desc.NumStaticSamplers = 0;
-        root_sig_desc.pStaticSamplers = nullptr;
+        root_sig_desc.NumStaticSamplers = 1;
+        root_sig_desc.pStaticSamplers = &linear_wrap_sampler;
         root_sig_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED;
         // Add samplers if needed, note you have to bind a sampler heap when this flag is enabled
         // | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED;
@@ -410,6 +427,49 @@ void glRemix::glRemixRenderer::create_pending_buffers(ID3D12GraphicsCommandList7
     build_mesh_blas_batch(start_idx, state.m_pending_geometries.size(), cmd_list);
 
     state.m_pending_geometries.clear();
+}
+
+void glRemix::glRemixRenderer::create_pending_textures(ID3D12GraphicsCommandList7* cmd_list)
+{
+    glState& state = m_driver.get_state();
+    if (state.m_pending_textures.empty())
+    {
+        return;
+    }
+
+    std::vector<dx::D3D12Texture*> textures_to_barrier;
+    textures_to_barrier.reserve(state.m_pending_textures.size());
+    for (size_t i = 0; i < state.m_pending_textures.size(); i++)
+    {
+        auto& pending = state.m_pending_textures[i];
+        TextureAndDescriptor texture;
+        texture.texture.desc = pending.desc;
+
+        THROW_IF_FALSE(m_context.create_texture(pending.desc, D3D12_BARRIER_LAYOUT_COPY_DEST,
+                                                &texture.texture, nullptr, "texture"));
+
+        m_texture_upload_buffers.emplace_back();
+        dx::D3D12Buffer& staging = m_texture_upload_buffers.back();
+        m_context.copy_to_texture(cmd_list, pending.pixels, &staging, &texture.texture);
+
+        texture.page_index = m_descriptor_pager.allocate_descriptor(m_context,
+                                                                    dx::DescriptorPager::TEXTURES,
+                                                                    &texture.descriptor);
+        m_context.create_shader_resource_view_texture(texture.texture, pending.desc.format,
+                                                      texture.descriptor);
+        m_textures.push_back(std::move(texture));
+        dx::D3D12Texture* tex_ptr = &m_textures[m_textures.size() - 1].texture;
+        m_context.mark_use(tex_ptr, dx::Usage::SRV_PIXEL);
+        textures_to_barrier.push_back(tex_ptr);
+    }
+
+    if (!textures_to_barrier.empty())
+    {
+        m_context.emit_barriers(cmd_list, nullptr, 0, textures_to_barrier.data(),
+                                textures_to_barrier.size());
+    }
+
+    state.m_pending_textures.clear();
 }
 
 void glRemix::glRemixRenderer::build_mesh_blas_batch(const size_t start_idx, const size_t count,
@@ -719,6 +779,8 @@ void glRemix::glRemixRenderer::render()
     state.m_num_mesh_resources
         = m_mesh_resources
               .size();  // required for setting mesh record pointers properly within driver
+    state.m_num_textures = m_textures.size();
+    m_texture_upload_buffers.clear();
     m_driver.process_stream();
 
     if (state.m_create_context)
@@ -804,6 +866,7 @@ void glRemix::glRemixRenderer::render()
 
     // Build all pending buffers from geometry collected in read_gl_command_stream
     create_pending_buffers(cmd_list.Get());
+    create_pending_textures(cmd_list.Get());
 
     // Currently reserve TLAS, 1 UAV RT, 2 CBV
     constexpr auto reserved_descriptor_offset = 4;
@@ -840,6 +903,20 @@ void glRemix::glRemixRenderer::render()
                               + reserved_descriptor_offset;
             gpu_mesh.ib_idx = vb_ib_blas.index_buffer.descriptor.offset + ib_offset
                               + reserved_descriptor_offset;
+        }
+        // Textures
+        {
+            gpu_mesh.tex_idx = 0xFFFFFFFFu;
+
+            if (mesh.tex_idx != 0xFFFFFFFFu && mesh.tex_idx < m_textures.size())
+            {
+                auto tex_desc_offset = m_textures[mesh.tex_idx].descriptor.offset;
+                auto tex_page_index = m_textures[mesh.tex_idx].page_index;
+                auto tex_offset = m_descriptor_pager
+                                      .calculate_global_offset(dx::DescriptorPager::TEXTURES,
+                                                               tex_page_index);
+                gpu_mesh.tex_idx = tex_desc_offset + tex_offset + reserved_descriptor_offset;
+            }
         }
         gpu_mesh_records_to_copy.push_back(gpu_mesh);
     }

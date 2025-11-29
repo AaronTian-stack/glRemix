@@ -16,7 +16,7 @@ static inline UINT32 _BytesPerComponent(GLenum type)
         case GL_BYTE:
         case GL_BITMAP: return 1;
         case GL_UNSIGNED_SHORT:
-        case GL_SHORT:
+        case GL_SHORT: return 2;
         case GL_UNSIGNED_INT:
         case GL_INT:
         case GL_FLOAT: return 4;
@@ -35,7 +35,7 @@ static inline UINT32 _ComponentsPerPixel(GLenum format)
         case GL_BLUE:
         case GL_ALPHA:
         case GL_LUMINANCE: return 1;
-        case GL_LUMINANCE_ALPHA:
+        case GL_LUMINANCE_ALPHA: return 2;
         case GL_RGB: return 3;
         case GL_RGBA: return 4;
         default: return 0;

@@ -96,6 +96,8 @@ public:
                                                             const D3D12Descriptor& descriptor) const;
     void create_unordered_access_view_texture(const D3D12Texture& texture, DXGI_FORMAT format,
                                               const D3D12Descriptor& descriptor) const;
+    void create_shader_resource_view_texture(const D3D12Texture& texture, DXGI_FORMAT format,
+                                             const D3D12Descriptor& descriptor) const;
 
     void copy_descriptors(const D3D12Descriptor& dest_start, const D3D12Descriptor& src_start,
                           UINT count) const;

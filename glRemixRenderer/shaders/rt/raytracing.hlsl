@@ -16,6 +16,8 @@ ConstantBuffer<LightCB> light_cb : register(b1);
 
 StructuredBuffer<GPUMeshRecord> meshes : register(t1);
 
+SamplerState g_sampler : register(s0);
+
 // https://learn.microsoft.com/en-us/windows/win32/direct3d12/intersection-attributes
 typedef BuiltInTriangleIntersectionAttributes TriAttributes;
 
@@ -168,6 +170,16 @@ float3 transform_to_world(float3 local_dir, float3 N)
         StructuredBuffer<Material> mat_buf
             = ResourceDescriptorHeap[NonUniformResourceIndex(mesh.mat_buffer_idx)];
         mat = mat_buf[mesh.mat_idx];
+    }
+    
+    float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+    
+    // Fetch texture
+    if (mesh.tex_idx != 0xFFFFFFFFu)
+    {
+        Texture2D tex = ResourceDescriptorHeap[NonUniformResourceIndex(mesh.tex_idx)];
+        float4 tex_sample = tex.SampleLevel(g_sampler, uv, 0.0f);
+        albedo = tex_sample.rgb;
     }
 
     const float n_dot_l = max(dot(n_world, light_vec), 0.0);
