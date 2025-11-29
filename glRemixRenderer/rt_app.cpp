@@ -477,8 +477,8 @@ void glRemix::glRemixRenderer::create_pending_textures(ID3D12GraphicsCommandList
     {
         m_context.mark_use(tex, dx::Usage::SRV_RT);
     }
-    m_context.emit_barriers(cmd_list, nullptr, 0,
-                            textures_to_barrier.data(), textures_to_barrier.size());
+    m_context.emit_barriers(cmd_list, nullptr, 0, textures_to_barrier.data(),
+                            textures_to_barrier.size());
 
     THROW_IF_FALSE(SUCCEEDED(cmd_list->Close()));
     const std::array<ID3D12CommandList*, 1> lists = { cmd_list };
@@ -984,7 +984,7 @@ void glRemix::glRemixRenderer::render()
 
         XMMATRIX proj = XMMatrixPerspectiveFovRH(fov, aspect, nearZ, farZ);
 
-        //XMMATRIX proj = XMLoadFloat4x4(&state.m_matrix_stack.top(GL_PROJECTION));
+        // XMMATRIX proj = XMLoadFloat4x4(&state.m_matrix_stack.top(GL_PROJECTION));
 
         XMMATRIX inv_proj = XMMatrixInverse(nullptr, proj);
 
