@@ -36,7 +36,7 @@ static inline UINT32 _ComponentsPerPixelFormat(GLenum format)
         case GL_BLUE:
         case GL_ALPHA:
         case GL_LUMINANCE: return 1;
-        case GL_LUMINANCE_ALPHA:
+        case GL_LUMINANCE_ALPHA: return 2;
         case GL_RGB: return 3;
         case GL_RGBA: return 4;
         default: return 0;

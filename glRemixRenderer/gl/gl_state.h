@@ -55,5 +55,12 @@ public:
     tsl::robin_map<UINT64, MeshRecord> m_mesh_map;
     UINT32 m_num_mesh_resources;
     std::vector<PendingGeometry> m_pending_geometries;
+
+    // textures
+    bool m_texture_2d;
+    UINT32 m_num_textures;
+    tsl::robin_map<UINT32, UINT32> m_texture_indices;
+    std::vector<PendingTexture> m_pending_textures;
+    UINT32 m_texture_index = 0;
 };
 }  // namespace glRemix
