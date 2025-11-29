@@ -1,10 +1,13 @@
 #include "rt_app.h"
-#include <string>
 
 int main(int argc, char* argv[])
 {
-    // Check for -d flag to enable debug layer
-    bool enable_debug = (argc > 1 && std::string(argv[1]) == "-d");
+    // Enable debug layer for Debug and RelWithDebInfo builds
+#if defined(_DEBUG) || defined(CONFIG_RELWITHDEBINFO)
+    constexpr bool enable_debug = true;
+#else
+    constexpr bool enable_debug = false;
+#endif
 
     glRemix::glRemixRenderer renderer;
     renderer.run_with_hwnd(enable_debug);

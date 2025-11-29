@@ -1,7 +1,5 @@
 #include "rt_app.h"
 
-#include <cstdio>
-
 #include <thread>
 #include <chrono>
 #include <vector>
