@@ -2,6 +2,7 @@
 # To use this file, configure git with:
 #   git config blame.ignoreRevsFile .git-blame-ignore-revs
 
+f75c2c67baac37b4bb430796a42f78ce98037c05  # ci: clang format
 a4c7bf9d229be0eb56601b868d34920cb97e3a62  # ci: reorder command handlers to match shim categories
 66f0e53f718a2176d381f0e79adc38858d7f9faf  # ci: clang format
 30d302c305a4e25361dddd044ac7217494eea993  # ci: run clang-format on non-complying merged files in main
