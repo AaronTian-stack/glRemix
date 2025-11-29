@@ -29,6 +29,7 @@ set(RENDERER_SOURCES
     "application.cpp"
     "rt_app.cpp"
     "debug_window.cpp"
+    "mesh_loader.cpp"
 )
 
 set(RENDERER_HEADERS
@@ -57,6 +58,7 @@ set(RENDERER_HEADERS
     "application.h"
     "rt_app.h"
     "debug_window.h"
+    "mesh_loader.h"
 )
 
 set(D3D12MA_SOURCES
@@ -73,6 +75,11 @@ file(GLOB IMGUI_SOURCES
     "${IMGUI_DIR}/imgui*.cpp"
 )
 
+set(FASTGLTF_DIR "${REPO_ROOT}/external/fastgltf/src")
+file(GLOB FASTGLTF_SOURCES
+    "${FASTGLTF_DIR}/*.cpp"
+)
+
 add_executable(${PROJECT_NAME} 
     ${RENDERER_SOURCES} 
     ${RENDERER_HEADERS}
@@ -80,12 +87,16 @@ add_executable(${PROJECT_NAME}
     ${SHARED_SOURCES}
     ${D3D12MA_SOURCES}
     ${IMGUI_SOURCES}
+    ${FASTGLTF_SOURCES}
     ${SHADER_FILES}
 )
+
+
 
 target_include_directories(${PROJECT_NAME} PRIVATE 
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${REPO_ROOT}/external/robin-map-1.4.0/include"
+    "${REPO_ROOT}/external/fastgltf/include"
     "${REPO_ROOT}/external/D3D12MemoryAllocator-3.0.1/include"
     "${REPO_ROOT}/external/DirectXTex/include"
     "${REPO_ROOT}/external/imgui"

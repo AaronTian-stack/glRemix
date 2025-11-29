@@ -37,6 +37,30 @@ struct Light
     float quadratic_attenuation;
 
     BOOL enabled;
+#if __cplusplus
+
+private:
+#endif
+    XMUINT3 padding;
+
+#if __cplusplus
+
+public:
+    Light()
+        : ambient(0, 0, 0, 1)
+        , diffuse(1, 1, 1, 1)
+        , specular(0, 0, 0, 1)
+        , position(0, 0, 1, 1)  // w position = 0 means directional light, otherwise point light
+        , spot_direction(0, 0, -1)
+        , spot_exponent(0)
+        , spot_cutoff(180.0f)
+        , constant_attenuation(1.0f)
+        , linear_attenuation(0.0f)
+        , quadratic_attenuation(0.0f)
+        , enabled(FALSE)
+    {
+    }
+#endif
 };
 
 struct Material

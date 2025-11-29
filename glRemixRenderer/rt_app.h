@@ -17,6 +17,8 @@
 #include "structs.h"
 #include <shared/containers/free_list_vector.h>
 
+#include <filesystem>
+
 #include "gl/gl_driver.h"
 
 namespace glRemix
@@ -88,9 +90,11 @@ class glRemixRenderer : public Application
 
     void create_swapchain_and_rts(HWND hwnd);
     void create_uav_rt();
+    UINT64 create_hash(std::vector<Vertex> vertices, std::vector<UINT32> indices);
 
     // This should only be called from create_pending_buffers
-    void build_mesh_blas_batch(size_t start_idx, size_t count, ID3D12GraphicsCommandList7* cmd_list);
+    void build_mesh_blas_batch(std::vector<size_t> pending_indices, size_t count,
+                               ID3D12GraphicsCommandList7* cmd_list);
     void create_pending_buffers(ID3D12GraphicsCommandList7* cmd_list);
     void create_pending_textures(ID3D12GraphicsCommandList7* cmd_list);
     void build_tlas(ID3D12GraphicsCommandList7* cmd_list);
@@ -99,6 +103,13 @@ protected:
     void create() override;
     void render() override;
     void destroy() override;
+
+private:
+    // asset replacement
+    void replace_mesh(UINT64 meshID, const char* new_asset_path);
+    void transform_replacement_vertices(std::vector<Vertex>& gltf_vertices,
+                                        std::array<float, 3> scale_val);
+    void handle_per_frame_replacement();
 
 public:
     glRemixRenderer() = default;

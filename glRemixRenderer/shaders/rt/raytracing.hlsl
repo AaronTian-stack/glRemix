@@ -46,73 +46,88 @@ float3 transform_to_world(float3 local_dir, float3 N)
     return normalize(local_dir.x * tangent + local_dir.y * bitangent + local_dir.z * N);
 }
 
-[shader("raygeneration")] void RayGenMain()
+[shader("raygeneration")]void RayGenMain()
 {
-    float2 uv = (float2)DispatchRaysIndex() / float2(g_raygen_cb.width, g_raygen_cb.height);
-
-    float2 ndc = uv * 2.0f - 1.0f;
-    ndc.y = -ndc.y;  // Flip Y for correct screen space orientation
-
-    // Transform from NDC to world space using inverse view-projection
-    // Near plane point in clip space
-    float4 near_point = float4(ndc, 0.0f, 1.0f);
-    float4 far_point = float4(ndc, 1.0f, 1.0f);  // look down -Z match gl convention
-
-    // Transform to world space
-    float4 near_world = mul(near_point, g_raygen_cb.inv_view_proj);
-    float4 far_world = mul(far_point, g_raygen_cb.inv_view_proj);
-
-    near_world /= near_world.w;
-    far_world /= far_world.w;
-
-    float3 origin = near_world.xyz;
-    float3 ray_dir = normalize(far_world.xyz - near_world.xyz);
-
-    float3 total_color = float3(0, 0, 0);
-    float3 throughput = 1.0;
-    uint max_bounces = 3;
+    float2 uv = (float2) DispatchRaysIndex() / float2(g_raygen_cb.width, g_raygen_cb.height);
     uint seed = uint(DispatchRaysIndex().x * 1973 + DispatchRaysIndex().y * 9277 + 891);
-    RayPayload payload;
-
-    for (uint bounce = 0; bounce < max_bounces; ++bounce)
+    
+    uint max_bounces = 3;
+    int num_samples_per_pixel = 5;
+    float3 final_color = float3(0, 0, 0);
+    
+    for (int sample = 0; sample < num_samples_per_pixel; ++sample)
     {
-        payload.color = float4(0, 0, 0, 0);
-        payload.normal = float3(0, 0, 0);
-        payload.hit = false;
+        // jitter for anti-aliasing
+        float2 jitter = float2(rand(seed), rand(seed)) / float2(g_raygen_cb.width, g_raygen_cb.height);
+        float2 jittered_uv = uv + jitter;
 
-        RayDesc ray;
-        ray.Origin = origin;
-        ray.Direction = ray_dir;
-        ray.TMin = 0.001;
-        ray.TMax = 10000.0;
+        float2 ndc = uv * 2.0f - 1.0f;
+        ndc.y = -ndc.y; // Flip Y for correct screen space orientation
 
-        // Note winding order if you don't see anything
-        TraceRay(scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
+        // Transform from NDC to world space using inverse view-projection
+        // Near plane point in clip space
+        float4 near_point = float4(ndc, 0.0f, 1.0f);
+        float4 far_point = float4(ndc, 1.0f, 1.0f); // look down -Z match gl convention
 
-        if (!payload.hit)
+        // Transform to world space
+        float4 near_world = mul(near_point, g_raygen_cb.inv_view_proj);
+        float4 far_world = mul(far_point, g_raygen_cb.inv_view_proj);
+
+        near_world /= near_world.w;
+        far_world /= far_world.w;
+
+        float3 origin = near_world.xyz;
+        float3 ray_dir = normalize(far_world.xyz - near_world.xyz);
+
+        float3 sample_color = float3(0, 0, 0);
+        float3 throughput = 1.0;
+        
+        RayPayload payload;
+
+        for (uint bounce = 0; bounce < max_bounces; ++bounce)
         {
-            // same as miss shader
-            total_color += throughput * payload.color.rgb;
-            break;
+            payload.color = float4(0, 0, 0, 0);
+            payload.normal = float3(0, 0, 0);
+            payload.hit = false;
+
+            RayDesc ray;
+            ray.Origin = origin;
+            ray.Direction = ray_dir;
+            ray.TMin = 0.001;
+            ray.TMax = 10000.0;
+
+            // Note winding order if you don't see anything
+            TraceRay(scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
+
+            if (!payload.hit)
+            {
+                // same as miss shader
+                sample_color += throughput * payload.color.rgb;
+                break;
+            }
+
+            sample_color += throughput * payload.color.rgb;
+
+            float2 xi = float2(rand(seed), rand(seed));
+            float3 local_dir = cosine_sample_hemisphere(xi);
+            float3 N = normalize(payload.normal);
+            float3 new_dir = transform_to_world(local_dir, N);
+
+            ray_dir = new_dir;
+            origin = payload.hit_pos + ray_dir * 0.001f;
         }
 
-        total_color += throughput * payload.color.rgb;
-
-        float2 xi = float2(rand(seed), rand(seed));
-        float3 local_dir = cosine_sample_hemisphere(xi);
-        float3 N = normalize(payload.normal);
-        float3 new_dir = transform_to_world(local_dir, N);
-
-        ray_dir = new_dir;
-        origin = payload.hit_pos + ray_dir * 0.001f;
+        final_color += sample_color;
     }
-
-    render_target[DispatchRaysIndex().xy] = float4(total_color, 1.0);
+    
+    final_color /= num_samples_per_pixel; // average samples
+    
+    render_target[DispatchRaysIndex().xy] = float4(final_color, 1.0);
     // RenderTarget[DispatchRaysIndex().xy] = float4(uv, 0.0, 1.0);
     // RenderTarget[DispatchRaysIndex().xy] = float4(ray_dir * 0.5 + 0.5, 1.0);
 }
 
-[shader("closesthit")] void ClosestHitMain(inout RayPayload payload, in TriAttributes attr)
+[shader("closesthit")]void ClosestHitMain(inout RayPayload payload, in TriAttributes attr)
 {
     // Fetch mesh record for this instance; indices are into the global SRV heap
     const GPUMeshRecord mesh = meshes[InstanceID()];
@@ -142,20 +157,15 @@ float3 transform_to_world(float3 local_dir, float3 N)
     bary.x = 1.0f - bary.y - bary.z;
 
     // Interpolate attributes
+    float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
     float3 albedo = v0.color.rgb * bary.x + v1.color.rgb * bary.y + v2.color.rgb * bary.z;
     float3 n_obj = normalize(v0.normal * bary.x + v1.normal * bary.y + v2.normal * bary.z);
 
     // Transform normal to world space (assumes uniform scale)
-    float3x3 o2w3x3 = (float3x3)GL_ObjectToWorld3x4();
+    float3x3 o2w3x3 = (float3x3) GL_ObjectToWorld3x4();
     float3 n_world = normalize(mul(n_obj, o2w3x3));
 
     const float3 hit_pos = WorldRayOrigin() + RayTCurrent() * WorldRayDirection();
-
-    // Just grab light index 0 for now
-    // TODO: Should loop through all 8 lights and check if each is enabled
-    const float3 light_pos = light_cb.lights[0].position.xyz;
-    const float3 light_color = float3(1.0, 1.0, 1.0);
-    const float3 light_vec = normalize(light_pos - hit_pos);
 
     Material mat;
     mat.ambient = float4(1.0, 1.0, 1.0, 1.0);
@@ -172,28 +182,56 @@ float3 transform_to_world(float3 local_dir, float3 N)
         mat = mat_buf[mesh.mat_idx];
     }
     
-    float2 uv = v0.uv * bary.x + v1.uv * bary.y + v2.uv * bary.z;
+    float3 tex_albedo = float3(1.0, 1.0, 1.0);
     
     // Fetch texture
     if (mesh.tex_idx != 0xFFFFFFFFu)
     {
         Texture2D tex = ResourceDescriptorHeap[NonUniformResourceIndex(mesh.tex_idx)];
         float4 tex_sample = tex.SampleLevel(g_sampler, uv, 0.0f);
-        albedo = tex_sample.rgb;
+        tex_albedo = tex_sample.rgb;
     }
+        
+    float3 final_color = float3(0, 0, 0);
+    
+    // iterate through lights
+    for (int i = 0; i < 8; ++i)
+    {
+        Light curr_light = light_cb.lights[i];
+        if (!curr_light.enabled)
+        {
+            continue;
+        }
+        
+        float3 light_pos = curr_light.position.xyz;
+        float3 light_dir = normalize(light_pos - hit_pos);
+        float light_dist = length(light_pos - hit_pos);
+        
+        // attenuation
+        float attenuation = 1.0 /
+            ((curr_light.constant_attenuation) +
+             (curr_light.linear_attenuation * light_dist) +
+             (curr_light.quadratic_attenuation * light_dist * light_dist));
 
-    const float n_dot_l = max(dot(n_world, light_vec), 0.0);
-    float3 ambient = mat.ambient.rgb * albedo;
-    float3 diffuse = mat.diffuse.rgb * albedo * n_dot_l * light_color;
-    float3 color = diffuse;
+        // diffuse
+        float n_dot_l = max(dot(n_world, light_dir), 0.0);
+        float3 diffuse = mat.diffuse.rgb * tex_albedo * curr_light.diffuse.rgb * albedo * n_dot_l;
+        
+        // ambient
+        float3 ambient = mat.ambient.rgb * tex_albedo * curr_light.ambient.rgb * albedo;
+
+        float3 color = (diffuse + ambient) * attenuation;
+        final_color += color;
+    }
 
     payload.hit_pos = hit_pos;
     payload.normal = n_world;
     payload.hit = true;
-    payload.color = float4(color, 1.0);
+    payload.color = float4(final_color, 1.0);
 }
 
-[shader("miss")] void MissMain(inout RayPayload payload)
+
+[shader("miss")]void MissMain(inout RayPayload payload)
 {
     payload.color = float4(0.0, 0.0, 0.0, 1.0);
     payload.hit = false;

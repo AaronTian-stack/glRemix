@@ -27,10 +27,16 @@ public:
 
     const T& operator[](unsigned id) const;
 
-    // Includes both used and freed elements
+    // Includes used elements
     size_t size() const
     {
         return m_elements.size();
+    }
+
+    // returns number of free elememts
+    size_t freed_size() const
+    {
+        return m_free_indices.size();
     }
 
     // Reserve capacity by growing the vector based on difference between requested length and free slots
