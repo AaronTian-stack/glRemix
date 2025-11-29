@@ -704,7 +704,8 @@ const GLubyte* APIENTRY gl_get_string_ovr(GLenum name)
 {
     switch (name)
     {
-        case GL_EXTENSIONS: return reinterpret_cast<const GLubyte*>("GL_ARB_multitexture ");
+        case GL_EXTENSIONS:
+            return reinterpret_cast<const GLubyte*>(g_extensions);
         case GL_VERSION: return reinterpret_cast<const GLubyte*>("1.3");  // TODO: define in CMake
         case GL_VENDOR: return reinterpret_cast<const GLubyte*>("glRemix");
         case GL_RENDERER: return reinterpret_cast<const GLubyte*>("glRemixRenderer");
@@ -748,10 +749,6 @@ GLenum APIENTRY gl_get_error()
 }
 
 /* WGL (Windows Graphics Library) overrides */
-const char* WINAPI get_extensions_string_ARB_ovr(HDC)
-{
-    return "GL_ARB_multitexture";
-}
 
 BOOL WINAPI swap_buffers_ovr(HDC)
 {
@@ -985,6 +982,16 @@ BOOL WINAPI swap_interval_EXT_ovr(int interval)
     return TRUE;
 }
 
+const char* WINAPI get_extensions_string_EXT_ovr()
+{
+    return g_extensions;
+}
+
+const char* WINAPI get_extensions_string_ARB_ovr(HDC hdc)
+{
+    return g_extensions;
+}
+
 std::once_flag g_install_flag;
 
 void install_overrides()
@@ -1091,10 +1098,6 @@ void install_overrides()
                           reinterpret_cast<PROC>(&gl_multi_tex_coord_2fv_ARB));
 
         /* WGL (Windows Graphics Library) overrides */
-        gl::register_hook("wglGetExtensionsStringARB",
-                          reinterpret_cast<PROC>(&get_extensions_string_ARB_ovr));
-        gl::register_hook("wglGetExtensionsStringEXT",
-                          reinterpret_cast<PROC>(&get_extensions_string_ARB_ovr));
         gl::register_hook("wglChoosePixelFormat", reinterpret_cast<PROC>(&choose_pixel_format_ovr));
         gl::register_hook("wglDescribePixelFormat",
                           reinterpret_cast<PROC>(&describe_pixel_format_ovr));
@@ -1108,6 +1111,10 @@ void install_overrides()
         gl::register_hook("wglMakeCurrent", reinterpret_cast<PROC>(&make_current_ovr));
         gl::register_hook("wglShareLists", reinterpret_cast<PROC>(&share_lists_ovr));
         gl::register_hook("wglSwapIntervalEXT", reinterpret_cast<PROC>(&swap_interval_EXT_ovr));
+        gl::register_hook("wglGetExtensionsStringARB",
+                          reinterpret_cast<PROC>(&get_extensions_string_ARB_ovr));
+        gl::register_hook("wglGetExtensionsStringEXT",
+                          reinterpret_cast<PROC>(&get_extensions_string_EXT_ovr));
     };
 
     std::call_once(g_install_flag, register_all_hooks_once_fn);

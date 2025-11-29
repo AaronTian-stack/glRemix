@@ -8,6 +8,14 @@ namespace glRemix
 {
 extern glRemix::IPCProtocol g_ipc;
 
+#ifndef GLREMIX_EXT
+#define GLREMIX_EXT(x) x " "
+#endif
+static const char g_extensions[] =
+#include "gl_extensions.inl"
+    "";
+#undef GLREMIX_EXT
+
 namespace gl
 {
 extern HANDLE g_renderer_process;
