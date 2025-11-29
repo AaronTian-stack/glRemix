@@ -87,7 +87,7 @@ float3 transform_to_world(float3 local_dir, float3 N)
         ray.TMax = 10000.0;
 
         // Note winding order if you don't see anything
-        TraceRay(scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, ~0, 0, 1, 0, ray, payload);
+        TraceRay(scene, RAY_FLAG_NONE, ~0, 0, 1, 0, ray, payload);
 
         if (!payload.hit)
         {

@@ -1544,20 +1544,18 @@ void D3D12Context::emit_barriers(ID3D12GraphicsCommandList7* cmd_list, D3D12Buff
     assert(buffers || textures);
     const size_t total_count = buffer_count + texture_count;
 
-    // TODO: Reduce size if possible
-    // Should the program be forced to emit multiple barrier groups instead?
-    std::array<Resource*, 64> resources{};
-    assert(total_count <= resources.size());
+    // TODO: Replace with arena allocator
+    std::vector<Resource*> resources;
 
-    auto b_ptr = buffers;
-    size_t index = 0;
-    for (auto ptr = buffers; ptr && *ptr && index < buffer_count; ++ptr)
+    for (size_t i = 0; i < buffer_count; i++)
     {
-        resources[index++] = &(*ptr)->barrier_state;
+        assert(buffers[i]);
+        resources.push_back(&buffers[i]->barrier_state);
     }
-    for (auto ptr = textures; ptr && *ptr && index < total_count; ++ptr)
+    for (size_t i = 0; i < texture_count; i++)
     {
-        resources[index++] = &(*ptr)->barrier_state;
+        assert(textures[i]);
+        resources.push_back(&textures[i]->barrier_state);
     }
 
     dx::emit_barriers(cmd_list, resources.data(), total_count, nullptr);

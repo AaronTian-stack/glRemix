@@ -62,6 +62,7 @@ DXGI_FORMAT gl_format_to_dxgi(UINT32 internalFormat, UINT32 format, UINT32 type)
             default: return DXGI_FORMAT_UNKNOWN;
         }
     }
+    return DXGI_FORMAT_UNKNOWN;
 }
 
 }  // namespace glRemix
