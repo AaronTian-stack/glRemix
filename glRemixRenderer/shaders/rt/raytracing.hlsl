@@ -173,7 +173,7 @@ float3 transform_to_world(float3 local_dir, float3 N)
     const float n_dot_l = max(dot(n_world, light_vec), 0.0);
     float3 ambient = mat.ambient.rgb * albedo;
     float3 diffuse = mat.diffuse.rgb * albedo * n_dot_l * light_color;
-    float3 color = albedo; // diffuse;
+    float3 color = albedo; // float3(1.0, 1.0, 1.0); // diffuse;
 
     payload.hit_pos = hit_pos;
     payload.normal = n_world;

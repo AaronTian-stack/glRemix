@@ -9,7 +9,7 @@ namespace glRemix
 {
 static void hash_and_commit_geometry(glState& state, const size_t* client_indices = nullptr)
 {
-    if (state.t_indices.empty())
+    if (!state.m_perspective || state.t_indices.empty())
     {
         state.t_vertices.clear();
         state.t_indices.clear();
@@ -692,6 +692,7 @@ static void handle_ortho(const GLCommandContext& ctx, const void* data)
 
     ctx.state.m_matrix_stack.ortho(ctx.state.m_matrix_mode, cmd->left, cmd->right, cmd->bottom,
                                    cmd->top, cmd->zNear, cmd->zFar);
+    ctx.state.m_perspective = false;
 }
 
 static void handle_frustum(const GLCommandContext& ctx, const void* data)
@@ -700,6 +701,7 @@ static void handle_frustum(const GLCommandContext& ctx, const void* data)
 
     ctx.state.m_matrix_stack.frustum(ctx.state.m_matrix_mode, cmd->left, cmd->right, cmd->bottom,
                                      cmd->top, cmd->zNear, cmd->zFar);
+    ctx.state.m_perspective = true;
 }
 
 static void handle_perspective(const GLCommandContext& ctx, const void* data)
@@ -708,6 +710,7 @@ static void handle_perspective(const GLCommandContext& ctx, const void* data)
 
     ctx.state.m_matrix_stack.perspective(ctx.state.m_matrix_mode, cmd->fovY, cmd->aspect,
                                          cmd->zNear, cmd->zFar);
+    ctx.state.m_perspective = true;
 }
 
 // RENDERING
