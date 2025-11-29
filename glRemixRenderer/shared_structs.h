@@ -37,8 +37,15 @@ struct Light
     float quadratic_attenuation;
 
     BOOL enabled;
+#if __cplusplus
+
+private:
+#endif
+    XMUINT3 padding;
 
 #if __cplusplus
+
+public:
     Light()
         : ambient(0, 0, 0, 1)
         , diffuse(1, 1, 1, 1)
