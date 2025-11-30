@@ -200,6 +200,11 @@ bool shutdown()
         std::scoped_lock lock(g_hook_mutex);
         g_hooks.clear();
     }
+
+#if 1
+    // TODO: add some other custom goodbye? or remove
+    MessageBoxA(nullptr, "Thanks for using glRemix!", "glRemixShim", MB_OK | MB_ICONINFORMATION);
+#endif
     return true;
 }
 

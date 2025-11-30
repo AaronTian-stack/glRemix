@@ -61,7 +61,7 @@ void Application::run_with_hwnd(const bool enable_debug_layer)
 
 #if 1
     // TODO: add some other custom goodbye? or remove
-    MessageBoxA(nullptr, "Thanks for using glRemix!", "glRemixApp", MB_OK | MB_ICONINFORMATION);
+    MessageBoxA(nullptr, "Thanks for using glRemix!", "glRemixRenderer", MB_OK | MB_ICONINFORMATION);
 #endif
 
     THROW_IF_FALSE(m_context.wait_idle(&m_gfx_queue));
