@@ -19,7 +19,7 @@ public:
     FreeListVector& operator=(FreeListVector&&) = default;
 
     // Replaces any free slots, otherwise appends to the end
-    unsigned push_back(T&& element);
+    size_t push_back(T&& element);
 
     void free(unsigned id);
 
@@ -57,11 +57,11 @@ public:
 
 private:
     std::vector<T> m_elements;
-    std::vector<unsigned> m_free_indices;
+    std::vector<size_t> m_free_indices;
 };
 
 template<typename T>
-unsigned FreeListVector<T>::push_back(T&& element)
+size_t FreeListVector<T>::push_back(T&& element)
 {
     if (!m_free_indices.empty())
     {
@@ -73,7 +73,7 @@ unsigned FreeListVector<T>::push_back(T&& element)
     }
 
     m_elements.push_back(std::move(element));
-    return static_cast<unsigned>(m_elements.size() - 1);
+    return m_elements.size() - 1;
 }
 
 template<typename T>
