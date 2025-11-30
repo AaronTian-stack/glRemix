@@ -1073,6 +1073,7 @@ void glRemix::glDriver::process_stream()
 {
     uint32_t frame_index = 0;
     uint32_t frame_bytes = 0;
+
     m_ipc.consume_frame_or_wait(m_command_buffer.data(), &frame_index, &frame_bytes);
 
     if (frame_bytes == 0)

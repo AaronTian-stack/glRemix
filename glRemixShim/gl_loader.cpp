@@ -51,7 +51,7 @@ bool initialize()
             const std::exception& e)  // All attempts to initialize IPC failed. Nothing will work.
         {
 #ifdef _DEBUG
-            throw e;  // only let error propogate in development
+            throw;  // only let error propogate in development
 #endif
             return false;
         }

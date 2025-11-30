@@ -5,6 +5,8 @@
 #include <thread>
 #include <chrono>
 
+#include <system_error>
+
 void glRemix::IPCProtocol::init_writer()
 {
     if (!m_slot_A.smem.create_for_writer(k_MAP_A, k_WRITE_EVENT_A, k_READ_EVENT_A))
@@ -46,7 +48,8 @@ void glRemix::IPCProtocol::start_frame_or_wait()
                 break;
             case WAIT_OBJECT_0 + 1: m_curr_slot = latest; break;
             case WAIT_TIMEOUT:
-                throw std::runtime_error(
+                throw std::system_error(
+                    ERROR_TIMEOUT, std::system_category(),
                     "IPCProtocol.WRITER - Timed out while waiting for IPC memory to become "
                     "available to write. Check the READER process for stalls.");
             default:
@@ -148,7 +151,8 @@ void glRemix::IPCProtocol::consume_frame_or_wait(void* payload, UINT32* frame_in
                           "before oldest.");
                 break;  // theoretically should not occur
             case WAIT_TIMEOUT:
-                throw std::runtime_error(
+                throw std::system_error(
+                    ERROR_TIMEOUT, std::system_category(),
                     "IPCProtocol.READER - Timed out while waiting for IPC memory to become "
                     "available to read. Check the WRITER process for stalls.");
             default:
