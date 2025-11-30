@@ -54,23 +54,6 @@ Within that one initialization pipeline, we had three levels of violations:
 Such a deep dive was actually quite useful, 
 so going forward we can be hyperaware of this "global DLL contract" within the Windows development ecosystem.
 
-## How to Avoid Deadlock - Lazy Initialization and Graceful Termination
-
-Brainstorming how to maintain the contract and really abide by the "DO NOTHING" rule of DllMain,
-some potential tricks are to track initialization status and lazy initialize whenever any (not just `wglCreateContext`) of our hooks are called.
-And this can be done via macro to avoid code repetition.
-
-Solution for achieving global graceful shutdown is along the same lines --
-keep an "is_shutdown_scheduled" flag, and toggle it whenever a runtime exception occurs.
-This is actually another interesting DLL best practice --
-_Never let thrown exceptions trickle to the host app._
-
-To specifically react to the host app's own termination process,
-we know we can't rely on `wglDeleteContext` anymore as we've discovered a host app often creates and deletes GL contexts multiple times during startup.
-So instead, we can also hook `ExitProcess` from `kernel32.dll`,
-which is reliable and safely outside of loader lock.
-That does the job of covering all termination conditions that we can reasonably predict.
-
 TLDR: "With great power comes great responsibility" comes to mind...
 
 ## MS Documentation

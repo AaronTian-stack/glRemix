@@ -10,6 +10,9 @@ namespace glRemix
 {
 glRemix::IPCProtocol g_ipc;
 
+std::once_flag g_renderer_flag;
+HANDLE g_renderer_process = nullptr;
+
 namespace gl
 {
 // Both WGL and OpenGL functions may be called from multiple threads hence the mutex
@@ -18,25 +21,58 @@ std::mutex g_hook_mutex;
 // Function pointers for our custom hook implementations
 tsl::robin_map<std::string, PROC> g_hooks;
 
-HANDLE g_renderer_process = nullptr;
-
 std::once_flag g_initialize_flag;
 
-void initialize()
+bool initialize()
 {
+    if (glRemix::g_renderer_process)
+    {
+#ifdef _DEBUG
+        // renderer only launched after first swap buffers call
+        throw std::runtime_error("GLRemixLoader - Single context assumption proven wrong.");
+#endif
+        DBG_PRINT("GLRemixLoader - Host app attempted to create a context after the first frame");
+        return false;
+    }
+
+    static bool cached_success = false;
+
     // create lambda function for `std::call_once`
-    auto initialize_once_fn = []
+    auto initialize_once_fn = []() -> bool
     {
         try
         {
             g_ipc.init_writer();  // initialize shim as IPC writer
             g_ipc.start_frame_or_wait();
-        }
-        catch (const std::exception& e)
-        {
-            return;  // do not attempt to launch the renderer if `init_writer()` fails
-        }
 
+            return true;
+        }
+        catch (
+            const std::exception& e)  // All attempts to initialize IPC failed. Nothing will work.
+        {
+#ifdef _DEBUG
+            throw e;  // only let error propogate in development
+#endif
+            return false;
+        }
+    };
+
+    std::call_once(g_initialize_flag, [&] { cached_success = initialize_once_fn(); });
+
+    return cached_success;
+}
+
+bool launch_renderer()
+{
+    if (glRemix::g_renderer_process)
+    {
+        return true;  // return as early as possible
+    }
+
+    static bool cached_success = false;
+
+    auto launch_renderer_once_fn = []() -> bool
+    {
 #ifdef GLREMIX_AUTO_LAUNCH_RENDERER
         // Start the renderer as a subprocess
         // Get the DLL path then expect to find "glRemix_renderer.exe" alongside it
@@ -71,19 +107,28 @@ void initialize()
             {
                 OutputDebugStringA("glRemix: Renderer started.\n");
                 // Store handle to terminate renderer on DLL unload
-                g_renderer_process = pi.hProcess;
+                glRemix::g_renderer_process = pi.hProcess;
                 CloseHandle(pi.hThread);
+                return true;
             }
             else
             {
                 OutputDebugStringA("glRemix: Failed to start renderer.\n");
-                // TODO: Treat as critical error?
+                // propogate down to swap buffer call to let host app handle
+                return false;
             }
         }
+
+        OutputDebugStringA("glRemix: Failed to find renderer executable.\n");
+        return false;
+#else
+        return true;  // return success if `GLREMIX_AUTO_LAUNCH_RENDERER` is OFF
 #endif
     };
 
-    std::call_once(g_initialize_flag, initialize_once_fn);
+    std::call_once(glRemix::g_renderer_flag, [&] { cached_success = launch_renderer_once_fn(); });
+
+    return cached_success;
 }
 
 void register_hook(const char* name, const PROC proc)
@@ -132,13 +177,21 @@ void report_missing_function(const char* name)
     OutputDebugStringA(buffer);
 }
 
-void shutdown()
+bool shutdown()
 {
-    if (g_renderer_process)
+    if (!glRemix::g_renderer_process)
     {
-        TerminateProcess(g_renderer_process, 0);
-        CloseHandle(g_renderer_process);
-        g_renderer_process = nullptr;
+        // prevent shutdown during first frame
+        DBG_PRINT("GLRemixLoader - Renderer not launched yet. Shutdown will not occur.");
+        return true;  // will not propogate to `wglDeleteContext`
+    }
+    if (glRemix::g_renderer_process)
+    {
+        TerminateProcess(glRemix::g_renderer_process, 0);
+        CloseHandle(glRemix::g_renderer_process);
+        glRemix::g_renderer_process = nullptr;
+
+        DBG_PRINT("GLRemixLoader - Renderer termination cached_success.");
     }
 
     // TODO: implement IPCProtocol::shutdown()
@@ -147,8 +200,7 @@ void shutdown()
         std::scoped_lock lock(g_hook_mutex);
         g_hooks.clear();
     }
-
-    DBG_PRINT("glRemix - shim shutdown complete.");
+    return true;
 }
 
 }  // namespace gl

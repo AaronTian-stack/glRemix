@@ -752,6 +752,10 @@ GLenum APIENTRY gl_get_error()
 
 BOOL WINAPI swap_buffers_ovr(HDC)
 {
+    if (!gl::launch_renderer())
+    {
+        return FALSE;
+    }
     g_ipc.end_frame();
     g_ipc.start_frame_or_wait();
 
@@ -928,7 +932,12 @@ BOOL WINAPI set_pixel_format_ovr(HDC dc, int pixel_format, const PIXELFORMATDESC
 
 HGLRC WINAPI create_context_ovr(HDC dc)
 {
-    gl::initialize();
+    if (!gl::initialize())
+    {
+        // this allows the host app to attempt a fallback if they have one
+        // as we've properly error-handled in `initialize()`, this is appropriate.
+        return nullptr;
+    }
 
     // Derive HWND from HDC for swapchain creation
     HWND hwnd = WindowFromDC(dc);
@@ -944,7 +953,6 @@ HGLRC WINAPI create_context_ovr(HDC dc)
 
     WGLCreateContextCommand payload{ hwnd };
 
-    // TODO: Application can do multiple create/destroy context pairs, so we need to account for that
     g_ipc.write_command(GLCommandType::WGLCMD_CREATE_CONTEXT, payload);
 
     return reinterpret_cast<HGLRC>(static_cast<UINT_PTR>(0xDEADBEEF));  // Dummy context handle
@@ -952,7 +960,7 @@ HGLRC WINAPI create_context_ovr(HDC dc)
 
 BOOL WINAPI delete_context_ovr(HGLRC context)
 {
-    return TRUE;
+    return gl::shutdown();
 }
 
 HGLRC WINAPI get_current_context_ovr()
