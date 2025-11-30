@@ -1,7 +1,8 @@
 #include "gl_hooks.h"
 
-#include <gl_loader.h>
 #include <shared/gl_utils.h>
+
+#include "gl_loader.h"
 
 namespace glRemix::hooks
 {
@@ -704,7 +705,7 @@ const GLubyte* APIENTRY gl_get_string_ovr(GLenum name)
 {
     switch (name)
     {
-        case GL_EXTENSIONS: return reinterpret_cast<const GLubyte*>(g_extensions);
+        case GL_EXTENSIONS: return reinterpret_cast<const GLubyte*>(k_EXTENSIONS);
         case GL_VERSION: return reinterpret_cast<const GLubyte*>("1.3");  // TODO: define in CMake
         case GL_VENDOR: return reinterpret_cast<const GLubyte*>("glRemix");
         case GL_RENDERER: return reinterpret_cast<const GLubyte*>("glRemixRenderer");
@@ -983,12 +984,12 @@ BOOL WINAPI swap_interval_EXT_ovr(int interval)
 
 const char* WINAPI get_extensions_string_EXT_ovr()
 {
-    return g_extensions;
+    return k_EXTENSIONS;
 }
 
 const char* WINAPI get_extensions_string_ARB_ovr(HDC hdc)
 {
-    return g_extensions;
+    return k_EXTENSIONS;
 }
 
 std::once_flag g_install_flag;

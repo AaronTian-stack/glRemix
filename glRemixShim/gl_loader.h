@@ -11,7 +11,7 @@ extern glRemix::IPCProtocol g_ipc;
 #ifndef GLREMIX_EXT
 #define GLREMIX_EXT(x) x " "
 #endif
-static const char g_extensions[] =
+constexpr char k_EXTENSIONS[] =
 #include "gl_extensions.inl"
     "";
 #undef GLREMIX_EXT
@@ -30,5 +30,7 @@ PROC find_hook(const char* name);
 
 // Print out missing function name to debug output
 void report_missing_function(const char* name);
+
+void shutdown();
 }  // namespace gl
 }  // namespace glRemix

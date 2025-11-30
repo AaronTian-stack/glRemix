@@ -4,6 +4,8 @@
 #include <string>
 #include <tsl/robin_map.h>
 
+#include <shared/debug_utils.h>
+
 namespace glRemix
 {
 glRemix::IPCProtocol g_ipc;
@@ -25,8 +27,15 @@ void initialize()
     // create lambda function for `std::call_once`
     auto initialize_once_fn = []
     {
-        g_ipc.init_writer();  // initialize shim as IPC writer
-        g_ipc.start_frame_or_wait();
+        try
+        {
+            g_ipc.init_writer();  // initialize shim as IPC writer
+            g_ipc.start_frame_or_wait();
+        }
+        catch (const std::exception& e)
+        {
+            return;  // do not attempt to launch the renderer if `init_writer()` fails
+        }
 
 #ifdef GLREMIX_AUTO_LAUNCH_RENDERER
         // Start the renderer as a subprocess
@@ -122,5 +131,25 @@ void report_missing_function(const char* name)
 
     OutputDebugStringA(buffer);
 }
+
+void shutdown()
+{
+    if (g_renderer_process)
+    {
+        TerminateProcess(g_renderer_process, 0);
+        CloseHandle(g_renderer_process);
+        g_renderer_process = nullptr;
+    }
+
+    // TODO: implement IPCProtocol::shutdown()
+    // TODO: implement global disabled state that affects `find_hook` and `export_macros.h`
+    {
+        std::scoped_lock lock(g_hook_mutex);
+        g_hooks.clear();
+    }
+
+    DBG_PRINT("glRemix - shim shutdown complete.");
+}
+
 }  // namespace gl
 }  // namespace glRemix
