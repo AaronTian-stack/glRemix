@@ -26,20 +26,23 @@ struct MeshRecord
 
     // For garbage collection, last frame this mesh record was accessed
     UINT32 last_frame;
+    
+    // Previous frame's transform for motion vectors
+    XMFLOAT3X4 prev_transform{};
 };
 
 struct BufferAndDescriptor
 {
     dx::D3D12Buffer buffer;
     dx::D3D12Descriptor descriptor;
-    UINT page_index = -1;
+    UINT page_index = 0xFFFFFFFFu;
 };
 
 struct TextureAndDescriptor
 {
     dx::D3D12Texture texture;
     dx::D3D12Descriptor descriptor;
-    UINT page_index = -1;
+    UINT page_index = 0xFFFFFFFFu;
 };
 
 struct MeshResources
@@ -56,7 +59,7 @@ struct PendingGeometry
     UINT64 hash;
     UINT32 mat_idx;
     UINT32 mv_idx;
-    UINT32 replace_idx = -1;
+    UINT32 replace_idx = 0xFFFFFFFFu;
 };
 
 struct PendingTexture
